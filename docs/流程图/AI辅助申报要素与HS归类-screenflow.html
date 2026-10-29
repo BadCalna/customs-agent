@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>AI辅助申报要素与HS归类 · 交互流程图</title>
+<style>
+body { font-family:"Microsoft YaHei","微软雅黑","PingFang SC",sans-serif; background:#f8f8fc; margin:0; color:#30285b; }
+.screenflow-canvas { position:relative; background:#fff; border-radius:14px; border:1px solid #ece9f6; margin:24px auto; overflow:hidden; }
+.canvas-inner { position:relative; transform-origin: top left; }
+.flow-node { position:absolute; }
+.node-frame { position:relative; overflow:hidden; border-radius:10px; border:1px solid #d8d4f0; background:#fff; box-shadow:0 2px 10px rgba(48,40,91,.08); }
+.node-frame iframe { border:none; transform-origin:top left; }
+.node-label { margin-top:7px; text-align:center; font-size:13px; font-weight:700; color:#30285b; }
+.node-badge { text-align:center; font-size:11.5px; color:#8b86a3; margin-top:1px; }
+.screenflow-svg { position:absolute; left:0; top:0; pointer-events:none; }
+.edge-label-bg { fill:#fff; }
+.edge-label { font-size:11.5px; fill:#5b5bd6; font-weight:600; }
+.state-legend { position:absolute; right:30px; bottom:30px; background:#faf9ff; border:1px solid #d8d4f0; border-radius:10px; padding:12px 16px; font-size:12px; line-height:1.9; color:#30285b; }
+.state-legend b { font-size:12.5px; }
+.toolbar { position:fixed; right:20px; top:20px; display:flex; gap:8px; z-index:50; }
+.toolbar button { background:#fff; color:#3b357a; border:1px solid #d8d4f0; border-radius:8px; padding:6px 12px; font-size:13px; cursor:pointer; font-weight:600; }
+h1 { font-size:20px; font-weight:700; text-align:center; margin:20px 0 2px; }
+.subtitle { font-size:12.5px; color:#8b86a3; text-align:center; margin:0; }
+</style>
+</head>
+<body>
+<h1>交互流程图 · 界面跳转链路</h1>
+<p class="subtitle">上排：业务员端（钉钉H5） ｜ 下排：物流审核端（工作台） ｜ 节点为缩放后的真实原型页</p>
+<div class="toolbar">
+  <button class="export-btn" onclick="exportShot()">📸 下载图片</button>
+  <button onclick="zoomStep(-1)">－</button>
+  <button id="zoomLabel" onclick="fitZoom()" style="min-width:64px;">适配</button>
+  <button onclick="zoomStep(1)">＋</button>
+</div>
+<div class="chart-container screenflow-canvas" id="canvas" style="margin-top:12px;">
+  <div class="canvas-inner" id="inner">
+    <!-- 节点：位置由 JS 布局 -->
+    <div class="flow-node" id="n-task-list"><div class="node-frame" style="width:188px;height:406px;"><iframe src="../原型/AI辅助申报要素与HS归类-prototype.html#task-list" style="width:375px;height:812px;transform:scale(0.5);"></iframe></div><div class="node-label">1.1 申报任务列表</div></div>
+    <div class="flow-node" id="n-input-form"><div class="node-frame" style="width:188px;height:406px;"><iframe src="../原型/AI辅助申报要素与HS归类-prototype.html#input-form" style="width:375px;height:812px;transform:scale(0.5);"></iframe></div><div class="node-label">1.2 要素录入</div></div>
+    <div class="flow-node" id="n-ai-result"><div class="node-frame" style="width:188px;height:406px;"><iframe src="../原型/AI辅助申报要素与HS归类-prototype.html#ai-result" style="width:375px;height:812px;transform:scale(0.5);"></iframe></div><div class="node-label">1.3 AI推荐结果</div></div>
+    <div class="flow-node" id="n-missing-fields"><div class="node-frame" style="width:188px;height:406px;"><iframe src="../原型/AI辅助申报要素与HS归类-prototype.html#missing-fields" style="width:375px;height:812px;transform:scale(0.5);"></iframe></div><div class="node-label">1.4 缺失字段补数</div></div>
+    <div class="flow-node" id="n-review-board"><div class="node-frame" style="width:512px;height:320px;"><iframe src="../原型/AI辅助申报要素与HS归类-prototype.html#review-board" style="width:1280px;height:800px;transform:scale(0.4);"></iframe></div><div class="node-label">2.1 审核看板</div></div>
+    <div class="flow-node" id="n-detail-review"><div class="node-frame" style="width:512px;height:320px;"><iframe src="../原型/AI辅助申报要素与HS归类-prototype.html#detail-review" style="width:1280px;height:800px;transform:scale(0.4);"></iframe></div><div class="node-label">2.2 单票审核</div></div>
+    <div class="flow-node" id="n-batch-import"><div class="node-frame" style="width:512px;height:320px;"><iframe src="../原型/AI辅助申报要素与HS归类-prototype.html#batch-import" style="width:1280px;height:800px;transform:scale(0.4);"></iframe></div><div class="node-label">2.3 批量导入</div></div>
+    <div class="flow-node" id="n-doc-making"><div class="node-frame" style="width:512px;height:320px;"><iframe src="../原型/AI辅助申报要素与HS归类-prototype.html#doc-making" style="width:1280px;height:800px;transform:scale(0.4);"></iframe></div><div class="node-label">3.1 报关单据制作</div></div>
+    <div class="flow-node" id="n-compare-report"><div class="node-frame" style="width:512px;height:320px;"><iframe src="../原型/AI辅助申报要素与HS归类-prototype.html#compare-report" style="width:1280px;height:800px;transform:scale(0.4);"></iframe></div><div class="node-label">3.2 单证比对</div></div>
+    <div class="flow-node" id="n-knowledge-base"><div class="node-frame" style="width:512px;height:320px;"><iframe src="../原型/AI辅助申报要素与HS归类-prototype.html#knowledge-base" style="width:1280px;height:800px;transform:scale(0.4);"></iframe></div><div class="node-label">4.1 知识库管理</div></div>
+    <svg class="screenflow-svg" id="edgeSvg"></svg>
+    <div class="state-legend" id="stateLegend"><b>状态机图例</b><br>申报任务：待填报 → 待补数 → 已提交 → 已通过 / 已退回<br>核对任务：待上传 → 比对中 → 有差异待处理 → 已完成<br>知识库条目：待官方核验 → 已核验</div>
+  </div>
+</div>
+<script src="../../scripts/prototype-export-client.js?v=20261029-screenflow"></script>
+<script>
+(function(){
+  var canvas=document.getElementById('canvas'), inner=document.getElementById('inner'), svg=document.getElementById('edgeSvg');
+  var POS = {
+    'n-task-list':      {x:60,  y:60},
+    'n-input-form':     {x:330, y:60},
+    'n-ai-result':      {x:600, y:60},
+    'n-missing-fields': {x:870, y:60},
+    'n-review-board':   {x:60,  y:620},
+    'n-detail-review':  {x:640, y:620},
+    'n-batch-import':   {x:640, y:990},
+    'n-doc-making':     {x:1210,y:620},
+    'n-compare-report': {x:1210,y:990},
+    'n-knowledge-base': {x:1780,y:620}
+  };
+  Object.keys(POS).forEach(function(id){
+    var el=document.getElementById(id);
+    el.style.left=POS[id].x+'px'; el.style.top=POS[id].y+'px';
+  });
+  var EDGES = [
+    {from:'n-task-list', to:'n-input-form', label:'点击任务卡片', fromSide:'right', toSide:'left'},
+    {from:'n-input-form', to:'n-ai-result', label:'点击AI识别并推荐', fromSide:'right', toSide:'left'},
+    {from:'n-ai-result', to:'n-missing-fields', label:'低置信度·补充信息', fromSide:'right', toSide:'left'},
+    {from:'n-missing-fields', to:'n-input-form', label:'已补充·重新识别', fromSide:'top', toSide:'top', bend:110},
+    {from:'n-ai-result', to:'n-detail-review', label:'确认提交审核', fromSide:'bottom', toSide:'top'},
+    {from:'n-review-board', to:'n-detail-review', label:'点击列表行', fromSide:'right', toSide:'left'},
+    {from:'n-detail-review', to:'n-input-form', label:'退回修改', fromSide:'top', toSide:'bottom', bend:-260},
+    {from:'n-detail-review', to:'n-knowledge-base', label:'审核通过·自动入库', fromSide:'right', toSide:'left'},
+    {from:'n-batch-import', to:'n-detail-review', label:'异常行转人工复核', fromSide:'top', toSide:'bottom', bend:60},
+    {from:'n-doc-making', to:'n-compare-report', label:'生成报关单据', fromSide:'bottom', toSide:'top'},
+    {from:'n-compare-report', to:'n-knowledge-base', label:'核对完成·归档', fromSide:'right', toSide:'bottom', bend:120}
+  ];
+  function box(id){
+    var el=document.getElementById(id), r=el.getBoundingClientRect(), c=inner.getBoundingClientRect();
+    return {x:POS[id].x, y:POS[id].y, w:el.offsetWidth, h:el.offsetHeight};
+  }
+  function anchor(b, side, offset){
+    if(side==='left') return {x:b.x, y:b.y+b.h/2+(offset||0)};
+    if(side==='right') return {x:b.x+b.w, y:b.y+b.h/2+(offset||0)};
+    if(side==='top') return {x:b.x+b.w/2+(offset||0), y:b.y};
+    return {x:b.x+b.w/2+(offset||0), y:b.y+b.h};
+  }
+  function route(e){
+    var fb=box(e.from), tb=box(e.to);
+    var p1=anchor(fb, e.fromSide, e.fromOffset), p2=anchor(tb, e.toSide, e.toOffset);
+    var pts=[p1];
+    var b=e.bend||0;
+    if(e.fromSide==='right'&&e.toSide==='left'){
+      var midX=(p1.x+p2.x)/2;
+      if(Math.abs(p1.y-p2.y)<2){ } else { pts.push({x:midX,y:p1.y},{x:midX,y:p2.y}); }
+    } else if((e.fromSide==='right'&&e.toSide==='top')||(e.fromSide==='bottom'&&e.toSide==='left')){
+      if(e.fromSide==='right'){ pts.push({x:p2.x,y:p1.y}); } else { pts.push({x:p1.x,y:p2.y}); }
+    } else if(e.fromSide==='bottom'&&e.toSide==='top'){
+      if(Math.abs(p1.x-p2.x)<2){} else { var midY=(p1.y+p2.y)/2; pts.push({x:p1.x,y:midY},{x:p2.x,y:midY}); }
+    } else if(e.fromSide==='top'&&e.toSide==='top'){
+      var rail=Math.min(p1.y,p2.y)+b; pts.push({x:p1.x,y:rail},{x:p2.x,y:rail});
+    } else if(e.fromSide==='top'&&e.toSide==='bottom'){
+      var rail2=Math.min(p1.y, p2.y)+b; if(b<0) rail2=p1.y+b; pts.push({x:p1.x,y:rail2},{x:p2.x,y:rail2});
+    } else if(e.fromSide==='right'&&e.toSide==='bottom'){
+      var ry=p2.y+b; pts.push({x:p1.x+(b?0:(p2.x-p1.x)/2),y:p1.y});
+      pts=[p1,{x:p1.x, y:Math.min(ry,p1.y)},{x:p1.x, y:ry},{x:p2.x, y:ry}];
+      pts=[p1,{x:p1.x,y:ry},{x:p2.x,y:ry}];
+    } else {
+      pts.push({x:p2.x,y:p1.y});
+    }
+    pts.push(p2);
+    return pts;
+  }
+  function draw(){
+    var maxX=0,maxY=0;
+    document.querySelectorAll('.flow-node').forEach(function(n){ maxX=Math.max(maxX,POS[n.id].x+n.offsetWidth); maxY=Math.max(maxY,POS[n.id].y+n.offsetHeight+30); });
+    var lg=document.getElementById('stateLegend');
+    maxY=Math.max(maxY, POS['n-knowledge-base'].y+620); // legend zone
+    var W=maxX+60, H=maxY+60;
+    inner.style.width=W+'px'; inner.style.height=H+'px';
+    svg.setAttribute('width',W); svg.setAttribute('height',H);
+    svg.setAttribute('viewBox','0 0 '+W+' '+H);
+    svg.innerHTML='<defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 Z" fill="#8d82b1"/></marker></defs>';
+    EDGES.forEach(function(e){
+      var pts=route(e);
+      var d='M '+pts.map(function(p){return p.x+','+p.y;}).join(' L ');
+      var path=document.createElementNS('http://www.w3.org/2000/svg','path');
+      path.setAttribute('d',d); path.setAttribute('fill','none'); path.setAttribute('stroke','#8d82b1');
+      path.setAttribute('stroke-width','1.6'); path.setAttribute('marker-end','url(#arr)');
+      path.dataset.from=e.from; path.dataset.to=e.to; path.dataset.edge=e.from+'->'+e.to;
+      svg.appendChild(path);
+      // 标签：最长一段中点
+      var seg=0, segLen=0;
+      for(var i=0;i<pts.length-1;i++){ var len=Math.abs(pts[i+1].x-pts[i].x)+Math.abs(pts[i+1].y-pts[i].y); if(len>segLen){segLen=len;seg=i;} }
+      var mx=(pts[seg].x+pts[seg+1].x)/2, my=(pts[seg].y+pts[seg+1].y)/2;
+      var g=document.createElementNS('http://www.w3.org/2000/svg','g');
+      var tw=e.label.length*11.5+18;
+      var rect=document.createElementNS('http://www.w3.org/2000/svg','rect');
+      rect.setAttribute('x',mx-tw/2); rect.setAttribute('y',my-10); rect.setAttribute('width',tw); rect.setAttribute('height',20);
+      rect.setAttribute('rx',5); rect.setAttribute('class','edge-label-bg'); rect.dataset.edge='label-'+e.from+'->'+e.to;
+      var text=document.createElementNS('http://www.w3.org/2000/svg','text');
+      text.setAttribute('x',mx); text.setAttribute('y',my+4); text.setAttribute('text-anchor','middle');
+      text.setAttribute('class','edge-label'); text.textContent=e.label; text.dataset.edge='label-'+e.from+'->'+e.to;
+      g.appendChild(rect); g.appendChild(text); svg.appendChild(g);
+    });
+  }
+  // 缩放
+  var scale=null;
+  function applyZoom(){
+    var avail=canvas.clientWidth-4;
+    var s = scale==null ? avail/inner.offsetWidth : scale;
+    inner.style.transform='scale('+s+')';
+    canvas.style.height=(inner.offsetHeight*s)+'px';
+    canvas.style.width=inner.offsetWidth*s+'px';
+    document.getElementById('zoomLabel').textContent=Math.round(s*100)+'%'+(scale==null?' · 适配':'');
+  }
+  window.zoomStep=function(dir){
+    var now=scale==null?(canvas.clientWidth-4)/inner.offsetWidth:scale;
+    var steps=[0.25,0.5,0.75,1,1.25,1.5,2];
+    var next= dir>0 ? steps.find(function(s){return s>now+0.01;}) : steps.slice().reverse().find(function(s){return s<now-0.01;});
+    if(next!=null){ scale=next; applyZoom(); }
+  };
+  window.fitZoom=function(){ scale=null; applyZoom(); };
+  window.addEventListener('load',function(){ setTimeout(function(){ draw(); applyZoom(); setTimeout(function(){ draw(); applyZoom(); },600); },300); });
+  window.addEventListener('resize',function(){ if(scale==null) applyZoom(); });
+  // 几何审计
+  window.auditFlow=function(){
+    var errs=[];
+    var nodes=[].map.call(document.querySelectorAll('.flow-node'),function(n){ return {id:n.id, x:POS[n.id].x, y:POS[n.id].y, w:n.offsetWidth, h:n.offsetHeight}; });
+    var labels=[].map.call(svg.querySelectorAll('.edge-label-bg'),function(r){ return {id:r.dataset.edge, x:+r.getAttribute('x'), y:+r.getAttribute('y'), w:+r.getAttribute('width'), h:+r.getAttribute('height')}; });
+    function hit(a,b,pad){ pad=pad||0; return a.x-pad<b.x+b.w && a.x+a.w+pad>b.x && a.y-pad<b.y+b.h && a.y+a.h+pad>b.y; }
+    labels.forEach(function(l){
+      nodes.forEach(function(n){
+        if(hit(l,n)) errs.push('标签压节点：'+l.id+' → '+n.id);
+      });
+    });
+    for(var i=0;i<labels.length;i++) for(var j=i+1;j<labels.length;j++) if(hit(labels[i],labels[j])) errs.push('标签重叠：'+labels[i].id+' / '+labels[j].id);
+    var W=inner.offsetWidth, H=inner.offsetHeight;
+    nodes.concat(labels).forEach(function(n){ if(n.x<0||n.y<0||n.x+n.w>W||n.y+n.h>H) errs.push('画布越界：'+n.id); });
+    return {ok:errs.length===0, errors:errs};
+  };
+  window.exportShot=function(){
+    var a=window.auditFlow();
+    if(!a.ok){ alert('布局检查未通过，请先修复：\n'+a.errors.join('\n')); return; }
+    if(window.exportPrototypeViaServer){ window.exportPrototypeViaServer(document.querySelector('.export-btn')); }
+  };
+})();
+</script>
+</body>
+</html>

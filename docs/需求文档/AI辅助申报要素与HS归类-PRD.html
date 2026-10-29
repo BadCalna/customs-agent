@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI辅助申报要素与HS归类 · 产品需求文档（PRD）</title>
+<style>
+:root{
+  --pm-accent:#5b5bd6;
+  --pm-ink:#1f2937;
+  --pm-heading:color-mix(in srgb, var(--pm-accent) 38%, #1f2937);
+  --pm-line:color-mix(in srgb, var(--pm-accent) 13%, #fff);
+  --pm-soft:color-mix(in srgb, var(--pm-accent) 9%, #fff);
+  --pm-panel:520px;
+}
+body { font-family:"Microsoft YaHei","微软雅黑","PingFang SC","Hiragino Sans GB","Noto Sans CJK SC",sans-serif; max-width:1400px; margin:0 auto; padding:32px 24px; color:var(--pm-ink); background:#fff; }
+</style>
+<!-- 全局交互骨架样式（悬浮按钮、侧栏、拖拽手柄）：不随复制带走 -->
+<style>
+.prototype-sidebar { display:none; position:fixed; right:0; top:0; height:100vh; width:var(--pm-panel); background:#1a1a2e; flex-direction:column; z-index:900; }
+body.dual-pane .prototype-sidebar { display:flex; }
+body.dual-pane { margin:0!important; max-width:none!important; padding-right:calc(var(--pm-panel) + 36px); }
+.sidebar-header { display:flex; align-items:center; justify-content:space-between; padding:12px 16px; color:#e8e6ff; font-size:14px; font-weight:600; border-bottom:1px solid rgba(255,255,255,.08); }
+.sidebar-header button { background:none; border:none; color:#b9b5e0; font-size:16px; cursor:pointer; }
+.preview-context { padding:8px 16px; font-size:12px; color:#b9b5e0; line-height:1.5; border-bottom:1px solid rgba(255,255,255,.08); }
+.page-selector { padding:10px 16px; border-bottom:1px solid rgba(255,255,255,.08); }
+.page-selector select { width:100%; padding:8px 10px; border-radius:6px; border:1px solid rgba(255,255,255,.2); background:#26243f; color:#e8e6ff; font-size:13px; }
+.device-shell { flex:1; overflow:auto; display:flex; justify-content:center; align-items:flex-start; padding:16px; }
+.device-wrapper { flex:0 0 auto; position:relative; }
+.device-wrapper iframe { transform-origin:top left; border:none; background:#fff; border-radius:8px; }
+.prototype-resizer { width:6px; cursor:col-resize; background:transparent; }
+.prototype-resizer:hover { background:rgba(255,255,255,.15); }
+.fab-group { position:fixed; right:28px; bottom:28px; display:flex; gap:10px; z-index:1000; }
+body.dual-pane .fab-group { right:calc(var(--pm-panel) + 28px); }
+.fab-group button { background:#fff; color:#3b357a; border:1px solid #d8d4f0; border-radius:12px; padding:13px 20px; font-size:14px; font-weight:700; cursor:pointer; box-shadow:0 4px 16px rgba(91,91,214,.18); }
+.fab-group button:hover { border-color:var(--pm-accent); }
+.copy-all-fab { position:fixed; left:28px; bottom:28px; z-index:1001; background:#fff; color:#3b357a; border:1px solid #d8d4f0; border-radius:12px; padding:13px 20px; font-size:14px; font-weight:700; cursor:pointer; box-shadow:0 4px 16px rgba(91,91,214,.18); }
+.copy-all-fab:hover { transform:translateY(-2px); border-color:#5b5bd6; }
+.copy-toast { position:fixed; left:28px; bottom:80px; z-index:1002; max-width:360px; background:#2a2459; color:#fff; padding:11px 16px; border-radius:10px; font-size:13px; box-shadow:0 8px 24px rgba(20,16,70,.28); opacity:0; transform:translateY(8px); pointer-events:none; transition:opacity .2s, transform .2s; }
+.copy-toast.show { opacity:1; transform:translateY(0); }
+.edited-cell { background:#e8f5e9 !important; }
+.editable-table-wrap { position:relative; margin:14px 0; }
+.editable-table-wrap > table { margin:0 !important; }
+.pm-anchor { position:relative; }
+.row-ctrl { position:absolute; left:-30px; display:flex; flex-direction:column; gap:3px; opacity:0; pointer-events:none; transition:opacity .15s; z-index:4; }
+tr:hover > * .pm-anchor > .row-ctrl, tr:hover .pm-anchor > .row-ctrl { opacity:1; pointer-events:auto; }
+.row-ctrl button { width:22px; height:18px; border:none; border-radius:5px; cursor:pointer; color:#fff; font-size:13px; font-weight:700; line-height:1; }
+.row-add { background:#00b894; } .row-del { background:#e74c3c; }
+.editable-table-remove { position:absolute; top:-12px; right:8px; z-index:5; border:none; border-radius:999px; background:rgba(231,76,60,.96); color:#fff; font-size:12px; padding:6px 10px; cursor:pointer; opacity:0; pointer-events:none; transition:opacity .15s; }
+.editable-table-wrap:hover .editable-table-remove { opacity:1; pointer-events:auto; }
+.col-resizer { position:absolute; top:0; right:0; width:9px; height:100%; cursor:col-resize; transform:translateX(50%); z-index:3; opacity:0; transition:opacity .15s; }
+.col-resizer::after { content:''; position:absolute; left:4px; top:0; width:2px; height:100%; background:#00b894; opacity:0; transition:opacity .15s; }
+th:hover .col-resizer, td:hover .col-resizer, body.col-resizing .col-resizer.active { opacity:1; }
+.col-resizer:hover::after, body.col-resizing .col-resizer.active::after { opacity:1; }
+.row-resizer { position:absolute; left:0; bottom:0; width:100%; height:9px; cursor:row-resize; transform:translateY(50%); z-index:3; }
+.row-resizer::after { content:''; position:absolute; top:4px; left:0; width:100%; height:2px; background:#00b894; opacity:0; transition:opacity .15s; }
+.row-resizer:hover::after, body.row-resizing .row-resizer.active::after { opacity:1; }
+body.col-resizing, body.row-resizing { user-select:none !important; }
+body.col-resizing { cursor:col-resize !important; } body.row-resizing { cursor:row-resize !important; }
+.pm-undo-toast { position:fixed; left:50%; bottom:34px; transform:translateX(-50%); background:rgba(33,33,45,.92); color:#fff; padding:8px 16px; border-radius:8px; font-size:13px; line-height:1.4; pointer-events:none; opacity:0; transition:opacity .18s; z-index:9999; }
+.pm-undo-toast.show { opacity:1; }
+</style>
+</head>
+<body>
+<main id="prdContent">
+<style>
+/* 文档级样式（随一键复制带走） */
+h1.doc-title { font-size:30px; font-weight:800; color:var(--pm-heading); margin:0 0 6px; }
+p.doc-sub { font-size:14px; color:#8b86a3; margin:0 0 28px; }
+h2 { font-size:21px; font-weight:800; color:var(--pm-heading); border-left:5px solid var(--pm-accent); padding-left:12px; margin:36px 0 14px; }
+h3 { font-size:16px; font-weight:700; color:var(--pm-heading); margin:22px 0 10px; }
+table { table-layout:fixed; width:100%; border-collapse:collapse; margin:14px 0; }
+th { background:var(--pm-soft); color:var(--pm-heading); font-size:14px; font-weight:700; }
+th, td { border:1px solid var(--pm-line); padding:10px 12px; text-align:left; word-break:break-word; vertical-align:top; font-size:14px; line-height:1.7; }
+.meta-table col:first-child, .meta-table td:first-child { width:160px; font-weight:600; background:var(--pm-soft); }
+.version-table col:nth-child(1){width:90px;} .version-table col:nth-child(2){width:120px;} .version-table col:nth-child(3){width:120px;}
+.scheme-table .c-mod{width:100px;} .scheme-table .c-fn{width:120px;} .scheme-table .c-proto{width:360px;}
+.tracking-table col:nth-child(1){width:65px;} .tracking-table col:nth-child(2){width:145px;} .tracking-table col:nth-child(4){width:90px;}
+.goal-table th, .goal-table td { font-size:13px; }
+.source-note { font-size:12.5px; color:#8b86a3; }
+.scope-card { border:1px solid var(--pm-line); border-left:4px solid #00b894; border-radius:8px; padding:14px 16px; margin:14px 0; background:#f6fffb; }
+.risk-card { border:1px solid var(--pm-line); border-left:4px solid #e67e22; border-radius:8px; padding:14px 16px; margin:14px 0; background:#fffaf3; }
+.scope-card ul, .risk-card ul { margin:8px 0 0; padding-left:20px; } .scope-card li, .risk-card li { margin:4px 0; font-size:14px; line-height:1.7; }
+.desc-block { margin:0 0 12px; }
+.desc-block b { color:var(--pm-heading); }
+.desc-block p { margin:4px 0; font-size:13.5px; }
+.alert { border-left:4px solid #f39c12; background:#fff9ef; padding:10px 14px; border-radius:6px; font-size:13.5px; margin:10px 0; }
+.proto-shot { max-width:100%; height:auto; border-radius:8px; border:1px solid var(--pm-line); }
+.asset-note { font-size:12px; color:#8b86a3; margin:6px 0 0; }
+.asset-note a { color:var(--pm-accent); }
+.prototype-frame { position:relative; overflow:hidden; border-radius:8px; background:#f5f5f5; width:320px; }
+.prototype-iframe { position:absolute; top:0; left:0; border:none; background:transparent; transform-origin:top left; }
+.flow-frame { border-radius:8px; }
+.seq-code { background:#1e1e2e; color:#e8e6ff; padding:16px; border-radius:8px; font-size:13px; overflow:auto; font-family:Consolas,"Courier New",monospace; }
+</style>
+
+<!-- ===== 正文开始 ===== -->
+
+<h1 class="doc-title">AI辅助申报要素与HS归类 · 产品需求文档（PRD）</h1>
+<p class="doc-sub">业务员 / 物流文员 / 物流专员 · 钉钉H5端 + 网页工作台 · V1.0</p>
+
+<h2>📋 项目信息</h2>
+<table class="meta-table"><tbody>
+<tr><td>项目名称</td><td>AI辅助申报要素与HS归类（报关全流程AI化重构）</td></tr>
+<tr><td>版本号</td><td>V1.0（初稿）</td></tr>
+<tr><td>文档负责人</td><td>待定</td></tr>
+<tr><td>需求状态</td><td>评审中</td></tr>
+<tr><td>目标用户</td><td>业务员（申报要素填写）、物流文员（审核）、物流专员（单证核对与通关管理）</td></tr>
+<tr><td>涉及端</td><td>业务员端：钉钉H5微应用；物流/审核端：网页工作台（PC）</td></tr>
+<tr><td>功能入口</td><td>钉钉工作台微应用入口；审核工作台网页链接</td></tr>
+<tr><td>关联文件</td><td>《沟通记录.md》、业务流程梳理（11步）、三个验证案例（轴承/热继/固态继电器）</td></tr>
+<tr><td>项目定位</td><td>报关全流程（ERP拟签→提单正本，11步）AI化重构，非单点赋能</td></tr>
+</tbody></table>
+
+<h2>📝 版本记录</h2>
+<table class="version-table"><colgroup><col><col><col><col></colgroup>
+<thead><tr><th>版本</th><th>日期</th><th>修订人</th><th>修订说明</th></tr></thead>
+<tbody><tr><td>V1.0</td><td>2026-10-29</td><td>待定</td><td>初稿：基于业务流程梳理与两轮需求确认，输出全流程重构PRD；覆盖双端+知识库+全链路单证核对</td></tr></tbody></table>
+
+<h2>一、需求背景</h2>
+<p>公司进口业务沿用"货到后申报"模式，报关全流程共11步：ERP拟签→采购合同签订→货物申报要素制作→物流文员审核→货物到货→报关单据制作→报关预录单核对→完成报关→大副收据核对→提单草本核对→确认提单正本。其中申报要素制作环节依赖<strong>业务员填写品名、规格、HS编码和申报要素，物流文员人工审核</strong>。业务员对产品归类缺乏专业能力（如焊丝与焊条因成分、形态差异对应不同税则号列和退税率，仅凭俗名无法判断），也缺乏填写动力；供应商填写不准、配合度低，错误从源头进入流程；物流专员单人判断、末端审核无力把关。</p>
+<p>由此造成三重影响：其一，<strong>归类错误直接导致退税损失、海关质疑与合规风险，且风险全部集中在物流环节末端</strong>；其二，所有单证工作堆积在货到后的最后两周，全员高强度加班，单证在"报关单据→预录单→大副收据→提单草本"间反复人工核对同一组数据（重量、件数、品名）；其三，人工逐项核对效率低、易漏检，申报要素若识别错误还可能引发外部风险。典型例证：固态继电器125A这类商品，供应商仅提供"品名+电流"，缺少电压、品牌、型号三项关键信息，按现行流程要到审核端甚至报关端才能发现，返工成本高。</p>
+<p class="source-note">证据说明：暂无量化基线数据（单票要素制作耗时、归类差错率、审核退回率、加班人天均未统计），本判断基于业务方会议共识与三个商品验证案例（轴承6224/C3、热过载继电器LRD12C、固态继电器125A）的实查结果；量化基线待上线后补测。</p>
+
+<h2>二、需求目标</h2>
+<p><strong>让业务员"填得省事、填得正确"，让物流端"只看异常、不再全量核对"，把申报准备工作从货到后两周前移到合同阶段，并通过知识库沉淀让归类准确率持续提升。</strong></p>
+<table class="goal-table">
+<colgroup><col><col><col><col><col></colgroup>
+<thead><tr><th>用户结果</th><th>衡量指标</th><th>统计口径</th><th>预期方向</th><th>目标值</th></tr></thead>
+<tbody>
+<tr><td>业务员一次填齐申报要素，减少被打回返工</td><td>申报要素一次通过率</td><td>首次提交即通过物流审核的票数 / 总提交票数</td><td>↑</td><td>待基线确认</td></tr>
+<tr><td>AI推荐的HS编码可直接采用，人工仅复核低置信度项</td><td>编码推荐采纳率</td><td>业务员未修改直接采用AI推荐编码的次数 / 总推荐次数</td><td>↑</td><td>待基线确认</td></tr>
+<tr><td>物流文员从逐项核对转为只处理标红异常</td><td>单票审核耗时</td><td>从打开申报单到审核完成的时长中位数</td><td>↓</td><td>待基线确认</td></tr>
+<tr><td>单证核对（重量/件数/品名）由AI自动比对完成</td><td>单证核对自动化率</td><td>由AI完成比对并生成差异报告的核对环节数 / 总核对环节数（报关单据、预录单、大副收据、提单草本）</td><td>↑</td><td>待基线确认</td></tr>
+<tr><td>申报准备工作前移，缓解货到后集中加班</td><td>到货前要素就绪率</td><td>货物到港时申报要素已通过审核的票数 / 总票数</td><td>↑</td><td>待基线确认</td></tr>
+</tbody></table>
+
+
+<h2>三、需求概述（功能清单）</h2>
+<div class="scope-card"><b>本期范围</b>
+  <ul>
+    <li>业务员端（钉钉H5微应用）：申报任务承接（源自合同/采购单）、品名+规格+图片录入、AI推荐HS编码与申报要素清单、缺失字段补数引导、提交送审</li>
+    <li>物流审核端（网页工作台）：申报单AI预审与异常标注、批量Excel导入与异常行识别、人工复核与放行/退回</li>
+    <li>单证智能核对（工作台）：报关单据制作辅助、报关预录单/大副收据/提单草本的自动比对与差异报告、船名航次等关键字段核验</li>
+    <li>知识库与数据管理（工作台）：企业历史申报记录沉淀、官方税则数据查看与更新机制、待官方核验事项管理</li>
+    <li>全流程重构：申报准备前移至合同阶段（到货前完成要素制作与审核），关键核对点全部AI自动比对</li>
+  </ul>
+</div>
+<div class="risk-card"><b>本期不做什么 / 暂不展开</b>
+  <ul>
+    <li>不做ERP拟签与采购合同签订环节的改造——ERP与合同系统由IT统一规划，本期仅在合同/采购单生成后承接任务，不改动其流程（依赖系统对接排期）</li>
+    <li>不做报关申报与海关系统直连——报关发送仍走现有报关行/单一窗口通道，本期只做"预录单核对"前的比对</li>
+    <li>不做商业HS数据库采购——知识库坚持"官方公开数据+企业历史申报记录"自建路线；第三方免费数据仅作AI推荐初筛层且标注来源</li>
+    <li>不做供应商端入口——供应商信息补全通过业务员转发"补数清单"完成，供应商直接使用的入口留待后续版本</li>
+    <li>暂不展开移动端审核——物流审核与单证核对均为PC工作台场景，不做移动端适配</li>
+  </ul>
+</div>
+<table class="overview-table"><thead><tr><th>模块</th><th>一级功能</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>1 业务员端·钉钉H5</td><td>申报任务列表</td><td>承接合同/采购单生成的申报任务，按到港时间倒排提醒，驱动要素准备前移</td></tr>
+<tr><td>1 业务员端·钉钉H5</td><td>要素录入与AI推荐</td><td>品名+规格+图片（铭牌/实物照）录入，AI返回HS编码候选（含置信度）、申报要素清单与填写建议</td></tr>
+<tr><td>1 业务员端·钉钉H5</td><td>缺失字段补数</td><td>信息不足时（如缺电压/品牌/型号），生成待补清单并引导补充，而非事后退回</td></tr>
+<tr><td>2 物流审核端·工作台</td><td>申报单审核</td><td>AI预审标注异常行（归类存疑/要素缺失/与历史申报不一致），文员只复核标红项后放行或退回</td></tr>
+<tr><td>2 物流审核端·工作台</td><td>Excel批量导入与异常识别</td><td>批量导入申报明细，AI逐行校验并标注异常，导出带标注结果</td></tr>
+<tr><td>3 单证智能核对·工作台</td><td>报关单据制作辅助</td><td>从合同/发票/装箱单提取重量、件数、品名，自动填充并多源交叉校验</td></tr>
+<tr><td>3 单证智能核对·工作台</td><td>预录单/收据/提单核对</td><td>预录单、大副收据、提单草本与基准单据逐字段自动比对，生成差异报告；提单核对含船名、航次</td></tr>
+<tr><td>4 知识库·工作台</td><td>历史申报记录沉淀</td><td>审核通过的申报自动入库，形成"品名+规格→编码+要素"检索资产，AI优先命中</td></tr>
+<tr><td>4 知识库·工作台</td><td>税则数据管理与核验</td><td>官方税则数据查看、更新任务提醒、待官方核验事项（第三方初筛结果）集中处理</td></tr>
+</tbody></table>
+
+<h3>3.1 AI推荐结果可信度分级规则（跨页共享）</h3>
+<table class="rule-table"><thead><tr><th>等级</th><th>判定条件</th><th>处理方式</th></tr></thead>
+<tbody>
+<tr><td>高置信度</td><td>命中企业历史申报成功记录，或官方税则数据精确匹配</td><td>直接展示推荐结果，业务员确认即可提交</td></tr>
+<tr><td>中置信度</td><td>仅第三方数据源匹配，或历史记录命中但规格有差异</td><td>展示推荐结果并标注"待官方核验"，提示提交后由物流端复核</td></tr>
+<tr><td>低置信度</td><td>多候选编码得分接近、或关键归类依据字段（如电压、材质、成分）缺失</td><td>不给唯一推荐，列出候选及判断依据，并生成缺失字段补数清单；疑难项提示可申请海关预裁定</td></tr>
+</tbody></table>
+
+<h3>3.2 单证核对基准与关键字段规则（跨页共享）</h3>
+<table class="rule-table"><thead><tr><th>核对环节</th><th>基准单据</th><th>关键字段</th></tr></thead>
+<tbody>
+<tr><td>报关单据制作</td><td>合同 + 发票 + 装箱单</td><td>重量、件数、品名（三单交叉校验）</td></tr>
+<tr><td>报关预录单核对</td><td>报关单据</td><td>重量、件数、品名、境内货源地</td></tr>
+<tr><td>大副收据核对</td><td>报关单据 + 装箱单</td><td>重量、件数、品名</td></tr>
+<tr><td>提单草本核对</td><td>大副收据 + 报关单据 + 订舱信息</td><td>重量、件数、品名、船名、航次</td></tr>
+</tbody></table>
+
+
+<h2>四、业务流程图</h2>
+<iframe class="flow-frame" loading="lazy" src="../流程图/AI辅助申报要素与HS归类-flow.html"
+        style="width:100%;height:800px;border:none;background:transparent;"></iframe>
+
+<h2>五、交互流程图</h2>
+<iframe class="flow-frame screen-frame" loading="lazy" src="../流程图/AI辅助申报要素与HS归类-screenflow.html"
+        style="width:100%;height:1150px;border:none;background:transparent;"></iframe>
+
+<h2>六、详细方案</h2>
+<table class="scheme-table">
+<colgroup><col class="c-mod"><col class="c-fn"><col class="c-proto"><col></colgroup>
+<thead><tr><th>一级模块</th><th>二级功能</th><th>原型</th><th>描述</th></tr></thead><tbody>
+<tr data-preview="task-list">
+  <td class="mod" rowspan="4">1<br>业务员端<br>钉钉H5</td>
+  <td class="fn">1.1 申报任务列表</td>
+  <td class="proto">
+    <div class="prototype-frame" data-pw="375" data-ph="812"><iframe class="prototype-iframe" src="../原型/AI辅助申报要素与HS归类-prototype.html#task-list"></iframe></div>
+  </td>
+  <td class="desc">
+    <div class="desc-block"><b>【页面元素】</b>
+      <p>1、顶部标题栏：文案"申报任务"，右侧刷新图标</p>
+      <p>2、任务卡片：每张卡片含商品名称、供应商、合同号、预计到港日期、要素准备截止日、状态标签（待填报/待补数/已提交/已通过/已退回）</p>
+      <p>3、倒排提醒条：黄色横幅，文案"距要素准备截止还有N天"</p>
+      <p>4、底部说明：文案"任务由采购合同生成，请在到港前完成要素填写并通过审核"</p>
+    </div>
+    <div class="desc-block"><b>【交互说明】</b>
+      <p>1、点击任务卡片 → 进入该任务的要素录入页</p>
+      <p>2、点击刷新图标 → 重新拉取任务列表</p>
+    </div>
+    <div class="desc-block"><b>【功能逻辑】</b>
+      <p>1、任务按要素准备截止日升序排列，已逾期任务置顶并标红</p>
+      <p>2、状态标签"已退回"的卡片显示退回原因摘要，点击可直接进入修改</p>
+    </div>
+    <div class="desc-block"><b>【边界说明】</b>
+      <p>1、无任务 → 展示空态插画与文案"暂无申报任务"</p>
+      <p>2、网络异常 → 展示重试按钮，文案"加载失败，点击重试"</p>
+    </div>
+  </td>
+</tr>
+<tr data-preview="input-form">
+  <td class="fn">1.2 要素录入</td>
+  <td class="proto">
+    <div class="prototype-frame" data-pw="375" data-ph="812"><iframe class="prototype-iframe" src="../原型/AI辅助申报要素与HS归类-prototype.html#input-form"></iframe></div>
+  </td>
+  <td class="desc">
+    <div class="desc-block"><b>【页面元素】</b>
+      <p>1、顶部标题栏：文案"要素录入"，左侧返回按钮</p>
+      <p>2、商品信息区：品名输入框、规格型号输入框、品牌输入框（可留空）</p>
+      <p>3、图片上传区：文案"上传铭牌或实物照片"，支持拍照/相册，最多3张，缩略图预览</p>
+      <p>4、AI识别按钮：文案"AI识别并推荐"</p>
+      <p>5、参考信息折叠区：合同中的商品描述、供应商、数量</p>
+    </div>
+    <div class="desc-block"><b>【交互说明】</b>
+      <p>1、点击"AI识别并推荐" → 按钮变为"识别中…"，完成后跳转AI推荐结果页</p>
+      <p>2、点击图片缩略图 → 全屏预览，支持删除重传</p>
+      <p>3、点击参考信息折叠区 → 展开/收起合同参考信息</p>
+    </div>
+    <div class="desc-block"><b>【功能逻辑】</b>
+      <p>1、品名+规格+图片三项至少填品名与规格之一方可触发AI识别；仅填品名时提示结果置信度可能较低</p>
+      <p>2、AI识别自动纠正常见品名错别字（如"固体继电器"归一为"固态继电器"），纠错结果回显在输入框并标注"已自动更正"</p>
+    </div>
+    <div class="desc-block"><b>【边界说明】</b>
+      <p>1、AI识别超时（超过30秒）→ 弹窗提示"识别超时，请重试或补充更多信息"</p>
+      <p>2、图片模糊或无法解析 → 在结果页提示"图片未能识别，建议补拍铭牌特写"</p>
+    </div>
+  </td>
+</tr>
+<tr data-preview="ai-result">
+  <td class="fn">1.3 AI推荐结果</td>
+  <td class="proto">
+    <div class="prototype-frame" data-pw="375" data-ph="812"><iframe class="prototype-iframe" src="../原型/AI辅助申报要素与HS归类-prototype.html#ai-result"></iframe></div>
+  </td>
+  <td class="desc">
+    <div class="desc-block"><b>【页面元素】</b>
+      <p>1、推荐编码卡片：HS编码、商品名称、置信度标签（高/中/低）、数据来源标签（历史申报/官方税则/第三方初筛）</p>
+      <p>2、候选编码列表：其余候选编码及推荐理由（如"按工作电压>60V归类"），可展开</p>
+      <p>3、申报要素清单：逐项要素名称与填写值（如"用途：用于电柜电路通断控制"），可逐项编辑</p>
+      <p>4、税率信息条：出口退税率、监管条件摘要</p>
+      <p>5、底部操作：按钮"确认提交审核"、"换一个候选"</p>
+    </div>
+    <div class="desc-block"><b>【交互说明】</b>
+      <p>1、点击要素项 → 行内编辑填写值</p>
+      <p>2、点击"换一个候选" → 展开候选编码列表供选择，选择后要素清单与税率信息联动刷新</p>
+      <p>3、点击"确认提交审核" → 提交并返回任务列表，卡片状态变为"已提交"</p>
+    </div>
+    <div class="desc-block"><b>【功能逻辑】</b>
+      <p>1、推荐结果按3.1规则分级：高置信度直接展示；中置信度在卡片标注"待官方核验"；低置信度不给唯一推荐并引导进入1.4补数页</p>
+      <p>2、要素清单按选定编码的官方申报要求生成必填项，GTIN/CAS无值时默认填"无"</p>
+    </div>
+    <div class="desc-block"><b>【边界说明】</b>
+      <p>1、候选编码得分接近（低置信度）→ 不展示"确认提交"按钮，展示"补充信息"按钮进入1.4</p>
+      <p>2、识别到敏感/管制商品特征 → 红色警示条"该商品可能涉及监管条件，提交后将由物流端重点复核"</p>
+    </div>
+  </td>
+</tr>
+<tr data-preview="missing-fields">
+  <td class="fn">1.4 缺失字段补数</td>
+  <td class="proto">
+    <div class="prototype-frame" data-pw="375" data-ph="812"><iframe class="prototype-iframe" src="../原型/AI辅助申报要素与HS归类-prototype.html#missing-fields"></iframe></div>
+  </td>
+  <td class="desc">
+    <div class="desc-block"><b>【页面元素】</b>
+      <p>1、顶部说明条：文案"以下信息影响归类判断，请补充后重新识别"</p>
+      <p>2、待补字段列表：字段名、缺失原因（如"电压决定编码三档划分"）、输入框或拍照上传入口</p>
+      <p>3、转发按钮：文案"发给供应商补数"（生成待补清单卡片转发钉钉会话）</p>
+      <p>4、重新识别按钮：文案"已补充，重新识别"</p>
+    </div>
+    <div class="desc-block"><b>【交互说明】</b>
+      <p>1、逐项填写或上传 → 字段状态从"待补"变为"已补"</p>
+      <p>2、点击"发给供应商补数" → 唤起钉钉会话选择器，发送含字段清单的卡片消息</p>
+      <p>3、点击"已补充，重新识别" → 返回1.3重新获取推荐结果</p>
+    </div>
+    <div class="desc-block"><b>【功能逻辑】</b>
+      <p>1、待补清单仅列出影响归类判定的字段（按编码规则库推导），不做全量字段轰炸</p>
+      <p>2、供应商回复的信息由业务员代填入库，不做供应商自动回传</p>
+    </div>
+    <div class="desc-block"><b>【边界说明】</b>
+      <p>1、业务员选择"暂无法补充" → 任务保留"待补数"状态并按天提醒，不阻塞其他任务</p>
+      <p>2、长期（超过要素准备截止日）未补 → 任务升级提醒推送至物流专员</p>
+    </div>
+  </td>
+</tr>
+<tr data-preview="review-board">
+  <td class="mod" rowspan="3">2<br>物流审核端<br>网页工作台</td>
+  <td class="fn">2.1 审核看板</td>
+  <td class="proto">
+    <div class="prototype-frame" data-pw="1280" data-ph="800"><iframe class="prototype-iframe" src="../原型/AI辅助申报要素与HS归类-prototype.html#review-board"></iframe></div>
+  </td>
+  <td class="desc">
+    <div class="desc-block"><b>【页面元素】</b>
+      <p>1、顶部统计卡：待审核数、今日通过数、今日退回数、待官方核验数</p>
+      <p>2、左侧导航：申报审核、批量导入、单证核对、知识库</p>
+      <p>3、待审核列表：合同号、商品、业务员、提交时间、AI预审结论标签（通过/存在异常/无法预判）、异常项摘要</p>
+      <p>4、筛选器：按业务员、按结论、按提交时间</p>
+    </div>
+    <div class="desc-block"><b>【交互说明】</b>
+      <p>1、点击列表行 → 进入2.2单票审核页</p>
+      <p>2、切换筛选条件 → 列表即时刷新</p>
+    </div>
+    <div class="desc-block"><b>【功能逻辑】</b>
+      <p>1、列表按AI预审结论分组排序：存在异常的置顶，无法预判次之，通过的沉底</p>
+      <p>2、统计卡数字实时更新于每次审核动作后</p>
+    </div>
+    <div class="desc-block"><b>【边界说明】</b>
+      <p>1、无待审核单 → 空态文案"暂无待审核申报"</p>
+    </div>
+  </td>
+</tr>
+<tr data-preview="detail-review">
+  <td class="fn">2.2 单票审核（异常复核）</td>
+  <td class="proto">
+    <div class="prototype-frame" data-pw="1280" data-ph="800"><iframe class="prototype-iframe" src="../原型/AI辅助申报要素与HS归类-prototype.html#detail-review"></iframe></div>
+  </td>
+  <td class="desc">
+    <div class="desc-block"><b>【页面元素】</b>
+      <p>1、单据头：合同号、商品、业务员、供应商、到港日期</p>
+      <p>2、AI预审报告区：逐项校验结果（归类与历史申报一致性、申报要素完整性、品牌型号与图片一致性），异常项红色标注并附AI说明</p>
+      <p>3、申报要素明细表：要素名、业务员填写值、AI建议值（不一致时并排展示差异）</p>
+      <p>4、参考图：业务员上传的铭牌/实物照片</p>
+      <p>5、底部操作：按钮"审核通过"、"退回修改"（附退回原因）</p>
+    </div>
+    <div class="desc-block"><b>【交互说明】</b>
+      <p>1、点击异常项说明 → 展开AI判定依据（如历史申报记录、税则条文摘要）</p>
+      <p>2、点击"审核通过" → 二次确认弹窗"含N项异常仍通过？"（有异常项时），确认后该票入库历史申报记录</p>
+      <p>3、点击"退回修改" → 弹出退回原因多选（归类存疑/要素缺失/图片不符/其他）并退回业务员</p>
+    </div>
+    <div class="desc-block"><b>【功能逻辑】</b>
+      <p>1、审核通过即触发该票申报数据沉淀入库（见4.1），供后续AI优先命中</p>
+      <p>2、"待官方核验"标记的推荐在通过时自动进入知识库待核验清单（见4.1）</p>
+    </div>
+    <div class="desc-block"><b>【边界说明】</b>
+      <p>1、AI预判"无法预判"（无历史记录且数据源无匹配）→ 报告区提示"本票为新品类，请人工重点核对，并建议申请预裁定"</p>
+    </div>
+  </td>
+</tr>
+<tr data-preview="batch-import">
+  <td class="fn">2.3 Excel批量导入与异常识别</td>
+  <td class="proto">
+    <div class="prototype-frame" data-pw="1280" data-ph="800"><iframe class="prototype-iframe" src="../原型/AI辅助申报要素与HS归类-prototype.html#batch-import"></iframe></div>
+  </td>
+  <td class="desc">
+    <div class="desc-block"><b>【页面元素】</b>
+      <p>1、上传区：拖拽或点击上传Excel，模板下载链接</p>
+      <p>2、识别进度条：文案"正在识别第N/M行…"</p>
+      <p>3、结果表格：逐行展示导入数据 + AI标注列（正常/异常+异常原因，如"缺电压""编码与品名不符""与历史申报不一致"），异常行红色高亮</p>
+      <p>4、操作栏：按钮"导出带标注结果"、"仅导出异常行"、"全部重新识别"</p>
+    </div>
+    <div class="desc-block"><b>【交互说明】</b>
+      <p>1、点击异常原因 → 弹出该行AI判定详情与建议修正值</p>
+      <p>2、点击"导出带标注结果" → 下载Excel，异常标注以批注/颜色保留</p>
+      <p>3、修正行内数据后 → 该行出现"重新识别"按钮，单独重跑</p>
+    </div>
+    <div class="desc-block"><b>【功能逻辑】</b>
+      <p>1、识别顺序：先品名归一纠错，再按3.1规则做编码与要素校验，最后比对历史申报记录</p>
+      <p>2、异常分类固定四类：归类存疑、要素缺失、品名不规范、与历史申报不一致</p>
+    </div>
+    <div class="desc-block"><b>【边界说明】</b>
+      <p>1、文件格式不符/超过行数上限（1000行）→ 上传即拦截并提示</p>
+      <p>2、某行识别失败 → 该行标注"识别失败"，不影响其余行</p>
+    </div>
+  </td>
+</tr>
+<tr data-preview="doc-making">
+  <td class="mod" rowspan="2">3<br>单证智能核对<br>网页工作台</td>
+  <td class="fn">3.1 报关单据制作辅助</td>
+  <td class="proto">
+    <div class="prototype-frame" data-pw="1280" data-ph="800"><iframe class="prototype-iframe" src="../原型/AI辅助申报要素与HS归类-prototype.html#doc-making"></iframe></div>
+  </td>
+  <td class="desc">
+    <div class="desc-block"><b>【页面元素】</b>
+      <p>1、单据关联区：选择合同，展示已关联的发票、装箱单文件列表</p>
+      <p>2、提取结果表：品名、重量、件数三列 × 合同/发票/装箱单三个来源，逐字段对比展示</p>
+      <p>3、一致性状态列：每行标注"三单一致"或"存在差异+差异说明"</p>
+      <p>4、报关单预览区：按提取结果自动填充的报关单字段（含申报要素，来自已审核的申报数据）</p>
+      <p>5、操作：按钮"生成报关单据"、"标记差异待处理"</p>
+    </div>
+    <div class="desc-block"><b>【交互说明】</b>
+      <p>1、点击差异行 → 展开三个来源的原值截图对照</p>
+      <p>2、点击"生成报关单据" → 一致行为自动填充，存在未处理差异行时按钮置灰并提示</p>
+    </div>
+    <div class="desc-block"><b>【功能逻辑】</b>
+      <p>1、申报要素部分直接取自已审核通过的申报记录，不重复录入</p>
+      <p>2、重量自动处理净重/毛重与单位换算，换算结果标注换算规则</p>
+    </div>
+    <div class="desc-block"><b>【边界说明】</b>
+      <p>1、发票或装箱单缺失 → 该来源列显示"未上传"，提示补充后才可生成</p>
+      <p>2、OCR识别置信度低的字段 → 黄色标注"请人工确认"</p>
+    </div>
+  </td>
+</tr>
+<tr data-preview="compare-report">
+  <td class="fn">3.2 单证比对与差异报告</td>
+  <td class="proto">
+    <div class="prototype-frame" data-pw="1280" data-ph="800"><iframe class="prototype-iframe" src="../原型/AI辅助申报要素与HS归类-prototype.html#compare-report"></iframe></div>
+  </td>
+  <td class="desc">
+    <div class="desc-block"><b>【页面元素】</b>
+      <p>1、核对环节选择Tab：报关预录单核对 / 大副收据核对 / 提单草本核对（三个环节同一界面形态）</p>
+      <p>2、上传区：上传待核对单据（预录单/大副收据/提单草本扫描件或PDF）</p>
+      <p>3、比对结果表：关键字段（按3.2规则表展示对应字段）× 基准值/单据值/比对结论（一致/差异），差异行红色</p>
+      <p>4、差异汇总卡片：差异字段数、差异明细、建议处理动作（如"联系报关行改单"）</p>
+      <p>5、操作：按钮"确认核对完成"、"导出差异报告"</p>
+    </div>
+    <div class="desc-block"><b>【交互说明】</b>
+      <p>1、切换Tab → 上传区与比对字段按3.2规则表切换（提单草本核对含船名、航次）</p>
+      <p>2、点击差异行 → 左右并排展示基准单据与上传单据对应位置截图</p>
+      <p>3、点击"确认核对完成" → 无未确认差异时记录核对结果并归档；有差异时需先逐项标记"已处理"</p>
+    </div>
+    <div class="desc-block"><b>【功能逻辑】</b>
+      <p>1、基准值来源按3.2规则表：预录单对报关单据，大副收据对报关单据+装箱单，提单草本对大副收据+报关单据+订舱信息</p>
+      <p>2、船名、航次与订舱信息自动交叉验证，不一致视为差异</p>
+    </div>
+    <div class="desc-block"><b>【边界说明】</b>
+      <p>1、上传单据OCR识别失败 → 提示"无法识别，请检查扫描件清晰度"，支持人工录入关键字段后比对</p>
+      <p>2、境内货源地（仅预录单环节）→ AI按供应商注册地推荐编码，低置信时标注"请人工确认"</p>
+    </div>
+  </td>
+</tr>
+<tr data-preview="knowledge-base">
+  <td class="mod" rowspan="1">4<br>知识库<br>网页工作台</td>
+  <td class="fn">4.1 知识库管理</td>
+  <td class="proto">
+    <div class="prototype-frame" data-pw="1280" data-ph="800"><iframe class="prototype-iframe" src="../原型/AI辅助申报要素与HS归类-prototype.html#knowledge-base"></iframe></div>
+  </td>
+  <td class="desc">
+    <div class="desc-block"><b>【页面元素】</b>
+      <p>1、Tab页：历史申报记录 / 税则数据 / 待官方核验</p>
+      <p>2、历史申报记录表：品名、规格、HS编码、申报要素摘要、审核人、入库时间、命中次数，支持按品名/编码搜索</p>
+      <p>3、税则数据区：编码查询框、税率/监管条件/申报要素要求展示、数据版本号与更新时间</p>
+      <p>4、待核验清单：来自第三方初筛的中置信度推荐项列表，每条附"官方渠道核验结果"登记入口</p>
+      <p>5、更新提醒横幅：文案"新年度税则已发布，请执行年度全量更新"（按年触发）</p>
+    </div>
+    <div class="desc-block"><b>【交互说明】</b>
+      <p>1、点击历史记录行 → 查看完整申报要素与关联合同</p>
+      <p>2、在待核验清单登记核验结果 → 该条状态变为"已核验"，并同步修正对应推荐数据</p>
+      <p>3、点击年度更新横幅 → 进入更新任务说明页（列出更新步骤与责任人）</p>
+    </div>
+    <div class="desc-block"><b>【功能逻辑】</b>
+      <p>1、历史申报记录在每次审核通过后自动入库（见2.2），不依赖人工录入</p>
+      <p>2、AI推荐优先命中历史申报记录，其次官方税则数据，第三方数据仅作初筛且必须携带"待官方核验"标记</p>
+    </div>
+    <div class="desc-block"><b>【边界说明】</b>
+      <p>1、税则年度切换后，历史记录中已停用编码标注"编码已停用，请重新归类"，不再参与高置信度命中</p>
+      <p>2、待核验条目超过30天未处理 → 升级提醒推送至物流专员</p>
+    </div>
+  </td>
+</tr>
+
+</tbody></table>
+
+<h2>七、数据埋点</h2>
+<table class="tracking-table">
+<colgroup><col><col><col><col><col><col></colgroup>
+<thead><tr><th>序号</th><th>埋点名</th><th>埋点中文名</th><th>埋点类型</th><th>埋点参数</th><th>参数值</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>ai_identify_click</td><td>点击AI识别并推荐</td><td>点击</td><td>task_id, has_image, has_spec</td><td>任务ID；是否含图片；是否含规格</td></tr>
+<tr><td>2</td><td>ai_recommend_view</td><td>AI推荐结果曝光</td><td>曝光</td><td>task_id, hs_code, confidence_level, source_type</td><td>任务ID；推荐编码；置信度分级；数据来源类型</td></tr>
+<tr><td>3</td><td>ai_recommend_adopt</td><td>采纳AI推荐编码</td><td>提交结果</td><td>task_id, hs_code, is_modified, candidate_rank</td><td>任务ID；最终编码；是否修改过推荐；采用候选序号</td></tr>
+<tr><td>4</td><td>ai_recommend_switch</td><td>切换其他候选编码</td><td>点击</td><td>task_id, from_code, to_code</td><td>任务ID；原推荐编码；切换后编码</td></tr>
+<tr><td>5</td><td>missing_fields_forward</td><td>转发补数清单</td><td>点击</td><td>task_id, field_count</td><td>任务ID；待补字段数</td></tr>
+<tr><td>6</td><td>declaration_submit</td><td>提交申报审核</td><td>提交结果</td><td>task_id, hs_code, confidence_level</td><td>任务ID；提交编码；推荐置信度</td></tr>
+<tr><td>7</td><td>review_result</td><td>审核结论</td><td>提交结果</td><td>task_id, result, reject_reasons, anomaly_count</td><td>任务ID；通过/退回；退回原因（多选）；异常项数</td></tr>
+<tr><td>8</td><td>batch_import_run</td><td>批量导入识别</td><td>提交结果</td><td>file_id, row_total, row_anomaly</td><td>文件ID；总行数；异常行数</td></tr>
+<tr><td>9</td><td>doc_generate</td><td>生成报关单据</td><td>提交结果</td><td>contract_id, diff_count</td><td>合同ID；未处理差异行数</td></tr>
+<tr><td>10</td><td>compare_finish</td><td>单证核对完成</td><td>提交结果</td><td>task_id, stage, diff_count</td><td>任务ID；核对环节（预录单/大副收据/提单草本）；差异数</td></tr>
+<tr><td>11</td><td>kb_verify_register</td><td>登记官方核验结果</td><td>提交结果</td><td>item_id, verify_result</td><td>条目ID；核验结论</td></tr>
+</tbody></table>
+<p class="source-note">埋点参数命名暂无公司埋点字典参考，字段名为本PRD拟定，接入埋点系统前需与数据团队对齐（见待确认清单）。</p>
+
+<h3>待后续确认的产品口径</h3>
+<ul>
+<li>埋点字段命名与埋点字典对齐 —— 卡在：数据团队/埋点系统规范；影响：数据埋点章节字段名可能调整</li>
+<li>钉钉H5微应用的免登与组织内发布权限 —— 卡在：企业钉钉开放平台管理员；影响：业务员端入口形态与上线方式</li>
+<li>合同/采购单数据对接方式（接口/定时同步/人工关联） —— 卡在：IT与ERP厂商；影响：任务自动生成能力是否本期可用</li>
+<li>官方税则数据的首次全量导入与年度更新的具体执行责任人 —— 卡在：物流部负责人；影响：知识库冷启动数据范围</li>
+<li>文档负责人、版本记录修订人等元信息 —— 卡在：用户；影响：项目信息章节</li>
+<li>历史申报存量数据是否一次性迁移入库（历史几年范围） —— 卡在：物流部负责人；影响：AI推荐冷启动命中率</li>
+<li>需求目标各项基线数据（一次通过率/审核耗时/核对耗时等） —— 卡在：上线前实测；影响：目标值暂为"待基线确认"</li>
+</ul>
+</main>
+
+<!-- 右侧双栏预览面板 -->
+<aside class="prototype-sidebar" contenteditable="false">
+  <div class="sidebar-header"><span>交互原型预览</span><button onclick="toggleDualPane()">✕</button></div>
+  <div class="preview-context">静态原型仅还原界面与主流程，AI推荐结果为示例数据，实际由后端模型返回。</div>
+  <div class="page-selector"><select id="pageSelect" onchange="switchPage(this.value)"></select></div>
+  <div class="preview-zoom" style="display:flex;align-items:center;gap:6px;padding:8px 16px;border-bottom:1px solid rgba(255,255,255,.08);">
+    <button type="button" onclick="zoomPreview(-1)" title="缩小" style="background:rgba(255,255,255,.08);color:#e8e6ff;border:1px solid rgba(255,255,255,.16);border-radius:6px;padding:3px 10px;font-size:12px;cursor:pointer;">－</button>
+    <span id="previewZoomLabel" style="min-width:82px;text-align:center;font-size:12px;color:#b9b5e0;">100%</span>
+    <button type="button" onclick="zoomPreview(1)" title="放大" style="background:rgba(255,255,255,.08);color:#e8e6ff;border:1px solid rgba(255,255,255,.16);border-radius:6px;padding:3px 10px;font-size:12px;cursor:pointer;">＋</button>
+    <button type="button" onclick="fitPreview()" title="适配面板宽度" style="background:rgba(255,255,255,.08);color:#e8e6ff;border:1px solid rgba(255,255,255,.16);border-radius:6px;padding:3px 10px;font-size:12px;cursor:pointer;">适配</button>
+  </div>
+  <div class="device-shell"><div class="device-wrapper" id="deviceWrapper"><iframe id="prototypeFrame" src=""></iframe></div></div>
+  <div class="prototype-resizer" id="panelResizer"></div>
+</aside>
+
+<div class="fab-group">
+  <button id="dualPaneToggle" onclick="toggleDualPane()">双栏预览</button>
+  <button onclick="savePRD()">💾 保存并通知AI</button>
+</div>
+<button class="copy-all-fab" onclick="copyAllContent()">📋 一键复制全文</button>
+
+<script src="../../scripts/prototype-export-client.js?v=20261029-prd"></script>
+<script>
+// ===== 双栏预览 CATALOG =====
+var CATALOG = [
+  { value:'task-list', label:'1.1 申报任务列表（钉钉H5）', url:'../原型/AI辅助申报要素与HS归类-prototype.html#task-list', w:375, h:812 },
+  { value:'input-form', label:'1.2 要素录入（钉钉H5）', url:'../原型/AI辅助申报要素与HS归类-prototype.html#input-form', w:375, h:812 },
+  { value:'ai-result', label:'1.3 AI推荐结果（钉钉H5）', url:'../原型/AI辅助申报要素与HS归类-prototype.html#ai-result', w:375, h:812 },
+  { value:'missing-fields', label:'1.4 缺失字段补数（钉钉H5）', url:'../原型/AI辅助申报要素与HS归类-prototype.html#missing-fields', w:375, h:812 },
+  { value:'review-board', label:'2.1 审核看板（工作台）', url:'../原型/AI辅助申报要素与HS归类-prototype.html#review-board', w:1280, h:800 },
+  { value:'detail-review', label:'2.2 单票审核（工作台）', url:'../原型/AI辅助申报要素与HS归类-prototype.html#detail-review', w:1280, h:800 },
+  { value:'batch-import', label:'2.3 批量导入（工作台）', url:'../原型/AI辅助申报要素与HS归类-prototype.html#batch-import', w:1280, h:800 },
+  { value:'doc-making', label:'3.1 报关单据制作（工作台）', url:'../原型/AI辅助申报要素与HS归类-prototype.html#doc-making', w:1280, h:800 },
+  { value:'compare-report', label:'3.2 单证比对（工作台）', url:'../原型/AI辅助申报要素与HS归类-prototype.html#compare-report', w:1280, h:800 },
+  { value:'knowledge-base', label:'4.1 知识库管理（工作台）', url:'../原型/AI辅助申报要素与HS归类-prototype.html#knowledge-base', w:1280, h:800 }
+];
+var previewPage = CATALOG[0].value;
+var previewZoom = null;
+function currentCfg(){ return CATALOG.find(function(o){return o.value===previewPage;}) || CATALOG[0]; }
+function scalePreview(){
+  var shell=document.querySelector('.device-shell'), wrap=document.getElementById('deviceWrapper'), frame=document.getElementById('prototypeFrame');
+  if(!shell||!wrap||!frame) return;
+  var cfg=currentCfg(), innerW=Math.max(120, shell.clientWidth-40);
+  var fit=innerW/cfg.w, scale=(previewZoom==null)? fit : previewZoom;
+  frame.style.width=cfg.w+'px'; frame.style.height=cfg.h+'px'; frame.style.transform='scale('+scale+')';
+  wrap.style.width=Math.round(cfg.w*scale)+'px'; wrap.style.height=Math.round(cfg.h*scale)+'px';
+  var lab=document.getElementById('previewZoomLabel');
+  if(lab) lab.textContent=Math.round(scale*100)+'%'+(previewZoom==null?' · 适配':'');
+}
+function switchPage(v){
+  previewPage=v; var sel=document.getElementById('pageSelect'); if(sel) sel.value=v;
+  if(!document.body.classList.contains('dual-pane')) return;
+  var f=document.getElementById('prototypeFrame'); if(f) f.src=currentCfg().url;
+  requestAnimationFrame(scalePreview); setTimeout(scalePreview,350);
+}
+function toggleDualPane(){
+  var on = document.body.classList.toggle('dual-pane');
+  var btn = document.getElementById('dualPaneToggle'); if(btn) btn.textContent = on ? '收起预览' : '双栏预览';
+  if(on){ var f=document.getElementById('prototypeFrame'); if(f && !f.src) f.src=currentCfg().url;
+    requestAnimationFrame(scalePreview); setTimeout(scalePreview,350); }
+}
+var ZOOM_STEPS=[0.25,0.5,0.75,1,1.25,1.5,2,3];
+function currentPreviewScale(){
+  if(previewZoom!=null) return previewZoom;
+  var shell=document.querySelector('.device-shell');
+  if(!shell) return 1;
+  return Math.max(120, shell.clientWidth-40)/currentCfg().w;
+}
+function zoomPreview(dir){
+  var now=currentPreviewScale(), next;
+  if(dir>0) next=ZOOM_STEPS.find(function(s){return s>now+1e-4;});
+  else next=[].concat(ZOOM_STEPS).reverse().find(function(s){return s<now-1e-4;});
+  previewZoom = next==null ? Math.min(3, Math.max(0.25, now)) : next;
+  scalePreview();
+}
+function fitPreview(){ previewZoom=null; scalePreview(); }
+window.addEventListener('resize', scalePreview);
+// 面板拖拽
+(function(){
+  var h=document.getElementById('panelResizer'); if(!h) return;
+  h.addEventListener('mousedown', function(e){
+    e.preventDefault();
+    var startX=e.clientX, startW=document.querySelector('.prototype-sidebar').offsetWidth;
+    function mv(ev){ var w=Math.min(Math.max(380, startW-(ev.clientX-startX)), Math.min(900, window.innerWidth-360)); document.documentElement.style.setProperty('--pm-panel', w+'px'); scalePreview(); }
+    function up(){ document.removeEventListener('mousemove',mv); document.removeEventListener('mouseup',up); }
+    document.addEventListener('mousemove',mv); document.addEventListener('mouseup',up);
+  });
+})();
+// scroll-spy
+function initPreviewScrollSync(){
+  var nodes = Array.prototype.slice.call(document.querySelectorAll('.scheme-table [data-preview]'));
+  if(!nodes.length) return;
+  var lockUntil = 0, sel = document.getElementById('pageSelect');
+  if(sel) sel.addEventListener('change', function(){ lockUntil = Date.now() + 4000; });
+  function pickActive(){
+    if(!document.body.classList.contains('dual-pane') || Date.now() < lockUntil) return;
+    var line = window.innerHeight * 0.35, current = null;
+    for(var i=0;i<nodes.length;i++){ if(nodes[i].getBoundingClientRect().top <= line) current = nodes[i]; }
+    if(!current) current = nodes[0];
+    var v = current.getAttribute('data-preview');
+    if(v && v !== previewPage) switchPage(v);
+  }
+  var ticking = false;
+  function onScroll(){ if(ticking) return; ticking = true; requestAnimationFrame(function(){ pickActive(); ticking = false; }); }
+  window.addEventListener('scroll', onScroll, { passive:true });
+  window.addEventListener('resize', onScroll);
+  pickActive();
+}
+window.addEventListener('load', function(){
+  var sel=document.getElementById('pageSelect');
+  if(sel){ CATALOG.forEach(function(c){ var o=document.createElement('option'); o.value=c.value; o.textContent=c.label; sel.appendChild(o); }); sel.value=previewPage; }
+  var m=location.hash.match(/preview=([\w-]+)/); if(m){ previewPage=m[1]; toggleDualPane(); }
+  initPreviewScrollSync();
+  scalePrototypes();
+});
+// 原型列等比缩放
+function scalePrototypes() {
+  document.querySelectorAll('.prototype-frame').forEach(function(frame) {
+    var pw = parseInt(frame.dataset.pw) || 375;
+    var ph = parseInt(frame.dataset.ph) || 700;
+    var iframe = frame.querySelector('.prototype-iframe');
+    if (!iframe) return;
+    iframe.style.width = pw + 'px';
+    iframe.style.height = ph + 'px';
+    var containerWidth = frame.clientWidth || 320;
+    var scale = containerWidth / pw;
+    iframe.style.transform = 'scale(' + scale + ')';
+    frame.style.height = Math.round(ph * scale) + 'px';
+  });
+}
+window.addEventListener('resize', scalePrototypes);
+setTimeout(scalePrototypes, 500);
+// 保存
+function savePRD(){
+  var html = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
+  var blob = new Blob([html], {type:'text/html;charset=utf-8'});
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'AI辅助申报要素与HS归类-PRD.html';
+  a.click(); URL.revokeObjectURL(a.href);
+}
+// ===== 通用编辑模块（PMEdit）=====
+(function () {
+  var EDITABLE_BLOCK_SELECTOR = 'td, th, p, li, h1, h2, h3, h4, .alert, blockquote, dd, dt';
+  var EXCLUDE_SELECTOR = '.prototype-sidebar, .fab-group, .save-btn, .save-btn-container, .dual-pane-toggle, .col-resizer, .row-resizer, .row-ctrl, .pm-anchor, .editable-table-remove, .pm-undo-toast, script, style, iframe, button';
+  var SKIP_CELL_CONTENT = 'table, iframe, video, canvas, img';
+  var origMap = new WeakMap(), rowDone = new WeakSet();
+  var undoStack = [], redoStack = [], MAX_STEPS = 200, applying = false;
+  function pushStep(step){ if (applying) return; undoStack.push(step); if (undoStack.length > MAX_STEPS) undoStack.shift(); redoStack.length = 0; }
+  function reinsert(node, parent, next){ if (!parent) return; if (next && next.parentNode === parent) parent.insertBefore(node, next); else parent.appendChild(node); }
+  var toastEl = null, toastTimer = null;
+  function toast(msg){
+    if (!toastEl){ toastEl = document.createElement('div'); toastEl.className = 'pm-undo-toast'; toastEl.setAttribute('contenteditable','false'); document.body.appendChild(toastEl); }
+    toastEl.textContent = msg;
+    requestAnimationFrame(function(){ if (toastEl) toastEl.classList.add('show'); });
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(function(){ if (toastEl){ toastEl.remove(); toastEl = null; } }, 1300);
+  }
+  function runStep(s, dir){ applying = true; try { s[dir](); } finally { applying = false; } }
+  function undo(){ commitPending(); var s = undoStack.pop(); if (!s){ toast('没有可撤销的操作'); return; } runStep(s, 'undo'); redoStack.push(s); toast('已撤销'); }
+  function redo(){ commitPending(); var s = redoStack.pop(); if (!s){ toast('没有可重做的操作'); return; } runStep(s, 'redo'); undoStack.push(s); toast('已重做'); }
+  function isFormField(t){ return !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT'); }
+  document.addEventListener('keydown', function(e){
+    if (!(e.metaKey || e.ctrlKey) || e.altKey) return;
+    if (isFormField(e.target)) return;
+    var k = (e.key || '').toLowerCase();
+    if (k === 'z' && !e.shiftKey){ e.preventDefault(); undo(); }
+    else if (k === 'y' || (k === 'z' && e.shiftKey)){ e.preventDefault(); redo(); }
+  }, true);
+  var pending = null, pendTimer = null, PEND_MS = 600;
+  function flagState(el){ return { changed: el.getAttribute('data-changed'), cls: el.classList.contains('edited-cell') }; }
+  function applyFlag(el, s){ if (s.changed) el.setAttribute('data-changed', s.changed); else el.removeAttribute('data-changed'); if (s.cls) el.classList.add('edited-cell'); else el.classList.remove('edited-cell'); }
+  function syncChangedFlag(el){ if (el.innerHTML !== origMap.get(el)) markEditableCellChanged(el); }
+  function reveal(el){ if (el && el.isConnected && el.scrollIntoView) el.scrollIntoView({ block:'nearest' }); }
+  function seed(el){ pending = { el: el, before: el.innerHTML, flag: flagState(el) }; }
+  function commitPending(){
+    if (pendTimer){ clearTimeout(pendTimer); pendTimer = null; }
+    var p = pending; pending = null;
+    if (!p) return;
+    var el = p.el, before = p.before, beforeFlag = p.flag, after = el.innerHTML;
+    if (after === before) return;
+    syncChangedFlag(el);
+    var afterFlag = flagState(el);
+    pushStep({ undo: function(){ el.innerHTML = before; applyFlag(el, beforeFlag); reveal(el); }, redo: function(){ el.innerHTML = after; applyFlag(el, afterFlag); reveal(el); } });
+  }
+  function onEditFocus(){ if (pending && pending.el !== this) commitPending(); if (!pending) seed(this); }
+  function onEditInput(){
+    var el = this;
+    if (!pending || pending.el !== el){ commitPending(); seed(el); }
+    if (pendTimer) clearTimeout(pendTimer);
+    pendTimer = setTimeout(function(){ var still = pending && pending.el; commitPending(); if (still && document.activeElement === still) seed(still); }, PEND_MS);
+  }
+  function onEditBlur(){ if (pending && pending.el === this) commitPending(); syncChangedFlag(this); }
+  function isExcluded(el){ return !!(el.closest && el.closest(EXCLUDE_SELECTOR)); }
+  function isHeaderRow(tr){ return tr.cells.length > 0 && Array.prototype.every.call(tr.cells, function(c){ return c.tagName === 'TH'; }); }
+  function headerRowOf(table){ if (table.tHead && table.tHead.rows[0]) return table.tHead.rows[0]; for (var i=0;i<table.rows.length;i++) if (isHeaderRow(table.rows[i])) return table.rows[i]; return table.rows[0] || null; }
+  function markEditableCellChanged(el){ if(!el) return; el.setAttribute('data-changed','true'); el.classList.add('edited-cell'); }
+  function trackEditable(el){ if (origMap.has(el)) return; origMap.set(el, el.innerHTML); el.setAttribute('contenteditable','true'); el.style.outline='none'; el.addEventListener('focus', onEditFocus); el.addEventListener('input', onEditInput); el.addEventListener('blur', onEditBlur); }
+  function makeDocumentEditable(root){ (root||document).querySelectorAll(EDITABLE_BLOCK_SELECTOR).forEach(function(el){ if (isExcluded(el)) return; if (el.querySelector(SKIP_CELL_CONTENT)) return; trackEditable(el); }); }
+  function wrapTable(table){
+    if (table.closest('.editable-table-wrap')) return table.closest('.editable-table-wrap');
+    var wrap=document.createElement('div'); wrap.className='editable-table-wrap'; wrap.setAttribute('contenteditable','false');
+    table.parentNode.insertBefore(wrap, table); wrap.appendChild(table);
+    var rm=document.createElement('button'); rm.type='button'; rm.className='editable-table-remove'; rm.textContent='删除表格';
+    rm.addEventListener('click', function(e){ e.preventDefault(); var parent=wrap.parentNode, next=wrap.nextSibling; wrap.remove(); pushStep({ undo:function(){ reinsert(wrap, parent, next); reveal(wrap); }, redo:function(){ wrap.remove(); } }); });
+    wrap.appendChild(rm); return wrap;
+  }
+  function blankRowFrom(tr){
+    var clone=tr.cloneNode(true); clone.style.height=''; clone.removeAttribute('id');
+    Array.prototype.forEach.call(clone.cells, function(c){
+      c.removeAttribute('rowspan'); c.removeAttribute('colspan'); c.removeAttribute('id');
+      c.removeAttribute('data-changed'); c.classList.remove('edited-cell');
+      c.querySelectorAll('.row-ctrl, .col-resizer, .row-resizer, .pm-anchor').forEach(function(n){ if(n.classList.contains('pm-anchor')){ while(n.firstChild) n.parentNode.insertBefore(n.firstChild,n); n.remove(); } else n.remove(); });
+      if(!c.querySelector('iframe, img, video, canvas')) c.innerHTML='<br>';
+      c.removeAttribute('contenteditable');
+    });
+    return clone;
+  }
+  function installRowControls(tr){
+    var first=tr.cells[0]; if(!first || first.querySelector(':scope > .pm-anchor > .row-ctrl')) return;
+    first.style.position='relative';
+    var anchor=document.createElement('span'); anchor.className='pm-anchor'; anchor.setAttribute('contenteditable','false');
+    var ctrl=document.createElement('span'); ctrl.className='row-ctrl';
+    var add=document.createElement('button'); add.type='button'; add.className='row-add'; add.textContent='+'; add.title='在下方插入一行';
+    var del=document.createElement('button'); del.type='button'; del.className='row-del'; del.textContent='−'; del.title='删除本行';
+    add.addEventListener('click', function(e){ e.preventDefault(); var nr=blankRowFrom(tr), parent=tr.parentNode, next=tr.nextSibling; parent.insertBefore(nr, next); decorateRow(nr); makeDocumentEditable(nr); pushStep({ undo:function(){ nr.remove(); }, redo:function(){ if(tr.parentNode) tr.parentNode.insertBefore(nr, tr.nextSibling); else reinsert(nr, parent, next); reveal(nr); } }); });
+    del.addEventListener('click', function(e){ e.preventDefault(); var body=tr.parentNode; var dataRows=Array.prototype.filter.call(body.rows, function(r){return !isHeaderRow(r);}); if(dataRows.length<=1) return; var next=tr.nextSibling; tr.remove(); pushStep({ undo:function(){ reinsert(tr, body, next); reveal(tr); }, redo:function(){ tr.remove(); } }); });
+    ctrl.appendChild(add); ctrl.appendChild(del); anchor.appendChild(ctrl); first.insertBefore(anchor, first.firstChild);
+  }
+  function ensureCols(table){
+    if (table.querySelector('colgroup')) return table.querySelector('colgroup');
+    var headRow=headerRowOf(table); if(!headRow) return null;
+    var cg=document.createElement('colgroup');
+    for(var i=0;i<headRow.cells.length;i++){ var col=document.createElement('col'); col.style.width=headRow.cells[i].offsetWidth+'px'; cg.appendChild(col); }
+    table.insertBefore(cg, table.firstChild); return cg;
+  }
+  function installColResizers(table){
+    var cg=ensureCols(table); if(!cg) return; var cols=cg.querySelectorAll('col');
+    var headRow=headerRowOf(table); if(!headRow) return;
+    Array.prototype.forEach.call(headRow.cells, function(th, idx){
+      if(idx>=cols.length) return; if(th.querySelector(':scope > .col-resizer')) return;
+      th.style.position='relative';
+      var h=document.createElement('span'); h.className='col-resizer'; h.setAttribute('contenteditable','false');
+      var col=cols[idx];
+      h.addEventListener('mousedown', function(e){
+        e.preventDefault(); e.stopPropagation();
+        var startX=e.clientX, startW=col.offsetWidth||th.offsetWidth, beforeW=col.style.width;
+        h.classList.add('active'); document.body.classList.add('col-resizing');
+        function mv(ev){ col.style.width=Math.max(48, startW+(ev.clientX-startX))+'px'; }
+        function up(){ document.removeEventListener('mousemove',mv); document.removeEventListener('mouseup',up); h.classList.remove('active'); document.body.classList.remove('col-resizing'); var afterW=col.style.width; if(afterW!==beforeW) pushStep({ undo:function(){ col.style.width=beforeW; }, redo:function(){ col.style.width=afterW; } }); }
+        document.addEventListener('mousemove',mv); document.addEventListener('mouseup',up);
+      });
+      th.appendChild(h);
+    });
+  }
+  function installRowResizer(tr){
+    var first=tr.cells[0]; if(!first || first.querySelector(':scope > .row-resizer')) return;
+    first.style.position='relative';
+    var h=document.createElement('span'); h.className='row-resizer'; h.setAttribute('contenteditable','false');
+    h.addEventListener('mousedown', function(e){
+      e.preventDefault(); e.stopPropagation();
+      var startY=e.clientY, startH=tr.offsetHeight, beforeH=tr.style.height;
+      h.classList.add('active'); document.body.classList.add('row-resizing');
+      function mv(ev){ tr.style.height=Math.max(24, startH+(ev.clientY-startY))+'px'; }
+      function up(){ document.removeEventListener('mousemove',mv); document.removeEventListener('mouseup',up); h.classList.remove('active'); document.body.classList.remove('row-resizing'); var afterH=tr.style.height; if(afterH!==beforeH) pushStep({ undo:function(){ tr.style.height=beforeH; }, redo:function(){ tr.style.height=afterH; } }); }
+      document.addEventListener('mousemove',mv); document.addEventListener('mouseup',up);
+    });
+    first.appendChild(h);
+  }
+  function decorateRow(tr){ if(rowDone.has(tr) || isHeaderRow(tr) || tr.closest('thead')) return; rowDone.add(tr); installRowControls(tr); installRowResizer(tr); }
+  function installTableControls(root){
+    (root||document).querySelectorAll('table').forEach(function(table){
+      if(isExcluded(table) || table.closest('.no-edit')) return;
+      wrapTable(table); installColResizers(table);
+      Array.prototype.forEach.call(table.rows, decorateRow);
+    });
+  }
+  function init(root){ installTableControls(root); makeDocumentEditable(root); }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', function(){ init(document); }); else init(document);
+  window.PMEdit={ init:init, makeDocumentEditable:makeDocumentEditable, installTableControls:installTableControls, undo:undo, redo:redo, canUndo:function(){ return undoStack.length>0; }, canRedo:function(){ return redoStack.length>0; } };
+})();
+// ===== 一键复制全文 =====
+(function(){
+  var mediaCache = new Map();
+  var MAX_IMG_WIDTH = 2000;
+  function shrinkDataUrl(dataUrl, maxWidth){
+    return new Promise(function(resolve){
+      var im = new Image();
+      im.onload = function(){
+        if(!im.naturalWidth || im.naturalWidth <= maxWidth){ resolve(dataUrl); return; }
+        try{
+          var r = maxWidth / im.naturalWidth;
+          var c = document.createElement('canvas');
+          c.width = Math.round(im.naturalWidth * r);
+          c.height = Math.round(im.naturalHeight * r);
+          var ctx = c.getContext('2d');
+          ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+          ctx.drawImage(im, 0, 0, c.width, c.height);
+          resolve(c.toDataURL('image/jpeg', 0.9));
+        }catch(e){ resolve(dataUrl); }
+      };
+      im.onerror = function(){ resolve(dataUrl); };
+      im.src = dataUrl;
+    });
+  }
+  function stripSkeleton(){
+    var clone = document.body.cloneNode(true);
+    var live = document.body.querySelectorAll('img'), copies = clone.querySelectorAll('img');
+    for(var i=0;i<live.length && i<copies.length;i++){
+      var w = Math.round(live[i].getBoundingClientRect().width);
+      if(w > 0){ copies[i].style.width = w + 'px'; copies[i].style.height = 'auto'; }
+      copies[i].style.maxWidth = '100%';
+    }
+    clone.querySelectorAll('.prototype-sidebar, .fab-group, .copy-all-fab, .copy-toast, .col-resizer, .row-resizer, .row-ctrl, .pm-anchor, .editable-table-remove, script, noscript').forEach(function(n){ n.remove(); });
+    clone.querySelectorAll('.editable-table-wrap').forEach(function(w){ var t=w.querySelector('table'); if(t) w.replaceWith(t); else w.remove(); });
+    return clone;
+  }
+  async function collectMedia(clone){
+    var jobs = [];
+    clone.querySelectorAll('iframe[src]').forEach(function(el){ jobs.push({ el: el, src: el.getAttribute('src'), kind: 'frame' }); });
+    clone.querySelectorAll('img[src]').forEach(function(el){ var s = el.getAttribute('src'); if(s && !/^data:/i.test(s)) jobs.push({ el: el, src: s, kind: 'asset' }); });
+    var out = { ok:0, fail:0, serviceDown:false, jobs: jobs };
+    if(!jobs.length) return out;
+    if(typeof window.snapshotPrototypeViaServer !== 'function' || typeof window.inlineAssetViaServer !== 'function'){ out.serviceDown = true; out.fail = jobs.length; return out; }
+    var srcs = [];
+    jobs.forEach(function(j){ if(srcs.indexOf(j.src) === -1) srcs.push(j.src); });
+    if(mediaCache.size < srcs.length){
+      showToast('正在唤起原型导出服务（首次启动较慢，最长约 40 秒）…', false, true);
+      try{ await window.ensureExportServerReady(); }
+      catch(e){ console.warn('[copy-all] 导出服务不可用', e); out.serviceDown = true; out.fail = srcs.length; return out; }
+    }
+    for(var i=0;i<srcs.length;i++){
+      var src = srcs[i];
+      if(mediaCache.has(src)){ out.ok++; continue; }
+      showToast('正在生成图片 '+(i+1)+'/'+srcs.length+'…', false, true);
+      var kind = jobs.filter(function(j){ return j.src === src; })[0].kind;
+      try{
+        var data = kind === 'frame' ? await window.snapshotPrototypeViaServer(src, {}) : await window.inlineAssetViaServer(src, {});
+        mediaCache.set(src, await shrinkDataUrl(data.dataUrl, MAX_IMG_WIDTH)); out.ok++;
+      }catch(e){ console.warn('[copy-all] 取图失败', src, e); out.fail++; }
+    }
+    return out;
+  }
+  function finalizeClone(clone, jobs){
+    (jobs||[]).forEach(function(j){
+      var url = mediaCache.get(j.src);
+      if(j.kind === 'frame'){
+        if(!url){ j.el.remove(); return; }
+        var img = document.createElement('img');
+        img.src = url;
+        img.alt = j.el.getAttribute('title') || '原型预览';
+        img.style.cssText = 'max-width:100%;height:auto;border:1px solid #e5e3f5;border-radius:8px;';
+        j.el.replaceWith(img);
+      } else if(url){ j.el.setAttribute('src', url); }
+    });
+    clone.querySelectorAll('[contenteditable]').forEach(function(el){ el.removeAttribute('contenteditable'); });
+    ['data-changed','data-original','data-orig','data-pm-tracked'].forEach(function(a){ clone.querySelectorAll('['+a+']').forEach(function(el){ el.removeAttribute(a); }); });
+    clone.querySelectorAll('.edited-cell').forEach(function(el){ el.classList.remove('edited-cell'); });
+    clone.querySelectorAll('table').forEach(function(t){ t.style.borderCollapse='collapse'; t.style.width='100%'; });
+    clone.querySelectorAll('th,td').forEach(function(c){ c.style.border='1px solid #ccc'; c.style.padding='6px 10px'; c.style.verticalAlign='top'; });
+    clone.querySelectorAll('th').forEach(function(c){ if(!c.style.background) c.style.background='#f2f1f8'; });
+    clone.querySelectorAll('img').forEach(function(img){ try{ if(!/^data:/i.test(img.getAttribute('src')||'')) img.setAttribute('src', img.src); }catch(e){} });
+    return clone;
+  }
+  function showToast(msg, err, sticky){
+    var t=document.querySelector('.copy-toast');
+    if(!t){ t=document.createElement('div'); t.className='copy-toast'; document.body.appendChild(t); }
+    t.textContent=msg; t.style.background= err? '#c0392b' : '#2a2459'; t.classList.add('show');
+    clearTimeout(showToast._t);
+    if(!sticky) showToast._t=setTimeout(function(){ t.classList.remove('show'); }, 2600);
+  }
+  async function writeClipboard(html, text){
+    try{
+      if(navigator.clipboard && window.ClipboardItem){
+        await navigator.clipboard.write([new ClipboardItem({ 'text/html': new Blob([html],{type:'text/html'}), 'text/plain': new Blob([text],{type:'text/plain'}) })]);
+        return true;
+      }
+      throw new Error('no async clipboard');
+    }catch(e){
+      var holder=document.createElement('div'); holder.setAttribute('contenteditable','true');
+      holder.style.cssText='position:fixed;left:-99999px;top:0;opacity:0;'; holder.innerHTML=html;
+      document.body.appendChild(holder);
+      var range=document.createRange(); range.selectNodeContents(holder);
+      var sel=window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
+      var okc=document.execCommand('copy'); sel.removeAllRanges(); holder.remove();
+      if(!okc) throw new Error('execCommand 拒绝');
+      return true;
+    }
+  }
+  async function copyAllContent(){
+    try{
+      var clone = stripSkeleton();
+      var media = await collectMedia(clone);
+      finalizeClone(clone, media.jobs);
+      await writeClipboard('<meta charset="utf-8">'+clone.innerHTML, clone.innerText);
+      if(media.serviceDown) showToast('导出服务未启动，已按纯文本复制（原型图缺失）', true);
+      else if(media.fail) showToast('已复制全文，含 '+media.ok+' 张图，'+media.fail+' 张生成失败已跳过', true);
+      else if(media.ok) showToast('已复制全文（含 '+media.ok+' 张图），可直接粘贴到钉钉/飞书/Word');
+      else showToast('已复制全文，可直接粘贴到钉钉/飞书/Word');
+    }catch(e){
+      showToast('复制失败，请手动全选复制：'+(e.message||e), true);
+    }
+  }
+  window.copyAllContent=copyAllContent;
+})();
+</script>
+</body>
+</html>

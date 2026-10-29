@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>AI辅助申报要素与HS归类 · 业务流程图</title>
+<style>
+body { font-family:"Microsoft YaHei","微软雅黑","PingFang SC","Hiragino Sans GB",sans-serif; background:#f8f8fc; padding:32px 24px; margin:0; color:#30285b; }
+.chart-container { background:#fff; border-radius:14px; padding:28px 24px; border:1px solid #ece9f6; box-shadow:0 2px 12px rgba(48,40,91,.05); max-width:1200px; margin:0 auto 24px; }
+h1 { font-size:22px; font-weight:700; color:#30285b; text-align:center; margin:0 0 6px; }
+.subtitle { font-size:13px; color:#8b86a3; text-align:center; margin:0 0 22px; }
+.export-bar { text-align:center; margin-bottom:14px; }
+.export-btn { background:#5b5bd6; color:#fff; border:none; border-radius:10px; padding:10px 22px; font-size:14px; font-weight:700; cursor:pointer; }
+.legend { font-size:12.5px; color:#8b86a3; text-align:center; margin-top:16px; }
+.legend b { color:#30285b; }
+</style>
+</head>
+<body>
+<div class="chart-container">
+<h1>报关全流程 AI 化重构 · 业务流程图</h1>
+<p class="subtitle">重构前：货到后集中申报（红色链路） → 重构后：要素准备前移 + AI 自动核对 + 知识库沉淀</p>
+<div class="export-bar"><button class="export-btn" onclick="exportChart()">📸 导出截图</button></div>
+<div class="mermaid">
+flowchart TD
+  A([开始: ERP拟签]) --> B[采购合同签订]
+  B --> B1[AI: 合同商品信息解析<br>自动生成申报任务<br>按到港时间倒排提醒]
+  B1 --> C[业务员钉钉H5:<br>品名+规格+图片录入]
+  C --> C1{AI: HS编码推荐<br>置信度分级}
+  C1 -- 高置信度 --> D[业务员确认要素<br>提交送审]
+  C1 -- 中置信度 --> D
+  C1 -- 低置信度 --> E[缺失字段补数清单<br>可转发供应商]
+  E --> C
+  D --> F{物流工作台:<br>AI预审+人工只看异常}
+  F -- 异常 --> G[退回业务员修改]
+  G --> C
+  F -- 通过 --> H[(知识库:<br>历史申报记录沉淀)]
+  H --> C1
+  X[货物到货<br>重构前: 此时才开始要素制作] -.重构后已前移.-> I
+  D --> I[报关单据制作<br>AI: 三单提取+交叉校验<br>重量/件数/品名]
+  I --> J[报关预录单核对<br>AI: 逐字段比对+货源地推荐]
+  J --> K[完成报关]
+  K --> L[大副收据核对<br>AI: 自动比对+差异报告]
+  L --> M[提单草本核对<br>AI: 全字段比对+船名航次校验]
+  M --> N[确认提单正本<br>AI: 正本与草本自动比对]
+  N --> O([归档: 全流程单据<br>关联完整档案])
+  O --> H
+  classDef legacy fill:#fdeaea,stroke:#e74c3c,stroke-width:1.5px;
+  classDef ai fill:#efeaff,stroke:#b9aee6,stroke-width:1.5px;
+  classDef step fill:#faf9ff,stroke:#cbc4e7,stroke-width:1px;
+  classDef endpoint fill:#e6f9f3,stroke:#9fd8c6,stroke-width:1px;
+  class B1,C1,E,I,J,L,M,N ai;
+  class X legacy;
+  class A,B,C,D,F,G,K,O endpoint;
+  class H step;
+</div>
+<p class="legend">图例：<b>紫色</b> = AI 能力嵌入点 ｜ <b>浅紫</b> = 数据资产 ｜ <b>红色</b> = 重构前痛点环节（货到才开始）｜ <b>绿色</b> = 流程节点</p>
+</div>
+<script type="module">
+import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+mermaid.initialize({
+  startOnLoad: true,
+  securityLevel: 'loose',
+  theme: 'base',
+  themeVariables: {
+    primaryColor: '#faf9ff',
+    primaryBorderColor: '#cbc4e7',
+    primaryTextColor: '#30285b',
+    lineColor: '#8d82b1',
+    textColor: '#30285b',
+    fontSize: '15px',
+    fontFamily: '"Microsoft YaHei","微软雅黑","PingFang SC",sans-serif'
+  },
+  flowchart: { useMaxWidth: false, htmlLabels: true, curve: 'linear', nodeSpacing: 60, rankSpacing: 70, padding: 18 }
+});
+</script>
+<script src="../../scripts/prototype-export-client.js?v=20261029-flow"></script>
+<script>
+async function exportChart(){
+  const btn=document.querySelector('.export-btn'), t=btn.textContent, bg=btn.style.background;
+  btn.textContent='⏳ 导出中...'; btn.disabled=true;
+  if(window.exportPrototypeViaServer){ try{ await window.exportPrototypeViaServer(btn); return; }catch(e){ console.warn('服务导出失败，降级',e); } }
+  try{
+    const {toBlob}=await import('https://cdn.jsdelivr.net/npm/html-to-image@1.11.11/+esm');
+    const node=document.querySelector('.chart-container'), s=2;
+    const blob=await toBlob(node,{cacheBust:true,backgroundColor:'#ffffff',pixelRatio:s,
+      width:node.scrollWidth,height:node.scrollHeight,canvasWidth:node.scrollWidth*s,canvasHeight:node.scrollHeight*s,style:{transform:'none'}});
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='AI辅助申报要素与HS归类-业务流程图.png'; a.click(); URL.revokeObjectURL(a.href);
+    btn.textContent='✅ 已导出';
+  }catch(e){ console.error(e); btn.textContent='❌ 失败'; btn.style.background='#ef4444'; }
+  setTimeout(()=>{ btn.textContent=t; btn.style.background=bg; btn.disabled=false; },2200);
+}
+</script>
+</body>
+</html>

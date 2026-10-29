@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI辅助申报要素与HS归类 · 交互原型</title>
+<style>
+:root{
+  --accent:#5b5bd6; --accent-soft:#efeeff; --ink:#1f2937; --sub:#8b86a3;
+  --ok:#00b894; --warn:#f39c12; --err:#e74c3c; --line:#e8e5f5; --bg:#f7f7fc;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:"Microsoft YaHei","微软雅黑","PingFang SC",sans-serif;background:#e9e8f2;color:var(--ink);}
+.gallery{display:block;padding:28px;}
+.device-wrapper{display:none;margin:0 auto 36px;}
+.device-wrapper.active{display:flex;}
+.tiled .device-wrapper{display:flex;}
+.device{background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 4px 18px rgba(48,40,91,.12);}
+.device.mobile{width:375px;height:812px;display:flex;flex-direction:column;}
+.device.desktop{width:1280px;height:800px;display:flex;flex-direction:column;}
+.device-label{text-align:center;font-size:13px;color:var(--sub);margin-bottom:8px;font-weight:600;}
+.tiled .device-label{display:block;}
+/* 手机屏内 */
+.scr{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+.scr-head{background:var(--accent);color:#fff;padding:14px 16px;font-size:16px;font-weight:700;display:flex;align-items:center;gap:10px;}
+.scr-body{flex:1;overflow:auto;background:var(--bg);padding:14px;}
+.scr-foot{background:#fff;border-top:1px solid var(--line);padding:10px 14px;display:flex;gap:10px;}
+.btn{flex:1;background:var(--accent);color:#fff;border:none;border-radius:10px;padding:12px;font-size:15px;font-weight:700;cursor:pointer;}
+.btn.ghost{background:#fff;color:var(--accent);border:1.5px solid var(--accent);}
+.btn.gray{background:#e5e4f0;color:#8b86a3;border:none;}
+.card{background:#fff;border-radius:12px;padding:14px;margin-bottom:12px;border:1px solid var(--line);}
+.tag{display:inline-block;font-size:11px;padding:2px 8px;border-radius:999px;font-weight:600;}
+.tag.todo{background:#eef4ff;color:#3b6fe0;} .tag.ok{background:#e6f9f3;color:#00a383;}
+.tag.warn{background:#fff4e0;color:#d18600;} .tag.err{background:#fdeaea;color:#d0342c;}
+.tag.conf-high{background:#e6f9f3;color:#00a383;} .tag.conf-mid{background:#fff4e0;color:#d18600;} .tag.conf-low{background:#fdeaea;color:#d0342c;}
+.banner{background:#fff4e0;border:1px solid #ffd98a;color:#a06a00;border-radius:10px;padding:10px 12px;font-size:13px;margin-bottom:12px;}
+.banner.alert{background:#fdeaea;border-color:#f5b5b0;color:#b03028;}
+.field{margin-bottom:12px;}
+.field label{display:block;font-size:13px;color:var(--sub);margin-bottom:6px;font-weight:600;}
+.field .inp{background:#fff;border:1px solid var(--line);border-radius:10px;padding:11px 12px;font-size:14px;}
+.field .inp .note{font-size:11px;color:var(--ok);margin-top:4px;}
+.row{display:flex;justify-content:space-between;align-items:center;gap:8px;}
+.kv{font-size:12px;color:var(--sub);}
+.h4{font-size:14px;font-weight:700;margin-bottom:8px;}
+/* 桌面屏 */
+.dtop{display:flex;height:100%;overflow:hidden;}
+.dnav{width:180px;background:#1a1a2e;color:#b9b5e0;padding:16px 0;flex-shrink:0;}
+.dnav .logo{color:#fff;font-weight:800;font-size:15px;padding:0 18px 18px;border-bottom:1px solid rgba(255,255,255,.08);margin-bottom:10px;}
+.dnav .item{padding:11px 18px;font-size:13.5px;cursor:pointer;}
+.dnav .item.active{background:rgba(91,91,214,.35);color:#fff;border-left:3px solid var(--accent);}
+.dmain{flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--bg);}
+.dhead{background:#fff;border-bottom:1px solid var(--line);padding:14px 24px;font-size:16px;font-weight:700;}
+.dbody{flex:1;overflow:auto;padding:20px 24px;}
+.stat-row{display:flex;gap:16px;margin-bottom:18px;}
+.stat{flex:1;background:#fff;border-radius:12px;padding:16px 18px;border:1px solid var(--line);}
+.stat .n{font-size:26px;font-weight:800;color:var(--accent);}
+.stat .t{font-size:12.5px;color:var(--sub);margin-top:2px;}
+table.dt{width:100%;border-collapse:collapse;background:#fff;border-radius:12px;overflow:hidden;font-size:13px;}
+table.dt th{background:var(--accent-soft);color:var(--accent);padding:10px 12px;text-align:left;font-weight:700;}
+table.dt td{padding:10px 12px;border-top:1px solid var(--line);}
+table.dt tr.hl td{background:#fdf3f2;}
+.tabs{display:flex;background:#eceaf6;border-radius:10px;padding:3px;margin-bottom:16px;width:fit-content;}
+.tabs .t{padding:8px 18px;font-size:13px;border-radius:8px;color:var(--sub);cursor:pointer;font-weight:600;}
+.tabs .t.active{background:#fff;color:var(--ink);font-weight:700;box-shadow:0 1px 3px rgba(0,0,0,.08);}
+.chip{font-size:12px;padding:3px 10px;border-radius:999px;background:#efeeff;color:var(--accent);font-weight:600;}
+.diff-old{color:var(--err);text-decoration:line-through;margin-right:6px;}
+.upload{border:2px dashed #c9c5e6;border-radius:12px;background:#fff;padding:26px;text-align:center;color:var(--sub);font-size:13.5px;}
+.legend{position:fixed;right:20px;bottom:20px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 16px;font-size:12.5px;color:var(--sub);box-shadow:0 4px 14px rgba(48,40,91,.1);display:none;}
+</style>
+</head>
+<body>
+<div class="gallery" id="gallery">
+<!-- 1.1 申报任务列表 -->
+<div class="device-wrapper" data-page="task-list">
+<div>
+<div class="device-label">1.1 申报任务列表（钉钉H5）</div>
+<div class="device mobile"><div class="scr">
+  <div class="scr-head">📋 申报任务 <span style="margin-left:auto;font-size:13px;font-weight:400;">⟳</span></div>
+  <div class="scr-body">
+    <div class="banner">⏰ 距【固态继电器 125A】要素准备截止还有 <b>3 天</b>（预计到港 11-01）</div>
+    <div class="card">
+      <div class="row"><b style="font-size:14px;">固态继电器 125A</b><span class="tag todo">待补数</span></div>
+      <p class="kv" style="margin-top:6px;">供应商：华强电控 · 合同号：PO-2026-1187</p>
+      <p class="kv">预计到港：11-01 · 截止：10-31 · <span style="color:#d0342c;">缺电压/品牌/型号</span></p>
+    </div>
+    <div class="card">
+      <div class="row"><b style="font-size:14px;">深沟球轴承 6224/C3</b><span class="tag warn">已退回</span></div>
+      <p class="kv" style="margin-top:6px;">供应商：SKF 代理 · 合同号：PO-2026-1185</p>
+      <p class="kv">退回原因：要素"结构类型"未填写</p>
+    </div>
+    <div class="card">
+      <div class="row"><b style="font-size:14px;">热过载继电器 LRD12C</b><span class="tag todo">已提交</span></div>
+      <p class="kv" style="margin-top:6px;">供应商：施耐德 · 合同号：PO-2026-1179</p>
+      <p class="kv">预计到港：11-05 · 已提交审核（AI预审：存在异常 1 项）</p>
+    </div>
+    <div class="card">
+      <div class="row"><b style="font-size:14px;">焊丝 ER50-6 Φ1.2mm</b><span class="tag ok">已通过</span></div>
+      <p class="kv" style="margin-top:6px;">供应商：金桥焊材 · 合同号：PO-2026-1172</p>
+      <p class="kv">预计到港：10-30 · 审核通过 10-20</p>
+    </div>
+  </div>
+  <div class="scr-foot"><div style="flex:1;font-size:11.5px;color:var(--sub);align-self:center;">任务由采购合同生成，请在到港前完成要素填写并通过审核</div></div>
+</div></div>
+</div>
+</div>
+
+<!-- 1.2 要素录入 -->
+<div class="device-wrapper" data-page="input-form">
+<div>
+<div class="device-label">1.2 要素录入（钉钉H5）</div>
+<div class="device mobile"><div class="scr">
+  <div class="scr-head">← 要素录入</div>
+  <div class="scr-body">
+    <div class="card">
+      <div class="h4">商品信息</div>
+      <div class="field"><label>品名</label><div class="inp">固态继电器<div class="note">✓ 已自动更正（原输入"固体继电器"）</div></div></div>
+      <div class="field"><label>规格型号</label><div class="inp">125A</div></div>
+      <div class="field"><label>品牌（可留空）</label><div class="inp" style="color:#b9b5e0;">未填写</div></div>
+    </div>
+    <div class="card">
+      <div class="h4">图片上传</div>
+      <div style="display:flex;gap:8px;">
+        <div style="width:72px;height:72px;background:var(--accent-soft);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--accent);">铭牌.jpg</div>
+        <div style="width:72px;height:72px;background:var(--accent-soft);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:24px;color:var(--accent);">＋</div>
+      </div>
+      <p class="kv" style="margin-top:8px;">上传铭牌或实物照片，最多 3 张</p>
+    </div>
+    <div class="card">
+      <div class="row"><span class="h4" style="margin:0;">参考信息（合同）</span><span style="color:var(--sub);font-size:12px;">展开 ▾</span></div>
+      <p class="kv" style="margin-top:6px;">商品描述：SOLID STATE RELAY 125A · 数量：40 · 供应商：华强电控</p>
+    </div>
+  </div>
+  <div class="scr-foot"><button class="btn">🤖 AI识别并推荐</button></div>
+</div></div>
+</div>
+</div>
+
+<!-- 1.3 AI推荐结果 -->
+<div class="device-wrapper" data-page="ai-result">
+<div>
+<div class="device-label">1.3 AI推荐结果（钉钉H5）</div>
+<div class="device mobile"><div class="scr">
+  <div class="scr-head">← AI推荐结果</div>
+  <div class="scr-body">
+    <div class="card" style="border:1.5px solid var(--accent);">
+      <div class="row"><b style="font-size:17px;">85364900.90</b><span class="tag conf-mid">中置信度 · 待官方核验</span></div>
+      <p style="font-size:13px;margin-top:4px;">其他电压大于60伏的继电器</p>
+      <p class="kv" style="margin-top:6px;">来源：<span class="chip">第三方初筛</span> <span class="chip">历史申报 2 条相似</span></p>
+      <p class="kv">出口退税率 13% · 监管条件 A（进口需通关单）</p>
+    </div>
+    <div class="card">
+      <div class="row"><span class="h4" style="margin:0;">其他候选（得分接近）</span><span style="font-size:12px;color:var(--accent);">换一个候选 ▾</span></div>
+      <p class="kv" style="margin-top:6px;">· 8536419000（36V＜电压≤60V）— 按负载电压分档</p>
+      <p class="kv">· 8536411090（电压≤36V）— 按负载电压分档</p>
+      <div class="banner alert" style="margin-top:8px;">⚠ 负载电压缺失，无法唯一确定编码，请补充信息</div>
+    </div>
+    <div class="card">
+      <div class="h4">申报要素清单</div>
+      <div class="field"><label>1 品牌类型</label><div class="inp">0 无品牌</div></div>
+      <div class="field"><label>2 出口享惠情况</label><div class="inp">1 出口货物在最终目的国（地区）不享受优惠关税</div></div>
+      <div class="field"><label>3 用途</label><div class="inp">用于电柜（配电柜）电路通断控制</div></div>
+      <div class="field"><label>4 电压</label><div class="inp" style="color:#d0342c;">⚠ 待补：负载电压（如 380VAC）</div></div>
+      <div class="field"><label>5 品牌</label><div class="inp" style="color:#d0342c;">⚠ 待补：品牌</div></div>
+      <div class="field"><label>6 型号</label><div class="inp" style="color:#d0342c;">⚠ 待补：完整型号（125A 仅为电流参数）</div></div>
+      <div class="field"><label>7 GTIN</label><div class="inp">无</div></div>
+      <div class="field"><label>8 CAS</label><div class="inp">无</div></div>
+    </div>
+  </div>
+  <div class="scr-foot"><button class="btn gray">补充信息</button><button class="btn ghost">换一个候选</button></div>
+</div></div>
+</div>
+</div>
+
+<!-- 1.4 缺失字段补数 -->
+<div class="device-wrapper" data-page="missing-fields">
+<div>
+<div class="device-label">1.4 缺失字段补数（钉钉H5）</div>
+<div class="device mobile"><div class="scr">
+  <div class="scr-head">← 缺失字段补数</div>
+  <div class="scr-body">
+    <div class="banner">以下信息影响归类判断，请补充后重新识别</div>
+    <div class="card">
+      <div class="row"><b style="font-size:14px;">负载电压 <span class="tag warn">待补</span></b></div>
+      <p class="kv" style="margin:6px 0;">缺失原因：继电器编码按 ≤36V / 36-60V / ＞60V 三档划分，电压是归类第一依据</p>
+      <div class="inp">如：380VAC（可拍铭牌照片识别）</div>
+    </div>
+    <div class="card">
+      <div class="row"><b style="font-size:14px;">品牌 <span class="tag warn">待补</span></b></div>
+      <p class="kv" style="margin:6px 0;">缺失原因：申报要素必填项（价格要素，海关知识产权保护用）</p>
+      <div class="inp" style="color:#b9b5e0;">输入品牌名</div>
+    </div>
+    <div class="card">
+      <div class="row"><b style="font-size:14px;">完整型号 <span class="tag warn">待补</span></b></div>
+      <p class="kv" style="margin:6px 0;">缺失原因：125A 仅为负载电流，不能替代型号（如 SSR-125DA）</p>
+      <div class="inp" style="color:#b9b5e0;">输入完整型号</div>
+    </div>
+  </div>
+  <div class="scr-foot"><button class="btn ghost">发给供应商补数</button><button class="btn">已补充，重新识别</button></div>
+</div></div>
+</div>
+</div>
+
+<!-- 2.1 审核看板 -->
+<div class="device-wrapper" data-page="review-board">
+<div>
+<div class="device-label">2.1 审核看板（物流审核端）</div>
+<div class="device desktop"><div class="dtop">
+  <div class="dnav">
+    <div class="logo">报关AI工作台</div>
+    <div class="item active">申报审核</div>
+    <div class="item">批量导入</div>
+    <div class="item">单证核对</div>
+    <div class="item">知识库</div>
+  </div>
+  <div class="dmain">
+    <div class="dhead">申报审核 · 看板</div>
+    <div class="dbody">
+      <div class="stat-row">
+        <div class="stat"><div class="n" style="color:#d18600;">6</div><div class="t">待审核</div></div>
+        <div class="stat"><div class="n" style="color:#00a383;">23</div><div class="t">今日通过</div></div>
+        <div class="stat"><div class="n" style="color:#d0342c;">4</div><div class="t">今日退回</div></div>
+        <div class="stat"><div class="n" style="color:#3b6fe0;">11</div><div class="t">待官方核验</div></div>
+      </div>
+      <table class="dt">
+        <tr><th style="width:130px;">合同号</th><th>商品</th><th style="width:90px;">业务员</th><th style="width:110px;">提交时间</th><th style="width:120px;">AI预审结论</th><th>异常项摘要</th></tr>
+        <tr class="hl"><td>PO-2026-1187</td><td>固态继电器 125A</td><td>王磊</td><td>10-29 09:12</td><td><span class="tag err">存在异常</span></td><td>缺电压/品牌/型号，归类无法判定</td></tr>
+        <tr class="hl"><td>PO-2026-1183</td><td>焊条 J422 Φ3.2</td><td>李敏</td><td>10-28 16:40</td><td><span class="tag err">存在异常</span></td><td>与历史申报不一致：历史按焊丝归类</td></tr>
+        <tr><td>PO-2026-1179</td><td>热过载继电器 LRD12C</td><td>王磊</td><td>10-28 14:05</td><td><span class="tag warn">存在异常</span></td><td>品牌类型建议按境外品牌（其他）复核</td></tr>
+        <tr><td>PO-2026-1176</td><td>深沟球轴承 6224/C3</td><td>张伟</td><td>10-28 11:30</td><td><span class="tag ok">通过</span></td><td>—</td></tr>
+        <tr><td>PO-2026-1174</td><td>变频器备件</td><td>李敏</td><td>10-27 17:55</td><td><span class="tag warn">无法预判</span></td><td>新品类，无历史记录，建议重点核对</td></tr>
+      </table>
+    </div>
+  </div>
+</div></div>
+</div>
+</div>
+
+<!-- 2.2 单票审核 -->
+<div class="device-wrapper" data-page="detail-review">
+<div>
+<div class="device-label">2.2 单票审核·异常复核（物流审核端）</div>
+<div class="device desktop"><div class="dtop">
+  <div class="dnav">
+    <div class="logo">报关AI工作台</div>
+    <div class="item active">申报审核</div>
+    <div class="item">批量导入</div>
+    <div class="item">单证核对</div>
+    <div class="item">知识库</div>
+  </div>
+  <div class="dmain">
+    <div class="dhead">单票审核 · PO-2026-1183 · 焊条 J422 Φ3.2 · 业务员：李敏 · 到港 11-03</div>
+    <div class="dbody">
+      <div style="display:flex;gap:16px;">
+        <div style="flex:1.4;">
+          <div class="card" style="border:1px solid var(--line);">
+            <div class="h4">🤖 AI预审报告</div>
+            <table class="dt">
+              <tr><th>校验项</th><th style="width:90px;">结论</th><th>AI说明（点击展开依据）</th></tr>
+              <tr class="hl"><td>归类与历史申报一致性</td><td><span class="tag err">不一致</span></td><td>历史 5 条相似品名（焊丝类）归 8311 系列；本票按焊条申报，退税差异需确认</td></tr>
+              <tr><td>申报要素完整性</td><td><span class="tag ok">完整</span></td><td>8 项要素齐全</td></tr>
+              <tr><td>品牌型号与图片一致性</td><td><span class="tag ok">一致</span></td><td>铭牌照片与填写值相符</td></tr>
+            </table>
+          </div>
+          <div class="card" style="border:1px solid var(--line);">
+            <div class="h4">申报要素明细</div>
+            <table class="dt">
+              <tr><th style="width:110px;">要素</th><th>业务员填写值</th><th>AI建议值</th></tr>
+              <tr><td>品牌类型</td><td>0 无品牌</td><td>0 无品牌</td></tr>
+              <tr><td>出口享惠情况</td><td>1 不享受优惠关税</td><td>1 不享受优惠关税</td></tr>
+              <tr class="hl"><td>用途</td><td>焊接用</td><td><span class="diff-old">焊接用</span>电弧焊接用（涂药焊条）</td></tr>
+              <tr><td>品牌</td><td>大桥</td><td>大桥</td></tr>
+              <tr><td>型号</td><td>J422 Φ3.2</td><td>J422 Φ3.2</td></tr>
+            </table>
+          </div>
+        </div>
+        <div style="flex:1;">
+          <div class="card" style="border:1px solid var(--line);">
+            <div class="h4">参考图</div>
+            <div style="background:var(--accent-soft);border-radius:10px;height:200px;display:flex;align-items:center;justify-content:center;color:var(--accent);font-size:13px;">铭牌照片（业务员上传）</div>
+            <div style="background:var(--accent-soft);border-radius:10px;height:160px;display:flex;align-items:center;justify-content:center;color:var(--accent);font-size:13px;margin-top:10px;">实物照片</div>
+          </div>
+          <div style="display:flex;gap:10px;margin-top:14px;">
+            <button class="btn ghost" style="padding:10px;">退回修改</button>
+            <button class="btn" style="padding:10px;">审核通过</button>
+          </div>
+          <p class="kv" style="margin-top:10px;">提示：含 1 项异常仍通过时将二次确认；通过后自动入库历史申报记录</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div></div>
+</div>
+</div>
+
+<!-- 2.3 批量导入 -->
+<div class="device-wrapper" data-page="batch-import">
+<div>
+<div class="device-label">2.3 Excel批量导入与异常识别（物流审核端）</div>
+<div class="device desktop"><div class="dtop">
+  <div class="dnav">
+    <div class="logo">报关AI工作台</div>
+    <div class="item">申报审核</div>
+    <div class="item active">批量导入</div>
+    <div class="item">单证核对</div>
+    <div class="item">知识库</div>
+  </div>
+  <div class="dmain">
+    <div class="dhead">批量导入 · 异常识别</div>
+    <div class="dbody">
+      <div class="stat-row">
+        <div class="stat"><div class="n">86</div><div class="t">总行数</div></div>
+        <div class="stat"><div class="n" style="color:#00a383;">71</div><div class="t">正常</div></div>
+        <div class="stat"><div class="n" style="color:#d0342c;">12</div><div class="t">异常行</div></div>
+        <div class="stat"><div class="n" style="color:#3b6fe0;">3</div><div class="t">识别失败</div></div>
+      </div>
+      <table class="dt">
+        <tr><th style="width:60px;">行号</th><th>品名</th><th style="width:120px;">规格</th><th style="width:110px;">HS编码</th><th style="width:200px;">AI标注</th><th style="width:90px;">操作</th></tr>
+        <tr class="hl"><td>3</td><td>固体继电器</td><td>125A</td><td>8536490000</td><td><span class="tag err">归类存疑</span> <span class="tag err">要素缺失</span> 缺电压/品牌/型号</td><td style="color:var(--accent);">详情 · 重识别</td></tr>
+        <tr class="hl"><td>7</td><td>焊丝</td><td>ER50-6 Φ1.2</td><td>8311300000</td><td><span class="tag warn">与历史不一致</span> 历史按盘条归 8311.20</td><td style="color:var(--accent);">详情 · 重识别</td></tr>
+        <tr><td>9</td><td>深沟球轴承</td><td>6224/C3</td><td>8482102000</td><td><span class="tag ok">正常</span> 品名已归一，要素完整</td><td style="color:var(--accent);">详情</td></tr>
+        <tr class="hl"><td>15</td><td>接触器</td><td>LC1D18</td><td>8536419…</td><td><span class="tag err">品名不规范</span> 建议规范为"交流接触器"</td><td style="color:var(--accent);">详情 · 重识别</td></tr>
+        <tr class="hl"><td>22</td><td>（空）</td><td>—</td><td>—</td><td><span class="tag err">识别失败</span> 请人工录入</td><td style="color:var(--accent);">人工录入</td></tr>
+      </table>
+      <div style="display:flex;gap:10px;margin-top:16px;">
+        <button class="btn ghost" style="flex:none;padding:10px 18px;">导出带标注结果</button>
+        <button class="btn ghost" style="flex:none;padding:10px 18px;">仅导出异常行</button>
+        <button class="btn" style="flex:none;padding:10px 18px;">全部重新识别</button>
+      </div>
+    </div>
+  </div>
+</div></div>
+</div>
+</div>
+
+<!-- 3.1 报关单据制作 -->
+<div class="device-wrapper" data-page="doc-making">
+<div>
+<div class="device-label">3.1 报关单据制作辅助（物流审核端）</div>
+<div class="device desktop"><div class="dtop">
+  <div class="dnav">
+    <div class="logo">报关AI工作台</div>
+    <div class="item">申报审核</div>
+    <div class="item">批量导入</div>
+    <div class="item active">单证核对</div>
+    <div class="item">知识库</div>
+  </div>
+  <div class="dmain">
+    <div class="dhead">报关单据制作 · 合同 PO-2026-1172（焊丝 ER50-6）</div>
+    <div class="dbody">
+      <div class="card" style="border:1px solid var(--line);">
+        <div class="row"><div class="h4" style="margin:0;">已关联单据</div><span class="chip">＋ 关联单据</span></div>
+        <p class="kv" style="margin-top:8px;">发票 INV-88231.pdf ｜ 装箱单 PK-88231.pdf ｜ 申报要素（已审核 ✓ 取自申报记录）</p>
+      </div>
+      <div class="card" style="border:1px solid var(--line);">
+        <div class="h4">三单提取与交叉校验（重量 / 件数 / 品名）</div>
+        <table class="dt">
+          <tr><th>字段</th><th>合同</th><th>发票</th><th>装箱单</th><th style="width:150px;">一致性</th></tr>
+          <tr><td>品名</td><td>焊丝 ER50-6</td><td>Welding Wire ER50-6</td><td>焊丝</td><td><span class="tag ok">三单一致</span></td></tr>
+          <tr class="hl"><td>净重</td><td>18,000 kg</td><td>18,000 kg</td><td>17,960 kg</td><td><span class="tag err">存在差异</span> 装箱单少 40kg</td></tr>
+          <tr><td>件数</td><td>720 件</td><td>720 件</td><td>720 件</td><td><span class="tag ok">三单一致</span></td></tr>
+          <tr><td>毛重</td><td>—</td><td>—</td><td>18,540 kg</td><td><span class="tag warn">请人工确认</span> OCR 置信度低</td></tr>
+        </table>
+        <p class="kv" style="margin-top:8px;">点击差异行可展开三个来源原值对照</p>
+      </div>
+      <div style="display:flex;gap:10px;">
+        <button class="btn ghost" style="flex:none;padding:10px 18px;">标记差异待处理</button>
+        <button class="btn gray" style="flex:none;padding:10px 18px;">生成报关单据（1 项差异待处理）</button>
+      </div>
+    </div>
+  </div>
+</div></div>
+</div>
+</div>
+
+<!-- 3.2 单证比对 -->
+<div class="device-wrapper" data-page="compare-report">
+<div>
+<div class="device-label">3.2 单证比对与差异报告（物流审核端）</div>
+<div class="device desktop"><div class="dtop">
+  <div class="dnav">
+    <div class="logo">报关AI工作台</div>
+    <div class="item">申报审核</div>
+    <div class="item">批量导入</div>
+    <div class="item active">单证核对</div>
+    <div class="item">知识库</div>
+  </div>
+  <div class="dmain">
+    <div class="dhead">单证比对 · PO-2026-1172</div>
+    <div class="dbody">
+      <div class="tabs"><div class="t">报关预录单核对</div><div class="t active">提单草本核对</div><div class="t">大副收据核对</div></div>
+      <div class="upload" style="margin-bottom:16px;">拖拽或点击上传提单草本（扫描件 / PDF）· 当前：BL-DRAFT-88231.pdf ✓ 已识别</div>
+      <div class="card" style="border:1px solid var(--line);">
+        <div class="row"><div class="h4" style="margin:0;">比对结果（基准：大副收据 + 报关单据 + 订舱信息）</div><span class="tag err">差异 2 项</span></div>
+        <table class="dt" style="margin-top:10px;">
+          <tr><th>关键字段</th><th>基准值</th><th>提单草本值</th><th style="width:90px;">结论</th></tr>
+          <tr><td>品名</td><td>焊丝 ER50-6</td><td>WELDING WIRE ER50-6</td><td><span class="tag ok">一致</span></td></tr>
+          <tr><td>件数</td><td>720 件</td><td>720 PKGS</td><td><span class="tag ok">一致</span></td></tr>
+          <tr class="hl"><td>毛重</td><td>18,540 kg</td><td>18,450 kg</td><td><span class="tag err">差异</span></td></tr>
+          <tr class="hl"><td>船名</td><td>MV OCEAN STAR（订舱）</td><td>MV OCEAN START</td><td><span class="tag err">差异</span> 疑似拼写错误</td></tr>
+          <tr><td>航次</td><td>V.2618E</td><td>V.2618E</td><td><span class="tag ok">一致</span></td></tr>
+        </table>
+      </div>
+      <div class="card" style="border:1px solid #ffd98a;background:#fffaf0;">
+        <div class="h4">差异汇总与建议</div>
+        <p style="font-size:13px;line-height:1.8;">1、毛重差 90kg → 建议与船代核对大副收据重量后改单<br>2、船名"START/STAR"疑似拼写错误 → 建议联系货代更正提单草本</p>
+      </div>
+      <div style="display:flex;gap:10px;">
+        <button class="btn ghost" style="flex:none;padding:10px 18px;">导出差异报告</button>
+        <button class="btn gray" style="flex:none;padding:10px 18px;">确认核对完成（2 项差异待标记已处理）</button>
+      </div>
+    </div>
+  </div>
+</div></div>
+</div>
+</div>
+
+<!-- 4.1 知识库 -->
+<div class="device-wrapper" data-page="knowledge-base">
+<div>
+<div class="device-label">4.1 知识库管理（物流审核端）</div>
+<div class="device desktop"><div class="dtop">
+  <div class="dnav">
+    <div class="logo">报关AI工作台</div>
+    <div class="item">申报审核</div>
+    <div class="item">批量导入</div>
+    <div class="item">单证核对</div>
+    <div class="item active">知识库</div>
+  </div>
+  <div class="dmain">
+    <div class="dhead">知识库管理</div>
+    <div class="dbody">
+      <div class="banner" style="max-width:760px;">📢 2027 年度税则已发布，请执行年度全量更新（更新任务说明 →）</div>
+      <div class="tabs"><div class="t active">历史申报记录</div><div class="t">税则数据</div><div class="t">待官方核验（11）</div></div>
+      <div class="card" style="border:1px solid var(--line);">
+        <div class="row" style="margin-bottom:10px;"><input class="inp" placeholder="按品名 / HS编码搜索…" style="flex:1;border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:13px;"><span class="chip">搜索</span></div>
+        <table class="dt">
+          <tr><th>品名</th><th style="width:110px;">规格</th><th style="width:110px;">HS编码</th><th>要素摘要</th><th style="width:70px;">命中次数</th><th style="width:90px;">入库时间</th></tr>
+          <tr><td>深沟球轴承</td><td>6224/C3</td><td>8482102000</td><td>SKF · 8 项要素</td><td>12</td><td>2026-10-20</td></tr>
+          <tr><td>热过载继电器</td><td>LRD12C</td><td>85364900.90</td><td>施耐德 · 380V</td><td>5</td><td>2026-10-22</td></tr>
+          <tr><td>焊丝</td><td>ER50-6 Φ1.2</td><td>8311200000</td><td>金桥 · 退税13%</td><td>28</td><td>2026-10-20</td></tr>
+          <tr class="hl"><td>交流接触器</td><td>LC1D18</td><td>8536419… <span class="tag warn">已停用</span></td><td>—（编码停用，请重新归类）</td><td>3</td><td>2026-06-14</td></tr>
+        </table>
+      </div>
+      <p class="kv">说明：审核通过的申报自动入库；AI推荐优先命中历史记录，其次官方税则数据；第三方初筛结果须先进"待官方核验"清单。</p>
+    </div>
+  </div>
+</div></div>
+</div>
+</div>
+
+</div>
+<div class="legend">Hash 寻址：#task-list / #input-form / #ai-result / #missing-fields / #review-board / #detail-review / #batch-import / #doc-making / #compare-report / #knowledge-base</div>
+<script>
+function applyMode(){
+  var h=location.hash.replace('#','');
+  document.body.classList.toggle('tiled',!h);
+  document.querySelectorAll('.device-wrapper').forEach(function(w){
+    var id=w.getAttribute('data-page');
+    w.classList.toggle('active', !h || id===h);
+  });
+}
+window.addEventListener('hashchange',applyMode);
+window.addEventListener('load',function(){applyMode();setTimeout(applyMode,200);});
+window.addEventListener('message',function(e){ if(e.data&&e.data.type==='navigate'){ location.hash=e.data.page; } });
+</script>
+</body>
+</html>
