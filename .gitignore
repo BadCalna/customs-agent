@@ -1,0 +1,42 @@
+# macOS
+.DS_Store
+.AppleDouble
+
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+
+# JavaScript / TypeScript
+node_modules/
+.next/
+.nuxt/
+.pnpm-store/
+
+# Build, test and log output
+/build/
+/dist/
+coverage/
+.coverage
+htmlcov/
+*.log
+
+# Local IDE settings
+.idea/
+.vscode/
+
+# Local business documents and uploads
+/data/private/
+/uploads/
