@@ -1,0 +1,4 @@
+interface:
+  display_name: "钢材与备件归类助手"
+  short_description: "核对官方与第三方资料，生成钢材和备件的分类依据、申报要素、置信度与补数清单"
+  default_prompt: "使用 $steel-hs-declaration 处理这份商品Excel，给出HS候选、归类理由、申报要素、置信度及补数要求，并按中黄低红导出供物流审核的结果。"
