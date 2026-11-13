@@ -2,92 +2,75 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AI辅助申报要素与HS归类 · 业务流程图</title>
 <style>
 body { font-family:"Microsoft YaHei","微软雅黑","PingFang SC","Hiragino Sans GB",sans-serif; background:#f8f8fc; padding:32px 24px; margin:0; color:#30285b; }
-.chart-container { background:#fff; border-radius:14px; padding:28px 24px; border:1px solid #ece9f6; box-shadow:0 2px 12px rgba(48,40,91,.05); max-width:1200px; margin:0 auto 24px; }
+.chart-container { background:#fff; padding:28px 30px; border:1px solid #e1e4e8; border-radius:14px; max-width:1020px; margin:0 auto 24px; }
 h1 { font-size:22px; font-weight:700; color:#30285b; text-align:center; margin:0 0 6px; }
 .subtitle { font-size:13px; color:#8b86a3; text-align:center; margin:0 0 22px; }
 .export-bar { text-align:center; margin-bottom:14px; }
-.export-btn { background:#5b5bd6; color:#fff; border:none; border-radius:10px; padding:10px 22px; font-size:14px; font-weight:700; cursor:pointer; }
-.legend { font-size:12.5px; color:#8b86a3; text-align:center; margin-top:16px; }
+.export-btn { background:#244d6d; color:#fff; border:none; border-radius:6px; padding:8px 18px; font-size:13px; cursor:pointer; }
+.flow { max-width:780px; margin:0 auto; }
+.step { display:grid; grid-template-columns:36px 110px 1fr; gap:14px; align-items:start; padding:14px 16px; border:1px solid #dce2e5; border-left:4px solid var(--step-color); background:#fff; }
+.step .num { color:var(--step-color); font-weight:700; font-size:15px; }
+.step .role { color:var(--step-color); font-weight:700; font-size:14px; }
+.step strong { display:block; font-size:15px; font-weight:700; color:#25343b; }
+.step small { display:block; color:#63727b; font-size:12.5px; line-height:1.65; margin-top:3px; }
+.supplier { --step-color:#287354; } .system { --step-color:#24658b; } .business { --step-color:#a46616; } .logistics { --step-color:#68518d; } .boundary { --step-color:#46636d; }
+.arrow { text-align:center; color:#8998a0; font-size:22px; line-height:30px; height:30px; }
+.branch { max-width:780px; margin:0 auto 10px; border:1px dashed #b9c7ce; padding:9px 14px; font-size:12.5px; line-height:1.6; color:#445964; background:#f8fafb; }
+.branch b { color:#244d6d; }
+.legend { font-size:12.5px; line-height:1.7; color:#596970; text-align:center; margin:18px auto 0; max-width:780px; }
 .legend b { color:#30285b; }
+.rules { max-width:900px; margin:28px auto 0; color:#25343b; font-size:13px; line-height:1.8; } .rules h2 { font-size:18px; margin:22px 0 10px; } .rules h3 { font-size:15px; } .rules table { width:100%; border-collapse:collapse; table-layout:fixed; } .rules th,.rules td { padding:10px 12px; border:1px solid #dce2e5; text-align:left; vertical-align:top; overflow-wrap:anywhere; } .rules th { background:#f5f6fb; } .rules details { border:1px solid #dce2e5; padding:12px 16px; margin-top:16px; } .rules summary { cursor:pointer; font-weight:700; } .rules .muted { color:#63727b; } .nav { text-align:center; font-size:13px; margin:12px 0 20px; } .nav a { margin:0 10px; color:#244d6d; }
+@media (max-width:620px) { body { padding:12px; } .chart-container { padding:20px 12px; } .step { grid-template-columns:28px 1fr; gap:6px 10px; } .step .role { grid-column:2; } .step .action { grid-column:2; } }
+@media print { body { background:#fff; padding:0; } .chart-container { border:0; margin:0; max-width:none; } .export-bar { display:none; } }
 </style>
 </head>
 <body>
 <div class="chart-container">
-<h1>报关全流程 AI 化重构 · 业务流程图</h1>
-<p class="subtitle">重构前：货到后集中申报（红色链路） → 重构后：要素准备前移 + AI 自动核对 + 知识库沉淀</p>
-<div class="export-bar"><button class="export-btn" onclick="exportChart()">📸 导出截图</button></div>
-<div class="mermaid">
-flowchart TD
-  A([开始: ERP拟签]) --> B[采购合同签订]
-  B --> B1[AI: 合同商品信息解析<br>自动生成申报任务<br>按到港时间倒排提醒]
-  B1 --> C[业务员钉钉H5:<br>品名+规格+图片录入]
-  C --> C1{AI: HS编码推荐<br>置信度分级}
-  C1 -- 高置信度 --> D[业务员确认要素<br>提交送审]
-  C1 -- 中置信度 --> D
-  C1 -- 低置信度 --> E[缺失字段补数清单<br>可转发供应商]
-  E --> C
-  D --> F{物流工作台:<br>AI预审+人工只看异常}
-  F -- 异常 --> G[退回业务员修改]
-  G --> C
-  F -- 通过 --> H[(知识库:<br>历史申报记录沉淀)]
-  H --> C1
-  X[货物到货<br>重构前: 此时才开始要素制作] -.重构后已前移.-> I
-  D --> I[报关单据制作<br>AI: 三单提取+交叉校验<br>重量/件数/品名]
-  I --> J[报关预录单核对<br>AI: 逐字段比对+货源地推荐]
-  J --> K[完成报关]
-  K --> L[大副收据核对<br>AI: 自动比对+差异报告]
-  L --> M[提单草本核对<br>AI: 全字段比对+船名航次校验]
-  M --> N[确认提单正本<br>AI: 正本与草本自动比对]
-  N --> O([归档: 全流程单据<br>关联完整档案])
-  O --> H
-  classDef legacy fill:#fdeaea,stroke:#e74c3c,stroke-width:1.5px;
-  classDef ai fill:#efeaff,stroke:#b9aee6,stroke-width:1.5px;
-  classDef step fill:#faf9ff,stroke:#cbc4e7,stroke-width:1px;
-  classDef endpoint fill:#e6f9f3,stroke:#9fd8c6,stroke-width:1px;
-  class B1,C1,E,I,J,L,M,N ai;
-  class X legacy;
-  class A,B,C,D,F,G,K,O endpoint;
-  class H step;
+<h1>供应商Excel · 业务员预审与专家审核</h1>
+<p class="subtitle">2026-11-12口径｜两个页签、两次审核、原值与AI建议并列；当前流程止于专家通过</p>
+<nav class="nav"><a href="#business-precheck">业务员预审</a><a href="#expert-review">专家审核</a><a href="#field-rules">Excel列与审核规则</a></nav>
+<div class="export-bar"><button class="export-btn" onclick="window.print()">打印 / 保存PDF</button></div>
+<div class="flow" aria-label="供应商上传、业务员预审、专家审核及退回补料流程">
+  <div class="step boundary"><span class="num">起点</span><span class="role">合同</span><div class="action"><strong>采购合同签订完成</strong><small>本轮流程从合同完成后开始。</small></div></div>
+  <div class="arrow" aria-hidden="true">↓</div>
+  <div class="step supplier"><span class="num">01</span><span class="role">供应商</span><div class="action"><strong>上传业务Excel</strong><small>提交装箱明细和申报要素页，保留供应商HS、申报要素、退税率及附图。系统只做解析、关联和版本留存，上传不自动触发归类。</small></div></div>
+  <div class="branch"><b>文件/关联异常：</b>缺页签、合同项关系不清、无法读取图片分别说明。文件解析失败由供应商修正重传；查询失败与商品低置信度分开记录。</div>
+  <div class="arrow" aria-hidden="true">↓</div>
+  <div class="step business" id="business-precheck"><span class="num">02</span><span class="role">业务员</span><div class="action"><strong>点击“预审”</strong><small>以当前上传版本启动HS预审，预审任务与专家审核任务分开。</small></div></div>
+  <div class="arrow" aria-hidden="true">↓</div>
+  <div class="step system"><span class="num">03</span><span class="role">AI预审</span><div class="action"><strong>独立推荐HS，与供应商编码比较</strong><small>装箱明细：合同第一条品名＝主品名，附件清单品名＝别名，结合规格和厂家/供应商型号；按合同号＋项号定位申报行，读取该行附图。查官方与第三方形成建议，再比较供应商HS。结果写入“海关编码 → AI推荐HScode → 预审结论”三列，供应商原码保持。</small></div></div>
+  <div class="branch"><b>预审结论：</b>一致 / 不一致 / 无法确认 / 供应商未填 / 编码格式或有效性异常 / 关联异常；写明事实、原因、预审置信度和需补资料。同码但缺关键证据仍为“无法确认”，不自动通过。</div>
+  <div class="arrow" aria-hidden="true">↓</div>
+  <div class="step business"><span class="num">04</span><span class="role">业务员</span><div class="action"><strong>决定退回、导出补料或提交专家</strong><small>查看逐商品差异和补料问题。退回供应商或导出带结论Excel/补料清单；资料就绪后提交指定版本给专家。导出不等于已退回或已发送。</small></div></div>
+  <div class="branch"><b>供应商补充循环：</b>04退回/导出 → 供应商补资料并上传新版本 → 02重新预审 → 04业务员处理。原文件、原结论与每轮修改可追溯。</div>
+  <div class="arrow" aria-hidden="true">↓</div>
+  <div class="step system" id="expert-review"><span class="num">05</span><span class="role">专家审核<br>AI辅助</span><div class="action"><strong>核查申报要素、附图、退税及法规</strong><small>先明确待审HS，逐项比较供应商要素与规格/图片，核官方要素模板。退税按商品→编码/退税代码→日期及适用政策核查。对差异和待核项连接税则、归类法条及相关两用物项规则，说明置信度不高的原因和待补证据。</small></div></div>
+  <div class="branch"><b>专家结果：</b>专家审核结论、建议要素、退税率核查、监管核查、专家置信度及具体问题。图片不能直接证明退税率；原要素和原率保留。法规未取得或不适用如实说明，不编造条款。</div>
+  <div class="arrow" aria-hidden="true">↓</div>
+  <div class="step logistics"><span class="num">06</span><span class="role">专家</span><div class="action"><strong>人工决定通过，或选择退回对象及问题</strong><small>可退回业务员处理关联/编码分歧，或供应商补要素、图片和事实；选择具体责任人及逐商品问题清单。AI可建议，最终退回对象及审核结论由专家确认。</small></div></div>
+  <div class="branch"><b>专家退回循环：</b>商品身份、规格、图片或HS变化 → 责任方修改 → 业务员重做受影响商品预审 → 再交专家；仅补要素/税务证据且不影响归类 → 保留有效预审，重新专家审核。所有结果绑定文件版本，旧版通过不自动沿用。</div>
+  <div class="arrow" aria-hidden="true">↓</div>
+  <div class="step boundary"><span class="num">当前终点</span><span class="role">专家通过</span><div class="action"><strong>形成专家确认版本</strong><small>记录确认编码、要素、退税/监管结论、审核人及时间；通过后的交接和报关动作待补充。</small></div></div>
 </div>
-<p class="legend">图例：<b>紫色</b> = AI 能力嵌入点 ｜ <b>浅紫</b> = 数据资产 ｜ <b>红色</b> = 重构前痛点环节（货到才开始）｜ <b>绿色</b> = 流程节点</p>
+<p class="legend">网页端角色：供应商、业务员、专家。专家是否由物流岗位担任待业务配置；不额外假定还有一次物流审批。预审置信度、专家置信度、监管状态与人工审批状态分别保存。</p>
+<section class="rules" id="field-rules">
+<h2>Excel结果列与标记</h2>
+<table><colgroup><col style="width:23%"><col><col style="width:24%"></colgroup><thead><tr><th>字段</th><th>写入内容</th><th>责任阶段</th></tr></thead><tbody>
+<tr><td>海关编码</td><td>供应商原HS，原文保留。</td><td>供应商填写；AI不覆盖</td></tr>
+<tr><td>AI推荐HScode</td><td>紧邻海关编码右侧；有依据的完整10位建议，无法定码注明待补。</td><td>业务员点击预审</td></tr>
+<tr><td>预审结论</td><td>紧邻AI推荐HScode右侧；比较状态、差异原因、预审置信度、具体补料问题及来源状态。</td><td>AI输出，业务员处置</td></tr>
+<tr><td>申报要素、退税率、附图</td><td>供应商原值保留；图片只证实可见事实，不直接推税率或工艺。</td><td>专家审核输入</td></tr>
+<tr><td>专家审核结论及置信度</td><td>逐项匹配与冲突、实际适用法规、退税/监管待核条件、低置信度原因和补料清单。</td><td>专家审核AI辅助</td></tr>
+<tr><td>退回对象、退回原因</td><td>角色、具体责任人、商品及问题；保留AI建议与专家选定值。</td><td>专家人工决定</td></tr>
+</tbody></table>
+<p>缺失/冲突要素标红，低置信度红字浅红底，中置信度黄底；编码不一致或无法确认另有明确状态及原因。新增列采用插入方式并保留原附图、公式、合并关系和历史意见，不能覆盖右侧原数据。</p>
+<details><summary>专家证据与置信度规则</summary><p>官方商品编码/要素、税则与归类规则优先；第三方和历史只补充线索。引用实际取得的文书标题、条款/页码、URL、生效日期、查询日及适用事实；官方版本未核不评高。</p><p>退税核查用税务总局/财政部适用文件与退税率文库；关税税率不代替出口退税率。两用物项按商务部等有效清单与技术门槛、用户/用途/目的地等核查，不凭关键词或改名排除管制。</p><p>预审高置信度指唯一归类有充分证据；专家高置信度还要求要素、退税和相关监管条件核清。关键身份冲突/跨税目未排除为低；可明确补齐的细项缺口为中。来源查询失败单记系统异常，不冒充商品错误。</p></details>
+<p class="muted">本页为当前流程说明，未表示网页后端已实现。主规则已同步到Skill；“场景提供型号”暂按此前厂家/供应商提供型号理解。<a href="../skills/steel-hs-declaration/SKILL.md">查看Skill</a></p>
+</section>
 </div>
-<script type="module">
-import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
-mermaid.initialize({
-  startOnLoad: true,
-  securityLevel: 'loose',
-  theme: 'base',
-  themeVariables: {
-    primaryColor: '#faf9ff',
-    primaryBorderColor: '#cbc4e7',
-    primaryTextColor: '#30285b',
-    lineColor: '#8d82b1',
-    textColor: '#30285b',
-    fontSize: '15px',
-    fontFamily: '"Microsoft YaHei","微软雅黑","PingFang SC",sans-serif'
-  },
-  flowchart: { useMaxWidth: false, htmlLabels: true, curve: 'linear', nodeSpacing: 60, rankSpacing: 70, padding: 18 }
-});
-</script>
-<script src="../../scripts/prototype-export-client.js?v=20261029-flow"></script>
-<script>
-async function exportChart(){
-  const btn=document.querySelector('.export-btn'), t=btn.textContent, bg=btn.style.background;
-  btn.textContent='⏳ 导出中...'; btn.disabled=true;
-  if(window.exportPrototypeViaServer){ try{ await window.exportPrototypeViaServer(btn); return; }catch(e){ console.warn('服务导出失败，降级',e); } }
-  try{
-    const {toBlob}=await import('https://cdn.jsdelivr.net/npm/html-to-image@1.11.11/+esm');
-    const node=document.querySelector('.chart-container'), s=2;
-    const blob=await toBlob(node,{cacheBust:true,backgroundColor:'#ffffff',pixelRatio:s,
-      width:node.scrollWidth,height:node.scrollHeight,canvasWidth:node.scrollWidth*s,canvasHeight:node.scrollHeight*s,style:{transform:'none'}});
-    const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='AI辅助申报要素与HS归类-业务流程图.png'; a.click(); URL.revokeObjectURL(a.href);
-    btn.textContent='✅ 已导出';
-  }catch(e){ console.error(e); btn.textContent='❌ 失败'; btn.style.background='#ef4444'; }
-  setTimeout(()=>{ btn.textContent=t; btn.style.background=bg; btn.disabled=false; },2200);
-}
-</script>
 </body>
 </html>

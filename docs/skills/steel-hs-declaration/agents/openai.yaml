@@ -1,4 +1,4 @@
 interface:
-  display_name: "钢材与备件归类助手"
-  short_description: "核对官方与第三方资料，生成钢材和备件的分类依据、申报要素、置信度与补数清单"
-  default_prompt: "使用 $steel-hs-declaration 处理这份商品Excel，给出HS候选、归类理由、申报要素、置信度及补数要求，并按中黄低红导出供物流审核的结果。"
+  display_name: "HS预审与专家审核助手"
+  short_description: "联合两页签比较供应商HS与AI建议，分阶段核查要素、附图、退税及法规并说明待补资料"
+  default_prompt: "使用 $steel-hs-declaration 对这份Excel执行业务员预审，保留供应商海关编码，在其右侧填写AI推荐HScode和预审结论，标出差异、置信度及补料要求；专家审核另行执行。"
