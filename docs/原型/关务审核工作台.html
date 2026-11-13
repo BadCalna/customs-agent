@@ -1,0 +1,2347 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>关务审核工作台 · 交互原型</title>
+<style>
+/* ---------- tokens ---------- */
+:root{
+  --bg:#F5F6F7;
+  --surface:#FFFFFF;
+  --surface-2:#FBFBFC;
+  --surface-3:#F2F3F5;
+  --line:#E1E3E7;
+  --line-soft:#EDEEF1;
+  --line-strong:#C9CDD4;
+  --ink:#14181F;
+  --ink-2:#3D4551;
+  --ink-3:#6C7583;
+  --ink-4:#9AA2AE;
+  --accent:#1B4A62;
+  --accent-2:#2A6B84;
+  --accent-bg:#EDF3F6;
+  --verify:#0D6E5C;
+  --verify-bg:#E8F3F0;
+  --doubt:#8D5A07;
+  --doubt-bg:#FBF1E0;
+  --stop:#A63024;
+  --stop-bg:#FBEDEB;
+  --idle:#5A6472;
+  --idle-bg:#F0F1F4;
+  --r-s:3px;
+  --r:5px;
+  --r-l:8px;
+  --sh:0 1px 2px rgba(16,22,32,.05);
+  --sh-pop:0 8px 28px -6px rgba(16,22,32,.18),0 1px 2px rgba(16,22,32,.06);
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans CJK SC","Source Han Sans SC",sans-serif;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0;background:var(--bg);color:var(--ink);
+  font:400 13px/1.55 var(--sans);
+  -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;
+}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+input,select,textarea{font:inherit;color:inherit}
+a{color:var(--accent-2);text-decoration:none}
+a:hover{text-decoration:underline}
+h1,h2,h3,h4,p,ul,ol,dl,dd,figure{margin:0;padding:0}
+ul,ol{list-style:none}
+table{border-collapse:collapse;width:100%}
+::selection{background:#CFE0E6}
+:focus-visible{outline:2px solid var(--accent-2);outline-offset:1px}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+
+/* ---------- entry ---------- */
+.gate{min-height:100vh;display:flex;flex-direction:column;background:var(--bg)}
+.gate::before{
+  content:"";position:fixed;inset:0;pointer-events:none;
+  background-image:linear-gradient(90deg,rgba(20,24,31,.028) 1px,transparent 1px);
+  background-size:calc(100% / 12) 100%;
+  -webkit-mask-image:linear-gradient(180deg,#000,transparent 78%);
+          mask-image:linear-gradient(180deg,#000,transparent 78%);
+}
+.gate-top{display:flex;align-items:center;justify-content:space-between;padding:22px 40px;border-bottom:1px solid var(--line);position:relative;z-index:1}
+.brand{display:flex;align-items:center;gap:10px}
+.brand-mark{width:26px;height:26px;flex:none}
+.brand-name{font-size:13.5px;font-weight:600;letter-spacing:.01em}
+.brand-sub{font-size:11.5px;color:var(--ink-4);padding-left:10px;margin-left:10px;border-left:1px solid var(--line)}
+.gate-main{flex:1;display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:64px;align-items:center;max-width:1280px;width:100%;margin:0 auto;padding:38px 40px 24px;position:relative;z-index:1}
+.gate-intro h1{font-size:28px;line-height:1.42;font-weight:600;letter-spacing:-.012em}
+.gate-intro p.lede{margin-top:14px;font-size:13.5px;line-height:1.8;color:var(--ink-3);max-width:36em}
+.gate-fig{margin-top:38px;border:1px solid var(--line);background:var(--surface);padding:0;width:100%;max-width:704px;box-shadow:var(--sh)}
+.gate-fig svg{display:block;width:100%;height:auto;aspect-ratio:704/188}
+.gate-fig svg{display:block;width:100%;height:auto}
+.gate-fig figcaption{display:flex;justify-content:space-between;gap:16px;padding:9px 14px;border-top:1px solid var(--line-soft);font-size:11.5px;color:var(--ink-4)}
+.gate-panel{background:var(--surface);border:1px solid var(--line);box-shadow:var(--sh)}
+.gate-panel-hd{padding:16px 20px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:baseline}
+.gate-panel-hd h2{font-size:13px;font-weight:600}
+.gate-panel-hd span{font-size:11.5px;color:var(--ink-4)}
+.gate-rules{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;margin:26px 0 0;padding-top:18px;border-top:1px solid var(--line);max-width:760px}
+.gate-rules dt{font-size:11.5px;font-weight:600;color:var(--ink-2);letter-spacing:.01em}
+.gate-rules dd{margin-top:5px;font-size:11.5px;line-height:1.65;color:var(--ink-4)}
+.gate-list{padding:6px}
+.role-row{display:grid;grid-template-columns:18px 40px 1fr auto;gap:13px;align-items:start;width:100%;text-align:left;padding:16px 14px;border-radius:var(--r);transition:background .14s}
+.role-row + .role-row{border-top:1px solid var(--line-soft)}
+.role-row:hover{background:var(--surface-3)}
+.role-idx{font-size:10.5px;color:var(--ink-4);padding-top:12px;letter-spacing:.04em}
+.role-glyph{width:40px;height:40px;display:grid;place-items:center;border:1px solid var(--line);border-radius:var(--r);color:var(--ink-2);background:var(--surface-2)}
+.role-row:hover .role-glyph{border-color:var(--line-strong);color:var(--accent)}
+.role-row h3{font-size:13.5px;font-weight:600;display:flex;align-items:center;gap:8px}
+.role-row h3 em{font-style:normal;font-weight:400;font-size:10.5px;color:var(--ink-4);border:1px solid var(--line);border-radius:2px;padding:1px 5px;letter-spacing:.02em}
+.role-row p{margin-top:4px;font-size:12px;line-height:1.65;color:var(--ink-3)}
+.role-row .role-enter{align-self:center;color:var(--ink-4);display:flex;align-items:center;gap:5px;font-size:11.5px;white-space:nowrap}
+.role-row:hover .role-enter{color:var(--accent)}
+.gate-foot{padding:0 40px 22px;text-align:center;font-size:11.5px;color:var(--ink-4);position:relative;z-index:1}
+.gate-foot b{font-weight:500;color:var(--ink-3)}
+
+/* ---------- app shell ---------- */
+.app{display:flex;min-height:100vh;align-items:stretch}
+.rail{width:212px;flex:none;background:var(--surface);border-right:1px solid var(--line);display:flex;flex-direction:column;position:fixed;left:0;top:0;bottom:0;height:100vh;z-index:40}
+.rail-brand{height:52px;display:flex;align-items:center;gap:9px;padding:0 16px;border-bottom:1px solid var(--line-soft)}
+.rail-brand .brand-name{font-size:12.5px}
+.rail-nav{padding:14px 10px;display:flex;flex-direction:column;gap:1px;flex:1;overflow-y:auto}
+.rail-label{font-size:10.5px;letter-spacing:.06em;color:var(--ink-4);padding:14px 8px 6px}
+.rail-link{display:flex;align-items:center;gap:9px;padding:7px 9px;border-radius:var(--r);font-size:12.5px;color:var(--ink-2);position:relative}
+.rail-link:hover{background:var(--surface-3)}
+.rail-link[aria-current="page"]{background:var(--accent-bg);color:var(--accent);font-weight:500}
+.rail-link[aria-current="page"]::before{content:"";position:absolute;left:-10px;top:6px;bottom:6px;width:2px;background:var(--accent)}
+.rail-link .count{margin-left:auto;font-size:11px;color:var(--ink-3);font-family:var(--mono)}
+.rail-link[aria-current="page"] .count{color:var(--accent-2)}
+.rail-link[disabled]{color:var(--ink-4);cursor:default;background:none}
+.rail-link[disabled]:hover{background:none}
+.rail-foot{border-top:1px solid var(--line-soft);padding:10px}
+.role-chip{display:flex;align-items:center;gap:9px;width:100%;padding:8px;border-radius:var(--r);text-align:left}
+.role-chip:hover{background:var(--surface-3)}
+.avatar{width:28px;height:28px;flex:none;border-radius:50%;display:grid;place-items:center;background:var(--accent-bg);color:var(--accent);font-size:11.5px;font-weight:600;letter-spacing:.02em}
+.role-chip-meta{min-width:0}
+.role-chip-name{font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.role-chip-role{font-size:10.5px;color:var(--ink-4)}
+.role-chip .caret{margin-left:auto;color:var(--ink-4);flex:none}
+
+.main{flex:1;min-width:0;display:flex;flex-direction:column;margin-left:212px}
+.topbar{height:52px;flex:none;background:rgba(255,255,255,.94);backdrop-filter:saturate(180%) blur(8px);border-bottom:1px solid var(--line);display:flex;align-items:center;gap:14px;padding:0 24px;position:sticky;top:0;z-index:30}
+.crumbs{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--ink-3);min-width:0}
+.crumbs a{color:var(--ink-3)}
+.crumbs a:hover{color:var(--accent)}
+.crumbs .sep{color:var(--ink-4);font-size:10px}
+.crumbs .cur{color:var(--ink);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.topbar-end{margin-left:auto;display:flex;align-items:center;gap:6px}
+.demo-chip{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--ink-3);border:1px solid var(--line);border-radius:2px;padding:2px 7px;background:var(--surface-2)}
+.icon-btn{width:28px;height:28px;display:grid;place-items:center;border-radius:var(--r);color:var(--ink-3);position:relative}
+.icon-btn:hover{background:var(--surface-3);color:var(--ink)}
+.icon-btn .dot{position:absolute;top:6px;right:6px;width:5px;height:5px;border-radius:50%;background:var(--stop);border:1px solid #fff}
+.content{padding:26px 28px 72px;max-width:1680px;width:100%}
+.content.wide{max-width:none}
+
+/* ---------- page header ---------- */
+.page-hd{display:flex;align-items:flex-start;gap:20px;margin-bottom:20px}
+.page-hd h1{font-size:19px;font-weight:600;letter-spacing:-.005em;line-height:1.3}
+.page-hd .sub{margin-top:5px;font-size:12.5px;color:var(--ink-3);max-width:62em}
+.page-hd .hd-actions{margin-left:auto;display:flex;gap:8px;flex:none;padding-top:2px}
+.sect{margin-top:26px}
+.sect-hd{display:flex;align-items:baseline;gap:10px;margin-bottom:10px}
+.sect-hd h2{font-size:12.5px;font-weight:600;letter-spacing:.01em}
+.sect-hd .hint{font-size:11.5px;color:var(--ink-4)}
+.sect-hd .hint-r{margin-left:auto;font-size:11.5px;color:var(--ink-4)}
+
+/* ---------- buttons ---------- */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:30px;padding:0 12px;border:1px solid var(--line-strong);border-radius:var(--r);background:var(--surface);color:var(--ink-2);font-size:12.5px;font-weight:500;white-space:nowrap;transition:background .12s,border-color .12s,color .12s}
+.btn:hover{background:var(--surface-3);border-color:#B4BAC4;color:var(--ink)}
+.btn:active{transform:translateY(.5px)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.primary:hover{background:#143B4E;border-color:#143B4E}
+.btn.ghost{border-color:transparent;background:none;color:var(--ink-3)}
+.btn.ghost:hover{background:var(--surface-3);color:var(--ink)}
+.btn.danger{color:var(--stop);border-color:#E7C4BE}
+.btn.danger:hover{background:var(--stop-bg);border-color:#DDA79F}
+.btn.sm{height:26px;padding:0 9px;font-size:12px}
+.btn.lg{height:34px;padding:0 16px;font-size:13px}
+.btn[disabled]{opacity:.45;pointer-events:none}
+.btn-group{display:inline-flex;border:1px solid var(--line-strong);border-radius:var(--r);overflow:hidden;background:var(--surface)}
+.btn-group button{height:28px;padding:0 11px;font-size:12px;color:var(--ink-3);border-right:1px solid var(--line)}
+.btn-group button:last-child{border-right:0}
+.btn-group button:hover{background:var(--surface-3);color:var(--ink)}
+.btn-group button[aria-pressed="true"]{background:var(--accent-bg);color:var(--accent);font-weight:500}
+
+/* ---------- pills / tags ---------- */
+.pill{display:inline-flex;align-items:center;gap:5px;height:20px;padding:0 7px;border-radius:2px;font-size:11px;font-weight:500;white-space:nowrap;border:1px solid transparent}
+.pill i{width:5px;height:5px;border-radius:50%;flex:none;background:currentColor;font-style:normal}
+.pill.verify{color:var(--verify);background:var(--verify-bg);border-color:#CFE5DF}
+.pill.doubt{color:var(--doubt);background:var(--doubt-bg);border-color:#EEDCBE}
+.pill.stop{color:var(--stop);background:var(--stop-bg);border-color:#F0D2CE}
+.pill.idle{color:var(--idle);background:var(--idle-bg);border-color:#E2E5EA}
+.pill.accent{color:var(--accent);background:var(--accent-bg);border-color:#D2E0E5}
+.pill.plain{color:var(--ink-3);border-color:var(--line);background:var(--surface)}
+.tag{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;color:var(--ink-3);border:1px solid var(--line);border-radius:2px;padding:1px 5px;background:var(--surface-2);white-space:nowrap}
+.tag.src{color:var(--accent-2);border-color:#D6E2E7;background:#F4F8F9}
+.tag.warn{color:var(--doubt);border-color:#EEDCBE;background:var(--doubt-bg)}
+.conf{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;color:var(--ink-3);white-space:nowrap}
+.conf b{font-weight:500;color:var(--ink-2)}
+.conf .bars{display:inline-flex;gap:2px}
+.conf .bars span{width:9px;height:4px;background:#DFE3E8;border-radius:1px}
+.conf.high .bars span:nth-child(-n+3){background:var(--verify)}
+.conf.mid .bars span:nth-child(-n+2){background:var(--doubt)}
+.conf.low .bars span:nth-child(-n+1){background:var(--stop)}
+.keyval{display:flex;align-items:baseline;gap:8px;font-size:12.5px}
+.keyval dt{color:var(--ink-4);font-size:11.5px;flex:none}
+.keyval dd{color:var(--ink-2);min-width:0}
+
+/* ---------- KPI ---------- */
+.kpi-row{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--line);background:var(--surface)}
+.kpi{padding:14px 16px 15px;border-right:1px solid var(--line-soft);min-width:0}
+.kpi:last-child{border-right:0}
+.kpi .k{font-size:11.5px;color:var(--ink-3);display:flex;align-items:center;gap:6px}
+.kpi .v{margin-top:7px;font-size:24px;font-weight:600;letter-spacing:-.02em;line-height:1;font-variant-numeric:tabular-nums}
+.kpi .v small{font-size:12px;font-weight:400;color:var(--ink-4);margin-left:4px;letter-spacing:0}
+.kpi .foot{margin-top:7px;font-size:11px;color:var(--ink-4)}
+
+/* ---------- panel / card ---------- */
+.panel{background:var(--surface);border:1px solid var(--line)}
+.panel + .panel{margin-top:16px}
+.panel-hd{display:flex;align-items:center;gap:10px;padding:11px 14px;border-bottom:1px solid var(--line-soft);min-height:42px}
+.panel-hd h2{font-size:12.5px;font-weight:600}
+.panel-hd .meta{font-size:11.5px;color:var(--ink-4)}
+.panel-hd .hd-r{margin-left:auto;display:flex;align-items:center;gap:6px}
+.panel-bd{padding:14px}
+.panel-bd.flush{padding:0}
+.panel-ft{padding:11px 14px;border-top:1px solid var(--line-soft);display:flex;align-items:center;gap:8px;background:var(--surface-2)}
+.panel-ft .note{font-size:11px;color:var(--ink-4)}
+
+/* ---------- table ---------- */
+.tbl{width:100%;font-size:12.5px;table-layout:auto}
+.tbl thead th{
+  font-size:11px;font-weight:500;color:var(--ink-3);text-align:left;
+  padding:8px 10px;background:var(--surface-2);border-bottom:1px solid var(--line);
+  white-space:nowrap;letter-spacing:.02em;
+}
+.tbl thead th.num{text-align:right}
+.tbl tbody td{padding:8px 10px;border-bottom:1px solid var(--line-soft);vertical-align:middle;vertical-align:top}
+.tbl tbody tr:last-child td{border-bottom:0}
+.tbl tbody tr{transition:background .1s}
+.tbl tbody tr:hover{background:var(--surface-2)}
+.tbl tbody tr.is-active{background:var(--accent-bg)}
+.tbl tbody tr.is-active td{box-shadow:inset 0 1px 0 #DCE7EA,inset 0 -1px 0 #DCE7EA}
+.tbl tbody tr.is-active td:first-child{box-shadow:inset 2px 0 0 var(--accent-2),inset 0 1px 0 #DCE7EA,inset 0 -1px 0 #DCE7EA}
+.tbl tbody tr[tabindex]{cursor:pointer}
+.tbl .num{text-align:right;font-variant-numeric:tabular-nums}
+.tbl .muted{color:var(--ink-4)}
+.tbl .name{font-weight:500;color:var(--ink);display:block;overflow:hidden;text-overflow:ellipsis}
+.tbl .alias{display:block;font-size:11px;color:var(--ink-4);margin-top:1px;font-weight:400;overflow:hidden;text-overflow:ellipsis}
+.tbl .code{font-family:var(--mono);font-size:11.5px;letter-spacing:-.02em;white-space:nowrap;display:block;overflow:hidden;text-overflow:ellipsis}
+.tbl .code.empty{color:var(--ink-4);font-family:var(--sans);font-size:11.5px}
+.tbl .verdict{display:flex;flex-direction:column;gap:3px;align-items:flex-start}
+.tbl .verdict .why{font-size:11px;color:var(--ink-3);line-height:1.45;max-width:24em;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.tbl-compact tbody td{padding:7px 12px}
+.tbl-wrap{overflow-x:auto}
+
+/* ---------- task cards / list ---------- */
+.task-list{display:flex;flex-direction:column}
+.task{display:grid;grid-template-columns:minmax(0,1fr) 132px 150px 128px;gap:18px;align-items:center;padding:14px 16px;border-bottom:1px solid var(--line-soft);width:100%;text-align:left;transition:background .12s}
+.task:last-child{border-bottom:0}
+.task:hover{background:var(--surface-2)}
+.task-no{font-family:var(--mono);font-size:11px;color:var(--ink-4);letter-spacing:.02em}
+.task-title{margin-top:3px;font-size:13px;font-weight:500;letter-spacing:-.01em}
+.task-meta{margin-top:4px;font-size:11.5px;color:var(--ink-3);display:flex;flex-wrap:wrap;gap:4px 12px}
+.task-meta span{display:inline-flex;align-items:center;gap:4px}
+.task-prog{display:flex;align-items:center;gap:8px}
+.prog{flex:1;height:4px;background:var(--surface-3);border-radius:2px;overflow:hidden;display:flex}
+.prog i{display:block;height:100%}
+.prog .p-ok{background:var(--verify)}
+.prog .p-wait{background:#C9B476}
+.prog .p-stop{background:var(--stop)}
+.prog .p-idle{background:#D8DCE2}
+.task-prog b{font-family:var(--mono);font-size:11px;color:var(--ink-3);font-weight:400;white-space:nowrap}
+.task-right{display:flex;flex-direction:column;align-items:flex-end;gap:5px}
+.task-right .when{font-size:11px;color:var(--ink-4)}
+.task-empty{padding:56px 20px;text-align:center;color:var(--ink-3);font-size:12.5px}
+.task-empty svg{margin:0 auto 12px;display:block;color:var(--ink-4)}
+
+/* ---------- queue rows ---------- */
+.q-row{display:grid;grid-template-columns:minmax(0,1fr) 104px 104px 92px;gap:14px;align-items:center;padding:11px 16px;border-bottom:1px solid var(--line-soft);width:100%;text-align:left}
+.q-row:last-child{border-bottom:0}
+.q-row:hover{background:var(--surface-2)}
+.q-name{display:block;font-size:12.5px;font-weight:500;letter-spacing:-.01em}
+.q-meta{display:block;font-size:11px;color:var(--ink-4);margin-top:3px}
+
+/* ---------- task detail layout ---------- */
+.detail{display:grid;grid-template-columns:minmax(0,1fr) minmax(410px,470px);gap:16px;align-items:start}
+.detail-l{min-width:0}
+.detail-r{position:sticky;top:68px;max-height:calc(100vh - 84px);overflow:auto;background:transparent}
+.detail-r .dp{background:var(--surface);border:1px solid var(--line)}
+.notes-block{margin-top:12px}
+.task-hd{background:var(--surface);border:1px solid var(--line);padding:16px 18px;margin-bottom:16px}
+.task-hd-top{display:flex;align-items:flex-start;gap:16px}
+.task-hd h1{font-size:17px;font-weight:600;line-height:1.35}
+.task-hd .task-hd-no{font-family:var(--mono);font-size:11px;color:var(--ink-4);margin-bottom:4px;letter-spacing:.02em}
+.task-hd .hd-actions{margin-left:auto;display:flex;gap:8px;flex:none}
+.facts{display:flex;flex-wrap:wrap;gap:6px 26px;margin-top:13px;padding-top:13px;border-top:1px solid var(--line-soft)}
+.fact{display:flex;align-items:baseline;gap:7px;font-size:12px}
+.fact .k{font-size:11.5px;color:var(--ink-4)}
+.fact .v{color:var(--ink-2)}
+.steps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0;margin-top:14px;padding-top:14px;border-top:1px solid var(--line-soft)}
+.step{position:relative;padding-left:22px;min-width:0}
+.step::before{content:"";position:absolute;left:0;top:3px;width:9px;height:9px;border-radius:50%;border:1.5px solid var(--line-strong);background:var(--surface)}
+.step.done::before{background:var(--verify);border-color:var(--verify)}
+.step.active::before{background:var(--surface);border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
+.step::after{content:"";position:absolute;left:13px;top:7px;right:6px;height:1px;background:var(--line-soft)}
+.step:last-child::after{display:none}
+.step.done::after{background:#CFE5DF}
+.step .s-k{font-size:11px;color:var(--ink-4)}
+.step .s-v{font-size:12px;margin-top:2px;color:var(--ink-3)}
+.step.done .s-v{color:var(--ink-2)}
+.step.active .s-v{color:var(--ink);font-weight:500}
+
+/* ---------- detail panel ---------- */
+.dp-hd{padding:14px 16px 0;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--surface);z-index:2}
+.dp-hd-top{display:flex;align-items:flex-start;gap:12px}
+.dp-hd h2{font-size:14.5px;font-weight:600;line-height:1.35}
+.dp-hd .dp-sub{margin-top:3px;font-size:11.5px;color:var(--ink-3);display:flex;flex-wrap:wrap;gap:3px 10px}
+.dp-hd .dp-sub code{font-family:var(--mono);font-size:10.5px;color:var(--ink-4);background:var(--surface-3);padding:1px 4px;border-radius:2px}
+.dp-hd .dp-close{margin-left:auto;flex:none}
+.tabs{display:flex;gap:2px;margin-top:12px;overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tab{position:relative;padding:8px 10px 9px;font-size:12px;color:var(--ink-3);border-bottom:2px solid transparent;white-space:nowrap;margin-bottom:-1px}
+.tab:hover{color:var(--ink)}
+.tab[aria-selected="true"]{color:var(--accent);font-weight:500;border-bottom-color:var(--accent)}
+.tab .n{font-family:var(--mono);font-size:10px;color:var(--ink-4);margin-left:4px}
+.dp-bd{padding:16px}
+.dp-sec + .dp-sec{margin-top:16px;padding-top:14px;border-top:1px solid var(--line-soft)}
+.dp-sec-hd{display:flex;align-items:center;gap:8px;margin-bottom:9px}
+.dp-sec-hd h3{font-size:11px;font-weight:600;color:var(--ink-3);letter-spacing:.04em;text-transform:uppercase}
+.dp-sec-hd .r{margin-left:auto;font-size:11px;color:var(--ink-4)}
+.dp-ft{position:sticky;bottom:0;background:var(--surface);border-top:1px solid var(--line);padding:10px 14px;display:flex;align-items:center;gap:8px;z-index:3}
+.dp-ft .note{margin-right:auto;font-size:11px;color:var(--ink-4)}
+
+/* ---------- compare block ---------- */
+.cmp{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--line);background:var(--surface)}
+.cmp-col{padding:11px 12px 12px;min-width:0}
+.cmp-col + .cmp-col{border-left:1px solid var(--line)}
+.cmp-k{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--ink-4)}
+.cmp-v{margin-top:5px;font-family:var(--mono);font-size:17px;letter-spacing:-.01em;line-height:1.2;font-weight:500}
+.cmp-v.empty{font-family:var(--sans);font-size:12px;color:var(--ink-4);font-weight:400}
+.cmp-v small{font-family:var(--sans);font-size:11px;font-weight:400;color:var(--ink-4);margin-left:5px;letter-spacing:0}
+.cmp-note{margin-top:5px;font-size:11px;color:var(--ink-3);line-height:1.5}
+.cmp-col.hl{background:#FAFCFC}
+.cmp-v.same{font-family:var(--sans);font-size:12.5px;font-weight:400;color:var(--ink-3);letter-spacing:0}
+.cmp-verdict{grid-column:1/-1;border-top:1px solid var(--line);padding:10px 12px;display:flex;align-items:flex-start;gap:8px;background:var(--surface-2)}
+.cmp-verdict .txt{font-size:12px;line-height:1.6;color:var(--ink-2)}
+.cmp-verdict .txt b{font-weight:600;color:var(--ink)}
+
+/* ---------- evidence ---------- */
+.ev{border:1px solid var(--line);padding:10px 12px;background:var(--surface-2)}
+.ev + .ev{margin-top:8px}
+.ev-top{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.ev-title{font-size:12px;font-weight:500;color:var(--ink)}
+.ev-meta{margin-top:4px;font-size:11px;color:var(--ink-3);line-height:1.55}
+.ev-meta code{font-family:var(--mono);font-size:10.5px;color:var(--ink-2)}
+.ev-quote{margin-top:7px;padding-left:9px;border-left:2px solid var(--line-strong);font-size:11.5px;color:var(--ink-2);line-height:1.65}
+.ev-links{margin-top:6px;display:flex;gap:12px;font-size:11px}
+
+/* ---------- element table ---------- */
+.elem{width:100%;font-size:12px}
+.elem th{font-size:10.5px;font-weight:500;color:var(--ink-4);text-align:left;padding:5px 8px;border-bottom:1px solid var(--line);letter-spacing:.03em}
+.elem td{padding:7px 8px;border-bottom:1px solid var(--line-soft);vertical-align:top;white-space:normal}
+.elem tr:last-child td{border-bottom:0}
+.elem .el-name{color:var(--ink-3);white-space:nowrap}
+.elem .el-val{color:var(--ink);line-height:1.5;max-width:13em}
+.elem .el-ai{color:var(--ink-2);line-height:1.5}
+.elem .st{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;white-space:nowrap}
+.elem .st.ok{color:var(--verify)}
+.elem .st.no{color:var(--stop)}
+.elem .st.q{color:var(--doubt)}
+.elem .st.unk{color:var(--ink-4)}
+
+/* ---------- issue list ---------- */
+.issues{display:flex;flex-direction:column;gap:7px}
+.issue{display:flex;gap:9px;padding:9px 10px;border:1px solid var(--line);background:var(--surface-2);border-radius:var(--r)}
+.issue .ic{flex:none;margin-top:1px}
+.issue .body{min-width:0}
+.issue .t{font-size:12px;line-height:1.5;color:var(--ink)}
+.issue .m{margin-top:3px;font-size:11px;color:var(--ink-3);display:flex;flex-wrap:wrap;gap:3px 10px}
+.issue .m code{font-family:var(--mono);font-size:10.5px}
+.issue.warn{border-color:#EEDCBE;background:var(--doubt-bg)}
+.issue.stop{border-color:#F0D2CE;background:var(--stop-bg)}
+
+/* ---------- decision / form ---------- */
+.field{margin-bottom:11px}
+.field > label,.field > .lb{display:block;font-size:11px;color:var(--ink-3);margin-bottom:5px;letter-spacing:.02em}
+.field .hint{margin-top:4px;font-size:10.5px;color:var(--ink-4);line-height:1.5}
+.input,.select,.textarea{
+  width:100%;border:1px solid var(--line-strong);border-radius:var(--r);
+  background:var(--surface);padding:6px 9px;font-size:12.5px;color:var(--ink);height:30px;
+}
+.textarea{height:auto;min-height:64px;resize:vertical;line-height:1.6}
+.input.mono{font-family:var(--mono);letter-spacing:.02em}
+.input:focus,.select:focus,.textarea:focus{outline:none;border-color:var(--accent-2);box-shadow:0 0 0 3px var(--accent-bg)}
+.select{appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='M3 4.5 6 7.5 9 4.5' fill='none' stroke='%236C7583' stroke-width='1.2' stroke-linecap='round'/></svg>");background-repeat:no-repeat;background-position:right 9px center;padding-right:26px}
+.radio{display:flex;gap:6px;flex-wrap:wrap}
+.radio-btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line-strong);border-radius:var(--r);padding:5px 9px;font-size:12px;color:var(--ink-2);background:var(--surface);cursor:pointer}
+.radio-btn:hover{border-color:#B4BAC4}
+.radio-btn input{position:absolute;opacity:0;pointer-events:none}
+.radio-btn:has(input:checked){border-color:var(--accent);background:var(--accent-bg);color:var(--accent);font-weight:500}
+.check{display:flex;align-items:flex-start;gap:7px;font-size:12px;color:var(--ink-2);line-height:1.5;cursor:pointer;padding:5px 0}
+.check input{margin:2px 0 0;accent-color:var(--accent);flex:none}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+
+/* ---------- callout / note ---------- */
+.callout{display:flex;gap:9px;padding:10px 12px;border:1px solid var(--line);background:var(--surface-2);font-size:11.5px;line-height:1.6;color:var(--ink-2);border-radius:var(--r)}
+.callout .ic{flex:none;margin-top:1px;color:var(--ink-3)}
+.callout b{font-weight:600;color:var(--ink)}
+.callout.info{border-color:#CFE0E6;background:#F4F8F9}
+.callout.info .ic{color:var(--accent-2)}
+.callout.warn{border-color:#EEDCBE;background:var(--doubt-bg)}
+.callout.warn .ic{color:var(--doubt)}
+.note-block{font-size:11.5px;color:var(--ink-3);line-height:1.7}
+.note-block b{color:var(--ink-2);font-weight:500}
+.kv-list{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:12px}
+.kv-list dt{color:var(--ink-4);font-size:11.5px;white-space:nowrap}
+.kv-list dd{color:var(--ink-2);min-width:0;line-height:1.5}
+
+/* ---------- timeline ---------- */
+.tl{position:relative;padding-left:18px}
+.tl::before{content:"";position:absolute;left:4px;top:5px;bottom:5px;width:1px;background:var(--line)}
+.tl-item{position:relative;padding-bottom:13px}
+.tl-item:last-child{padding-bottom:0}
+.tl-item::before{content:"";position:absolute;left:-17px;top:5px;width:7px;height:7px;border-radius:50%;background:var(--surface);border:1.5px solid var(--line-strong)}
+.tl-item.key::before{background:var(--accent);border-color:var(--accent)}
+.tl-item:last-child::before{border-color:var(--accent)}
+.tl-top{display:flex;align-items:baseline;gap:8px}
+.tl-act{font-size:12px;font-weight:500;color:var(--ink)}
+.tl-time{margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--ink-4);white-space:nowrap;flex:none}
+.tl-by{font-size:10.5px;color:var(--ink-4);border:1px solid var(--line);border-radius:2px;padding:0 4px;white-space:nowrap}
+.tl-desc{margin-top:3px;font-size:11.5px;color:var(--ink-3);line-height:1.6}
+
+/* ---------- version chip ---------- */
+.versions{display:flex;gap:0;border:1px solid var(--line-strong);border-radius:var(--r);overflow:hidden}
+.version{height:28px;padding:0 10px;font-size:11.5px;font-family:var(--mono);color:var(--ink-3);border-right:1px solid var(--line);display:flex;align-items:center;gap:5px;background:var(--surface)}
+.version:last-child{border-right:0}
+.version:hover{background:var(--surface-3)}
+.version[aria-current="true"]{background:var(--accent-bg);color:var(--accent);font-weight:500}
+
+/* ---------- modal ---------- */
+.modal-mask{position:fixed;inset:0;background:rgba(18,23,30,.34);display:grid;place-items:center;z-index:100;padding:24px;animation:fade .14s ease-out}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+.modal{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-l);box-shadow:var(--sh-pop);width:min(520px,100%);max-height:calc(100vh - 48px);display:flex;flex-direction:column;animation:rise .16s cubic-bezier(.2,.8,.3,1)}
+@keyframes rise{from{transform:translateY(6px);opacity:.6}to{transform:none;opacity:1}}
+.modal.wide{width:min(720px,100%)}
+.modal-hd{padding:15px 18px;border-bottom:1px solid var(--line);display:flex;align-items:flex-start;gap:12px}
+.modal-hd h2{font-size:14px;font-weight:600}
+.modal-hd p{margin-top:3px;font-size:11.5px;color:var(--ink-3)}
+.modal-hd .icon-btn{margin-left:auto;margin-top:-3px}
+.modal-bd{padding:16px 18px;overflow:auto}
+.modal-ft{padding:12px 18px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:8px;background:var(--surface-2)}
+
+/* ---------- upload ---------- */
+.drop{border:1px dashed var(--line-strong);border-radius:var(--r);padding:28px 20px;text-align:center;background:var(--surface-2);transition:border-color .15s,background .15s}
+.drop:hover,.drop.over{border-color:var(--accent-2);background:var(--accent-bg)}
+.drop .ic{color:var(--ink-3);margin-bottom:10px}
+.drop .t{font-size:12.5px;color:var(--ink-2);font-weight:500}
+.drop .s{margin-top:4px;font-size:11.5px;color:var(--ink-4)}
+.drop .pick{margin-top:12px}
+.file-row{display:flex;align-items:center;gap:10px;padding:9px 11px;border:1px solid var(--line);background:var(--surface);border-radius:var(--r);margin-top:10px}
+.file-row .nm{font-size:12px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.file-row .sz{font-family:var(--mono);font-size:10.5px;color:var(--ink-4);flex:none}
+.file-row .ic{color:var(--verify);flex:none}
+
+/* ---------- progress bar ---------- */
+.bar{height:3px;background:var(--surface-3);border-radius:2px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--accent-2);transition:width .24s ease}
+.run-row{display:flex;align-items:center;gap:10px;padding:7px 0;font-size:12px;color:var(--ink-3)}
+.run-row .nm{width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink-2)}
+.run-row .bar{flex:1}
+.run-row .st{width:76px;text-align:right;font-size:11px}
+.spin{width:12px;height:12px;border:1.5px solid var(--line-strong);border-top-color:var(--accent-2);border-radius:50%;animation:sp .7s linear infinite;flex:none}
+@keyframes sp{to{transform:rotate(360deg)}}
+.checkmark{color:var(--verify);flex:none}
+
+/* ---------- misc ---------- */
+.empty{padding:32px 16px;text-align:center;font-size:12px;color:var(--ink-4)}
+.split-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.split-3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.row-between{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.stack-8 > * + *{margin-top:8px}
+.stack-12 > * + *{margin-top:12px}
+.stack-16 > * + *{margin-top:16px}
+.hr{height:1px;background:var(--line-soft);margin:14px 0}
+.dim{color:var(--ink-4)}
+.nowrap{white-space:nowrap}
+.fade-in{animation:fi .18s ease-out}
+@keyframes fi{from{opacity:0;transform:translateY(2px)}to{opacity:1;transform:none}}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.pointer-none{pointer-events:none}
+
+/* ---------- footer ---------- */
+.foot-note{margin-top:32px;padding-top:14px;border-top:1px solid var(--line-soft);display:flex;gap:16px;flex-wrap:wrap;font-size:11px;color:var(--ink-4)}
+.foot-note b{font-weight:500;color:var(--ink-3)}
+
+@media (max-width:1280px){
+  .detail{grid-template-columns:minmax(0,1fr) minmax(400px,460px)}
+}
+@media (max-width:1120px){
+  .detail{grid-template-columns:minmax(0,1fr)}
+  .detail-l,.detail-r{min-width:0}
+  .detail-r{position:static;max-height:none;overflow:visible}
+  .gate-main{grid-template-columns:1fr;gap:36px}
+  .gate-fig{display:none}
+  .task{grid-template-columns:minmax(0,1fr) 120px 120px;gap:14px}
+  .task .task-right{display:none}
+}
+@media (max-width:860px){
+  .content{padding:16px 12px 48px}
+  .topbar{padding:0 12px;gap:8px}
+  .crumbs{font-size:11.5px}
+  .demo-chip{display:none}
+  .page-hd{flex-wrap:wrap;gap:10px}
+  .page-hd .hd-actions{margin-left:0;padding-top:0}
+  .task-hd-top{flex-wrap:wrap;gap:10px}
+  .task-hd .hd-actions{margin-left:0}
+  .task-hd h1{font-size:15px;word-break:break-all}
+  .facts{gap:5px 16px}
+  .steps{grid-template-columns:1fr 1fr;gap:12px}
+  .step::after{display:none}
+  .tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .tbl{min-width:560px}
+  .dp-bd{padding:12px}
+  .dp-ft{flex-wrap:wrap}
+  .rail{width:60px}
+  .main{margin-left:60px}
+  .rail-brand .brand-name,.rail-label,.rail-link span,.rail-link .count,.role-chip-meta,.role-chip .caret{display:none}
+  .rail-link{justify-content:center;padding:8px}
+  .content{padding:18px 14px 56px}
+  .kpi-row{grid-template-columns:1fr 1fr}
+  .kpi:nth-child(2){border-right:0}
+  .kpi:nth-child(-n+2){border-bottom:1px solid var(--line-soft)}
+  .steps{grid-template-columns:1fr 1fr;gap:14px}
+  .step::after{display:none}
+  .split-2,.split-3{grid-template-columns:1fr}
+  .form-row{grid-template-columns:1fr}
+}
+@media print{.rail,.topbar,.dp-ft,.hd-actions{display:none}}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<div id="modal-root"></div>
+<script>
+/* =========================================================================
+   关务审核工作台 · 交互原型
+   口径：docs/开发文档/阶段0（D1 业务与流程约定 / D2 数据与版本约定）
+   范围：仅前端交互演示。不接后端、不做真实文件解析与归类。
+   演示数据取自参考模板（象盛镍业 · 苏州淳鑫）结构，编码不构成归类结论。
+   ========================================================================= */
+
+/* ---------------------------- icons ---------------------------- */
+const I = {
+  book:'<path d="M3 2.5h6.5a2 2 0 0 1 2 2V14a1.5 1.5 0 0 0-1.5-1.5H3z"/><path d="M13.5 2.5H13v12"/>',
+  box:'<path d="M2 5.5 8 2l6 3.5v5L8 14l-6-3.5z"/><path d="M2 5.5 8 9l6-3.5M8 9v5"/>',
+  user:'<circle cx="8" cy="5.5" r="2.5"/><path d="M3 14c0-2.5 2.2-4 5-4s5 1.5 5 4"/>',
+  users:'<circle cx="6" cy="6" r="2.2"/><path d="M2 13.5c0-2.2 1.8-3.5 4-3.5s4 1.3 4 3.5"/><path d="M10.5 4.2a2.2 2.2 0 0 1 0 4.1M12 10.2c1.3.4 2 1.5 2 3.3"/>',
+  file:'<path d="M9 2H4.5A1.5 1.5 0 0 0 3 3.5v9A1.5 1.5 0 0 0 4.5 14h7a1.5 1.5 0 0 0 1.5-1.5V6z"/><path d="M9 2v4h4"/>',
+  upload:'<path d="M8 10V3M5.2 5.8 8 3l2.8 2.8"/><path d="M3 10.5v2A1.5 1.5 0 0 0 4.5 14h7a1.5 1.5 0 0 0 1.5-1.5v-2"/>',
+  download:'<path d="M8 3v7M5.2 7.2 8 10l2.8-2.8"/><path d="M3 10.5v2A1.5 1.5 0 0 0 4.5 14h7a1.5 1.5 0 0 0 1.5-1.5v-2"/>',
+  check:'<path d="m3 8.5 3.2 3L13 4.5"/>',
+  checkCircle:'<circle cx="8" cy="8" r="6"/><path d="m5.5 8.2 1.8 1.8 3.4-3.6"/>',
+  x:'<path d="M4 4l8 8M12 4l-8 8"/>',
+  alert:'<path d="M8 3 1.8 13.2h12.4z"/><path d="M8 6.5v3.2M8 11.6v.1"/>',
+  info:'<circle cx="8" cy="8" r="6"/><path d="M8 7.4v3.4M8 5.3v.1"/>',
+  clock:'<circle cx="8" cy="8" r="6"/><path d="M8 4.8V8l2.2 1.4"/>',
+  search:'<circle cx="7" cy="7" r="4.3"/><path d="m10.2 10.2 3 3"/>',
+  chevD:'<path d="m4 6 4 4 4-4"/>',
+  chevR:'<path d="m6 4 4 4-4 4"/>',
+  arrowR:'<path d="M3 8h10M9.5 4.5 13 8l-3.5 3.5"/>',
+  arrowL:'<path d="M13 8H3M6.5 4.5 3 8l3.5 3.5"/>',
+  refresh:'<path d="M13.5 8a5.5 5.5 0 1 1-1.7-4"/><path d="M13.5 2.5V6h-3.5"/>',
+  plus:'<path d="M8 3.5v9M3.5 8h9"/>',
+  minus:'<path d="M3.5 8h9"/>',
+  filter:'<path d="M2.5 3.5h11l-4.2 4.8v4.6l-2.6 1.3V8.3z"/>',
+  inbox:'<path d="M2 9.5 4 3.5h8l2 6v3A1.5 1.5 0 0 1 12.5 14h-9A1.5 1.5 0 0 1 2 12.5z"/><path d="M2 9.5h3.5l.8 1.6h3.4l.8-1.6H14"/>',
+  layers:'<path d="M8 2 2 5l6 3 6-3z"/><path d="m2 8 6 3 6-3M2 11l6 3 6-3"/>',
+  shield:'<path d="M8 2 3 4v4c0 3 2.2 5.3 5 6 2.8-.7 5-3 5-6V4z"/><path d="m6 8 1.6 1.6L10.5 6.7"/>',
+  scale:'<path d="M8 2v12M4 4h8"/><path d="M3 9.2 4.2 5l1.2 4.2a2 2 0 0 1-2.4 0zM11.8 9.2 13 5l1.2 4.2a2 2 0 0 1-2.4 0z"/>',
+  more:'<circle cx="3.5" cy="8" r="1"/><circle cx="8" cy="8" r="1"/><circle cx="12.5" cy="8" r="1"/>',
+  bell:'<path d="M4 6.5a4 4 0 0 1 8 0c0 3 1.2 4 1.2 4H2.8s1.2-1 1.2-4z"/><path d="M6.2 12.5a2 2 0 0 0 3.6 0"/>',
+  image:'<rect x="2.5" y="3" width="11" height="10" rx="1.2"/><circle cx="6" cy="6.4" r="1.1"/><path d="m3.4 11.6 3.2-3 2.3 2.1 1.6-1.4 2.1 2.3"/>',
+  doc:'<path d="M4 2h5l3.5 3.5V14H4z"/><path d="M9 2v3.5h3.5M6 8h4M6 10.5h4"/>',
+  table:'<rect x="2" y="3" width="12" height="10" rx="1"/><path d="M2 6.5h12M2 9.8h12M6.5 6.5V13"/>',
+  log:'<path d="M4 2h8v12H4z"/><path d="M6 5h4M6 7.5h4M6 10h2.5"/>',
+  sparkle:'<path d="M8 2.2 9.4 6l3.8 1.4L9.4 8.8 8 12.6 6.6 8.8 2.8 7.4 6.6 6z"/>',
+  link:'<path d="M6.6 9.4a2.5 2.5 0 0 0 3.5 0l1.8-1.8a2.5 2.5 0 0 0-3.5-3.5l-.7.7"/><path d="M9.4 6.6a2.5 2.5 0 0 0-3.5 0L4.1 8.4a2.5 2.5 0 0 0 3.5 3.5l.7-.7"/>',
+  globe:'<circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c1.8 2 2.6 4 2.6 6S9.8 12 8 14C6.2 12 5.4 10 5.4 8S6.2 4 8 2z"/>',
+  settings:'<circle cx="8" cy="8" r="2"/><path d="M8 1.8v1.6M8 12.6v1.6M14.2 8h-1.6M3.4 8H1.8M12.4 3.6l-1.1 1.1M4.7 11.3l-1.1 1.1M12.4 12.4l-1.1-1.1M4.7 4.7 3.6 3.6"/>',
+  logout:'<path d="M9 2.5H3.5v11H9"/><path d="M7 8h6.5M11 5.5 13.5 8 11 10.5"/>',
+  qr:'<rect x="2.5" y="2.5" width="4.5" height="4.5"/><rect x="9" y="2.5" width="4.5" height="4.5"/><rect x="2.5" y="9" width="4.5" height="4.5"/><path d="M9 9h2v2H9zM12.5 12.5h1M11 13.5h2"/>'
+};
+const svg = (name, size = 16, cls = '') =>
+  `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${I[name] || ''}</svg>`;
+const brandMark = (s = 26) => `<svg class="brand-mark" width="${s}" height="${s}" viewBox="0 0 28 28" fill="none" aria-hidden="true">
+  <rect x=".9" y=".9" width="26.2" height="26.2" rx="3" stroke="#1B4A62" stroke-width="1.2"/>
+  <path d="M8 9.5h8.4M8 14h11.4M8 18.5h6.2" stroke="#1B4A62" stroke-width="1.2" stroke-linecap="round"/>
+  <path d="M20.4 17.2v5.2M17.8 19.8h5.2" stroke="#2A6B84" stroke-width="1.4" stroke-linecap="round"/>
+</svg>`;
+
+/* ---------------------------- domain ---------------------------- */
+const ROLE = {
+  supplier:{ key:'supplier', name:'供应商', person:'王海涛', org:'苏州淳鑫科技发展有限公司', glyph:'box',
+    blurb:'上传业务 Excel，按问题补充资料，从原任务重新提交。' },
+  business:{ key:'business', name:'业务员', person:'陈静', org:'厦门象盛镍业 · 物流部', glyph:'clipboard',
+    blurb:'启动 HS 预审，确认待审编码，退回补料或提交专家。' },
+  expert:{ key:'expert', name:'专家', person:'林国栋', org:'厦门象盛镍业 · 关务', glyph:'shield',
+    blurb:'核查申报要素、附图、退税与监管依据，人工通过或退回。' }
+};
+
+const VERDICT = {
+  match:    { label:'一致',      tone:'verify', note:'AI 独立推荐与供应商原码相同' },
+  mismatch: { label:'不一致',    tone:'doubt',  note:'AI 推荐与供应商原码不同，需人工判断' },
+  unsure:   { label:'无法确认',  tone:'doubt',  note:'编码相同但关键证据不足，不自动通过' },
+  missing:  { label:'供应商未填',tone:'idle',   note:'原表海关编码为空或无效' },
+  invalid:  { label:'编码异常',  tone:'stop',   note:'编码格式或有效性校验未通过' },
+  relation: { label:'关联异常',  tone:'stop',   note:'合同项号无法对应装箱明细' }
+};
+const CONF = { high:'高', mid:'中', low:'低' };
+
+/* ---------------------------- seed ---------------------------- */
+function seed(){
+  return {
+    role:null,
+    sessionRole:null,
+    ui:{tab:'hs'},
+    tasks:[
+      {
+        id:'T-2026-0118',
+        contract:'XMXS-20260520-SZCX-ZW',
+        supplier:'苏州淳鑫科技发展有限公司',
+        project:'象盛镍业 · 备件出口',
+        owner:'陈静',
+        createdAt:'2026-11-12 09:24',
+        updatedAt:'2026-11-13 09:12',
+        versions:[{v:1,file:'装箱明细+申报要素_V1.xlsx',size:'412 KB',at:'2026-11-12 09:24',by:'王海涛'}],
+        prechecked:true,
+        precheckAt:'2026-11-12 10:05',
+        submitted:false,
+        submittedAt:null,
+        lines:[
+          {
+            id:'G001', no:'3', name:'硫化水胎', alias:'硫化水胎', spec:'12.00R20', model:'—',
+            material:'成品橡胶', usage:'轮胎总成内胎，充气后随外胎装配', qty:'50 PCS / 个',
+            supplierCode:'4016950090', tenantCode:'1070501040000000000',
+            position:'申报要素 · 第 7 行 · L7', boxNo:'M1-M4', photo:'IMG_6317',
+            aiCode:'4016950090', aiConf:'high',
+            verdict:'match', verdictConf:'high',
+            aiReason:'充气用硫化橡胶制品，属品目 40.16 其他硫化橡胶制品；按用途与结构归入 4016.95 其他充气制品，本国子目 40169500，附加码 90。',
+            aiGap:'已具备材质、结构、用途三项关键事实；如后续改为随外胎成套进口需重新判断。',
+            evidence:['E1','E2'],
+            elements:[
+              {name:'品名', orig:'硫化水胎', ai:'硫化水胎', img:'—', state:'ok'},
+              {name:'材质', orig:'橡胶', ai:'硫化橡胶（成品）', img:'可见', state:'ok'},
+              {name:'用途', orig:'轮胎内胎', ai:'机动车辆轮胎用充气内胎', img:'—', state:'ok'},
+              {name:'规格型号', orig:'12.00R20', ai:'12.00R20', img:'铭牌可见', state:'ok'},
+              {name:'品牌', orig:'（空）', ai:'无品牌 / 中性包装', img:'未见', state:'q'}
+            ],
+            special:'供应商原备注：不是已经硫化了，还要充气硫化？',
+            expert:{done:false, result:null, checks:[], confidence:null, note:'', issues:[]}
+          },
+          {
+            id:'G002', no:'4', name:'补胎打毛杆总成', alias:'补胎打毛杆总成', spec:'打毛器配件，长度：3 米', model:'CX-3M',
+            material:'钢制杆体 + 橡胶轮', usage:'补胎前打磨轮胎内壁，手持电动工具附件', qty:'50 PCS / 条',
+            supplierCode:'8467991000', tenantCode:'1070503000000000000',
+            position:'申报要素 · 第 8 行 · L8', boxNo:'M7', photo:'IMG_CB82',
+            aiCode:'8467991000', aiConf:'mid',
+            verdict:'unsure', verdictConf:'mid',
+            aiReason:'作为手持电动工具的可互换附件，8456～8466 项下零件或附件是候选方向；但本品是否"专用"于某一品目、是否自带动力，直接决定归入 8467 零件还是 8205 手工具。现有资料未给出驱动方式与专用性证据。',
+            aiGap:'需补充：① 是否自带电机（电动/手动）；② 是否仅适用于某一型号打毛机；③ 杆体与磨头是否成套报验。',
+            evidence:['E3','E4'],
+            elements:[
+              {name:'品名', orig:'补胎打毛杆总成', ai:'轮胎打磨器具（附件）', img:'可见', state:'ok'},
+              {name:'材质', orig:'钢、橡胶', ai:'钢制杆体 + 橡胶打磨轮', img:'部分可见', state:'q'},
+              {name:'用途', orig:'轮胎打磨', ai:'补胎前打磨轮胎内壁', img:'—', state:'ok'},
+              {name:'驱动方式', orig:'（空）', ai:'待确认：电动 / 手动', img:'未见', state:'no'},
+              {name:'专用性', orig:'（空）', ai:'待确认：是否专用于某一品目', img:'未见', state:'no'}
+            ],
+            special:'供应商原备注：是否专用？（是轮胎打磨专用，但适用于不同类型打毛机）',
+            expert:{done:false, result:null, checks:[], confidence:null, note:'', issues:[]}
+          },
+          {
+            id:'G003', no:'6', name:'大接头', alias:'大接头（优质）', spec:'打毛杆配件', model:'—',
+            material:'铝合金', usage:'连接打毛杆与软轴', qty:'50 SETS / 套',
+            supplierCode:'8467991000', tenantCode:'1080414040000000000',
+            position:'申报要素 · 第 10 行 · L10', boxNo:'M7', photo:'IMG_24A1',
+            aiCode:'8467991000', aiConf:'mid',
+            verdict:'match', verdictConf:'mid',
+            aiReason:'与 G002 同属打毛杆组件，若整机归入 8467，则本品可作为零件随附；但供应商未说明是否单独报验，独立申报时需按零件归类规则复核。',
+            aiGap:'需补充：是否与 G002 成套、是否单独销售。',
+            evidence:['E4'],
+            elements:[
+              {name:'品名', orig:'大接头', ai:'打毛杆连接接头', img:'可见', state:'ok'},
+              {name:'材质', orig:'铝合金', ai:'铝合金', img:'—', state:'ok'},
+              {name:'用途', orig:'连接打毛杆', ai:'连接杆体与软轴', img:'—', state:'ok'},
+              {name:'是否成套', orig:'（空）', ai:'待确认', img:'未见', state:'q'}
+            ],
+            special:'',
+            expert:{done:false, result:null, checks:[], confidence:null, note:'', issues:[]}
+          },
+          {
+            id:'G004', no:'7', name:'手柄', alias:'手柄（小总成）', spec:'打毛杆配件', model:'—',
+            material:'工程塑料', usage:'握持', qty:'50 SETS / 套',
+            supplierCode:'8467991000', tenantCode:'1080414040000000000',
+            position:'申报要素 · 第 11 行 · L11', boxNo:'M7', photo:'IMG_018F',
+            aiCode:'8467991000', aiConf:'low',
+            verdict:'unsure', verdictConf:'low',
+            aiReason:'手柄为通用塑料件，既可能是 8467 工具零件，也可能按材料归入 39 章。关键取决于是否专用于打毛机以及是否与整机同报。',
+            aiGap:'需补充：专用性说明、是否随整机报验、材质牌号。',
+            evidence:['E4'],
+            elements:[
+              {name:'品名', orig:'手柄', ai:'工具手柄（塑料）', img:'可见', state:'ok'},
+              {name:'材质', orig:'工程塑料', ai:'工程塑料（牌号待补）', img:'—', state:'q'},
+              {name:'专用性', orig:'（空）', ai:'待确认', img:'未见', state:'no'}
+            ],
+            special:'',
+            expert:{done:false, result:null, checks:[], confidence:null, note:'', issues:[]}
+          },
+          {
+            id:'G005', no:'36', name:'头戴式强光充电电筒', alias:'头灯', spec:'LED，可充电', model:'HL-860',
+            material:'ABS 外壳 + 锂电池', usage:'头戴照明', qty:'100 PCS / 个',
+            supplierCode:'8513101000', tenantCode:'1090424070000000000',
+            position:'申报要素 · 第 13 行 · L13', boxNo:'M12', photo:'IMG_5C21',
+            aiCode:'8513109000', aiConf:'mid',
+            verdict:'mismatch', verdictConf:'mid',
+            aiReason:'本品为头戴式、可充电 LED 灯具。8513 项下按自供能源的手提灯具归类；"头戴式"是否仍属 8513.10 便携式灯具、还是按 8513.90 其他灯具，取决于是否手持使用。供应商原码 8513101000 与本建议仅在最后两位附加码上不同。',
+            aiGap:'需补充：是否可脱离头带手持使用；电池是否可拆卸。',
+            evidence:['E5'],
+            elements:[
+              {name:'品名', orig:'头戴式强光充电电筒', ai:'头戴式 LED 灯具', img:'可见', state:'ok'},
+              {name:'材质', orig:'ABS', ai:'ABS 外壳', img:'—', state:'ok'},
+              {name:'光源', orig:'LED', ai:'LED', img:'铭牌可见', state:'ok'},
+              {name:'供电', orig:'充电', ai:'内置锂电池，可充电', img:'—', state:'ok'},
+              {name:'使用方式', orig:'头戴', ai:'头戴，是否可手持待确认', img:'可见', state:'q'}
+            ],
+            special:'供应商原备注：这是头灯吧？（是头灯，修改为 85131090…）',
+            expert:{done:false, result:null, checks:[], confidence:null, note:'', issues:[]}
+          }
+        ],
+        log:[
+          {at:'2026-11-12 09:24', by:'王海涛', role:'供应商', act:'上传 V1', desc:'装箱明细 + 申报要素两页签，5 条申报记录；附图 5 张已解析。'},
+          {at:'2026-11-12 10:05', by:'陈静', role:'业务员', act:'启动预审', desc:'对 V1 全部 5 条商品执行 HS 预审。'},
+          {at:'2026-11-13 09:12', by:'陈静', role:'业务员', act:'处理不一致', desc:'G005 编码分歧待选：原码 8513101000 或建议 8513109000。G002、G004 待确认或补料。'}
+        ]
+      },
+      {
+        id:'T-2026-0117',
+        contract:'XMXS-20260525-SZCX-TZM',
+        supplier:'苏州淳鑫科技发展有限公司',
+        project:'象盛镍业 · 备件出口',
+        owner:'陈静',
+        createdAt:'2026-11-11 14:02',
+        updatedAt:'2026-11-12 17:20',
+        versions:[
+          {v:1,file:'喷涂机备件_V1.xlsx',size:'286 KB',at:'2026-11-11 14:02',by:'王海涛'},
+          {v:2,file:'喷涂机备件_V2.xlsx',size:'291 KB',at:'2026-11-12 17:20',by:'王海涛'}
+        ],
+        prechecked:true,
+        precheckAt:'2026-11-12 17:41',
+        submitted:true,
+        submittedAt:'2026-11-12 17:52',
+        lines:[
+          {
+            id:'G001', no:'3', name:'喷涂机', alias:'喷涂机', spec:'PT-9A，气动', model:'PT-9A', decision:{code:'8424899990', at:'2026-11-12 17:50', by:'陈静', note:'采纳 AI 建议'},
+            material:'不锈钢机身', usage:'喷涂作业', qty:'30 SETS / 台',
+            supplierCode:'8424899990', tenantCode:'1090133020000000000',
+            position:'申报要素 · 第 8 行 · L8', boxNo:'M2', photo:'IMG_77C1',
+            aiCode:'8424899990', aiConf:'high',
+            verdict:'match', verdictConf:'high',
+            aiReason:'喷涂、喷砂等喷射机械属 8424.89 其他喷射装置；本品为气动喷涂机，符合 8424.89 项下描述。',
+            aiGap:'已具备驱动方式与用途。',
+            evidence:['E6'],
+            elements:[{name:'品名', orig:'喷涂机', ai:'气动喷涂机', img:'可见', state:'ok'}],
+            special:'', expert:{done:false, result:null, confidence:'mid', note:'', issues:[], at:'2026-11-12 17:53', checks:[
+              {name:'编码与要素对应', state:'ok', note:'8424.89 要素模板必填项齐全；气动驱动方式已由规格补足'},
+              {name:'图片可见事实', state:'ok', note:'附图显示不锈钢机身与喷枪组件，与申报描述一致'},
+              {name:'退税率适用', state:'q', note:'未取得 2026-11-12 当日退税率文库条目，按原表 13% 保留待核'},
+              {name:'归类法规引用', state:'ok', note:'税则 8424.89 子目条文已定位，无需另引归类决定'},
+              {name:'两用物项与监管', state:'ok', note:'未命中清单；喷涂机不属两用物项，保留参数备查'}
+            ]}
+          },
+          {
+            id:'G002', no:'9', name:'喷嘴', alias:'喷嘴', spec:'Φ1.3', model:'—', decision:{code:'8424909000', at:'2026-11-12 17:50', by:'陈静', note:'采纳 AI 建议'},
+            material:'不锈钢', usage:'喷涂机配件', qty:'200 PCS / 个',
+            supplierCode:'8424909000', tenantCode:'1090133020000000000',
+            position:'申报要素 · 第 9 行 · L9', boxNo:'M2', photo:'IMG_77C2',
+            aiCode:'8424909000', aiConf:'high',
+            verdict:'match', verdictConf:'high',
+            aiReason:'8424 机器的零件归 8424.90；喷嘴为喷涂机专用零件，供应商原码与本建议一致。',
+            aiGap:'可补充专用性说明以支撑。',
+            evidence:['E6'],
+            elements:[{name:'品名', orig:'喷嘴', ai:'喷涂机喷嘴', img:'可见', state:'ok'}],
+            special:'', expert:{done:false, result:null, confidence:'high', note:'', issues:[], at:'2026-11-12 17:53', checks:[
+              {name:'编码与要素对应', state:'ok', note:'8424.90 零件要素齐全；专用性由整机同批申报佐证'},
+              {name:'图片可见事实', state:'ok', note:'喷嘴孔径与规格一致'},
+              {name:'退税率适用', state:'q', note:'退税率文库条目待核'},
+              {name:'归类法规引用', state:'ok', note:'8424.90 品目条文已定位'},
+              {name:'两用物项与监管', state:'ok', note:'不属管制物项'}
+            ]}
+          },
+          {
+            id:'G003', no:'12', name:'电磁阀', alias:'电磁阀', spec:'DC24V', model:'—', decision:{code:'8481804090', at:'2026-11-12 17:51', by:'陈静', note:'采纳 AI 建议，压力参数待补'},
+            material:'黄铜阀体', usage:'控制气路通断', qty:'40 PCS / 个',
+            supplierCode:'8481804090', tenantCode:'1080301020000000000',
+            position:'申报要素 · 第 10 行 · L10', boxNo:'M3', photo:'IMG_77C3',
+            aiCode:'8481804090', aiConf:'mid',
+            verdict:'match', verdictConf:'mid',
+            aiReason:'电磁阀属 8481.80 其他阀门；但需确认工作电压与流量参数是否落在 8481.80 具体子目描述内。',
+            aiGap:'需补充：额定压力、接口尺寸。',
+            evidence:['E7'],
+            elements:[
+              {name:'品名', orig:'电磁阀', ai:'电磁阀', img:'可见', state:'ok'},
+              {name:'电压', orig:'DC24V', ai:'DC24V', img:'铭牌可见', state:'ok'},
+              {name:'压力', orig:'（空）', ai:'待补', img:'未见', state:'q'}
+            ],
+            special:'', expert:{done:false, result:null, confidence:'mid', note:'', issues:[], at:'2026-11-12 17:54', checks:[
+              {name:'编码与要素对应', state:'q', note:'8481.80 要素模板要求额定压力，原表未填'},
+              {name:'图片可见事实', state:'ok', note:'阀体铭牌显示 DC24V，与申报一致'},
+              {name:'退税率适用', state:'q', note:'退税率文库条目待核'},
+              {name:'归类法规引用', state:'ok', note:'8481.80 子目条文已定位'},
+              {name:'两用物项与监管', state:'ok', note:'不属管制物项'}
+            ]}
+          },
+          {
+            id:'G004', no:'15', name:'压力传感器', alias:'压力传感器', spec:'0-10bar', model:'—', decision:{code:null, at:'2026-11-12 17:51', by:'陈静', note:'标记待补料'}, needSupplement:true,
+            material:'不锈钢', usage:'检测喷涂压力', qty:'20 PCS / 个',
+            supplierCode:'', tenantCode:'1090502010000000000',
+            position:'申报要素 · 第 11 行 · L11', boxNo:'M3', photo:'—',
+            aiCode:'9026201000', aiConf:'low',
+            verdict:'missing', verdictConf:'low',
+            aiReason:'原表海关编码为空，系统无法形成比较；按商品事实初判为压力测量仪表，属 9026.20。',
+            aiGap:'请供应商补填海关编码，并补充量程与输出信号形式。',
+            evidence:['E8'],
+            elements:[
+              {name:'品名', orig:'压力传感器', ai:'压力变送器', img:'无附图', state:'q'},
+              {name:'量程', orig:'0-10bar', ai:'0-10bar', img:'—', state:'ok'},
+              {name:'输出信号', orig:'（空）', ai:'待补', img:'—', state:'no'}
+            ],
+            special:'', expert:{done:false, result:null, confidence:'low', note:'', issues:[], at:'2026-11-12 17:54', checks:[
+              {name:'编码与要素对应', state:'no', note:'原表海关编码为空，无法比较；AI 初判 9026.20 但缺输出信号形式'},
+              {name:'图片可见事实', state:'q', note:'该行无附图，不能据图核对量程与接口'},
+              {name:'退税率适用', state:'q', note:'编码未定，退税率无从适用'},
+              {name:'归类法规引用', state:'q', note:'9026.20 条文已定位，但量程与信号形式缺口影响子目判断'},
+              {name:'两用物项与监管', state:'q', note:'压力仪表可能涉两用，需按量程与技术参数复核'}
+            ]}
+          }
+        ],
+        log:[
+          {at:'2026-11-11 14:02', by:'王海涛', role:'供应商', act:'上传 V1', desc:'4 条申报记录；G004 海关编码为空。'},
+          {at:'2026-11-11 15:10', by:'陈静', role:'业务员', act:'启动预审', desc:'V1 全部 4 条。'},
+          {at:'2026-11-11 17:30', by:'陈静', role:'业务员', act:'退回供应商', desc:'G004 缺海关编码与输出信号；G003 缺压力参数。导出补料清单。'},
+          {at:'2026-11-12 17:20', by:'王海涛', role:'供应商', act:'上传 V2', desc:'补充 G004 编码与输出信号、G003 压力参数；整表重新提交。'},
+          {at:'2026-11-12 17:41', by:'陈静', role:'业务员', act:'启动预审', desc:'V2 整表重审，未继承 V1 结论。'},
+          {at:'2026-11-12 17:52', by:'陈静', role:'业务员', act:'提交专家', desc:'提交 V2 快照；4 条商品，G004 标注待补料。'},
+          {at:'2026-11-12 17:54', by:'系统', role:'系统', act:'专家核查已完成', desc:'要素、附图、退税、监管分项结果已生成，待专家人工处置。'}
+        ]
+      },
+      {
+        id:'T-2026-0116',
+        contract:'XMXS-20260615-SZCX-XBY',
+        supplier:'苏州淳鑫科技发展有限公司',
+        project:'象盛镍业 · 备件出口',
+        owner:'陈静',
+        createdAt:'2026-11-13 08:40',
+        updatedAt:'2026-11-13 08:40',
+        versions:[{v:1,file:'过滤材料备件_V1.xlsx',size:'198 KB',at:'2026-11-13 08:40',by:'王海涛'}],
+        prechecked:false,
+        precheckAt:null,
+        submitted:false,
+        submittedAt:null,
+        lines:[
+          {
+            id:'G001', no:'1', name:'空气过滤棉', alias:'Air Filter Cotton', spec:'1m×2m×20mm', model:'—',
+            material:'合成纤维', usage:'空气过滤', qty:'10 PCS / 片',
+            supplierCode:'5602100000', tenantCode:'1040111010000000000',
+            position:'申报要素 · 第 8 行 · L8', boxNo:'M1', photo:'IMG_9910',
+            aiCode:null, aiConf:null, verdict:null, verdictConf:null,
+            aiReason:'', aiGap:'', evidence:[],
+            elements:[{name:'品名', orig:'空气过滤棉', ai:'', img:'可见', state:'unk'}],
+            special:'', expert:{done:false, result:null, checks:[], confidence:null, note:'', issues:[]}
+          },
+          {
+            id:'G002', no:'2', name:'滤芯', alias:'Filter element', spec:'Φ60×250', model:'—',
+            material:'滤纸 + 金属网', usage:'油过滤', qty:'5 PCS / 个',
+            supplierCode:'8421999090', tenantCode:'1090130010000000000',
+            position:'申报要素 · 第 9 行 · L9', boxNo:'M2', photo:'IMG_9911',
+            aiCode:null, aiConf:null, verdict:null, verdictConf:null,
+            aiReason:'', aiGap:'', evidence:[],
+            elements:[{name:'品名', orig:'滤芯', ai:'', img:'可见', state:'unk'}],
+            special:'', expert:{done:false, result:null, checks:[], confidence:null, note:'', issues:[]}
+          },
+          {
+            id:'G003', no:'3', name:'滤网', alias:'Filter mesh', spec:'40 目', model:'—',
+            material:'不锈钢丝网', usage:'过滤', qty:'30 PCS / 张',
+            supplierCode:'7314140000', tenantCode:'1080201010000000000',
+            position:'申报要素 · 第 10 行 · L10', boxNo:'M3', photo:'IMG_9912',
+            aiCode:null, aiConf:null, verdict:null, verdictConf:null,
+            aiReason:'', aiGap:'', evidence:[],
+            elements:[{name:'品名', orig:'滤网', ai:'', img:'可见', state:'unk'}],
+            special:'', expert:{done:false, result:null, checks:[], confidence:null, note:'', issues:[]}
+          }
+        ],
+        log:[
+          {at:'2026-11-13 08:40', by:'王海涛', role:'供应商', act:'上传 V1', desc:'3 条申报记录；尚未启动预审。'}
+        ]
+      },
+      {
+        id:'T-2026-0115',
+        contract:'XMXS-20260618-SZCX-ZW',
+        supplier:'苏州淳鑫科技发展有限公司',
+        project:'象盛镍业 · 备件出口',
+        owner:'陈静',
+        createdAt:'2026-11-08 10:12',
+        updatedAt:'2026-11-11 11:02',
+        versions:[{v:1,file:'电气备件_V1.xlsx',size:'233 KB',at:'2026-11-08 10:12',by:'王海涛'}],
+        prechecked:true,
+        precheckAt:'2026-11-08 11:20',
+        submitted:true,
+        submittedAt:'2026-11-09 09:30',
+        approvedAt:'2026-11-11 11:02',
+        lines:[
+          {
+            id:'G001', no:'29', name:'接线端子', alias:'terminal block', spec:'UK-2.5B', model:'UK-2.5B',
+            material:'尼龙 + 铜', usage:'导线连接', qty:'100 PCS / 个',
+            supplierCode:'8536909000', tenantCode:'1090407030000000000',
+            position:'申报要素 · 第 8 行 · L8', boxNo:'M1', photo:'IMG_2201',
+            aiCode:'8536909000', aiConf:'high', verdict:'match', verdictConf:'high',
+            aiReason:'8536.90 其他电路连接装置，接线端子符合品目描述。',
+            aiGap:'已具备材质与用途。',
+            evidence:['E9'],
+            elements:[{name:'品名', orig:'接线端子', ai:'接线端子', img:'可见', state:'ok'}],
+            special:'',
+            expert:{done:true, result:'pass', checks:[], confidence:'high', note:'要素与附图一致，编码确认。', issues:[]}
+          },
+          {
+            id:'G002', no:'31', name:'灭火装置', alias:'灭火装置', spec:'悬挂式 4kg', model:'XZ-4',
+            material:'钢瓶 + 干粉', usage:'机舱自动灭火', qty:'20 PCS / 套',
+            supplierCode:'8424100090', tenantCode:'1090253030000000000',
+            position:'申报要素 · 第 9 行 · L9', boxNo:'M2', photo:'IMG_2202',
+            aiCode:'8424100090', aiConf:'high', verdict:'match', verdictConf:'high',
+            aiReason:'8424.10 灭火器，不论是否装药；悬挂式干粉灭火装置符合。',
+            aiGap:'需确认是否含驱动气体。',
+            evidence:['E10'],
+            elements:[{name:'品名', orig:'灭火装置', ai:'悬挂式干粉灭火装置', img:'可见', state:'ok'}],
+            special:'',
+            expert:{done:true, result:'pass', checks:[], confidence:'high', note:'非两用物项，附压力容器证明。', issues:[]}
+          }
+        ],
+        log:[
+          {at:'2026-11-08 10:12', by:'王海涛', role:'供应商', act:'上传 V1', desc:'2 条申报记录。'},
+          {at:'2026-11-08 11:20', by:'陈静', role:'业务员', act:'启动预审', desc:'全部 2 条。'},
+          {at:'2026-11-09 09:30', by:'陈静', role:'业务员', act:'提交专家', desc:'提交 V1 快照。'},
+          {at:'2026-11-11 11:02', by:'林国栋', role:'专家', act:'审核通过', desc:'2 条商品全部通过，形成专家确认版本。'}
+        ]
+      }
+    ],
+    evidence:{
+      E1:{type:'税则', status:'已核', title:'中华人民共和国进出口税则（2026）第四十章 子目注释', locator:'品目 40.16；子目 4016.95', eff:'2026-01-01', queried:'2026-11-12',
+        quote:'硫化橡胶的其他制品：4016.95 — 其他充气制品。'},
+      E2:{type:'归类决定', status:'已核', title:'税则归类决定 Z2006-0452（硫化橡胶充气制品）', locator:'决定正文第 2 段', eff:'2006-08-01', queried:'2026-11-12', url:'https://www.customs.gov.cn/',
+        quote:'用于机动车轮胎的硫化橡胶充气水胎，按其他硫化橡胶制品归类。'},
+      E3:{type:'税则', status:'已核', title:'税则第八十四章 品目 84.67 注释', locator:'84.67 品目条文', eff:'2026-01-01', queried:'2026-11-12',
+        quote:'手提式风动或液压工具及装有自装电机的工具；其零件归入 8467.9。'},
+      E4:{type:'归类决定', status:'待核', title:'打毛器具归类意见（内部案例库，未取得官方文本）', locator:'案例编号待补', eff:'—', queried:'2026-11-12',
+        quote:'轮胎打磨器具按是否自带动力分别归入 8205 或 8467；本条为历史申报线索，未取得当期官方文本，不作为高置信依据。'},
+      E5:{type:'税则', status:'已核', title:'税则第八十五章 品目 85.13 注释', locator:'8513.10 / 8513.90 子目', eff:'2026-01-01', queried:'2026-11-12',
+        quote:'自供能源（例如干电池、蓄电池、磁电机）的手提电灯；其他灯具归 8513.90。'},
+      E6:{type:'税则', status:'已核', title:'税则第八十四章 品目 84.24 注释', locator:'8424.89 子目', eff:'2026-01-01', queried:'2026-11-11',
+        quote:'喷射、散布或喷雾液体的机械器具；其他器具归 8424.89。'},
+      E7:{type:'税则', status:'已核', title:'税则第八十四章 品目 84.81 注释', locator:'8481.80 子目', eff:'2026-01-01', queried:'2026-11-11',
+        quote:'其他阀门及类似装置。'},
+      E8:{type:'税则', status:'部分', title:'税则第九十章 品目 90.26 注释', locator:'9026.20 子目', eff:'2026-01-01', queried:'2026-11-12',
+        quote:'测量或检验液体或气体的流量、液位、压力或其他变化量的仪器；压力测量归 9026.20。'},
+      E9:{type:'税则', status:'已核', title:'税则第八十五章 品目 85.36 注释', locator:'8536.90 子目', eff:'2026-01-01', queried:'2026-11-08',
+        quote:'其他电路开关、保护或连接装置。'},
+      E10:{type:'税则', status:'已核', title:'税则第八十四章 品目 84.24 注释', locator:'8424.10 子目', eff:'2026-01-01', queried:'2026-11-08',
+        quote:'灭火器，不论是否装药。'}
+    }
+  };
+}
+
+/* ---------------------------- state ---------------------------- */
+let S = seed();
+
+/* ---------------------------- helpers ---------------------------- */
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const $ = sel => document.querySelector(sel);
+const $$ = sel => Array.from(document.querySelectorAll(sel));
+const now = () => {
+  const d = new Date(), p = n => String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+};
+const task = id => S.tasks.find(t => t.id === id);
+const line = (t, id) => t.lines.find(l => l.id === id);
+const curVersion = t => t.versions[t.versions.length - 1].v;
+const isApproved = t => !!t.approvedAt;
+const allApproved = t => t.lines.every(l => l.expert && l.expert.result === 'pass');
+
+function counts(t){
+  const total = t.lines.length;
+  const pass = t.lines.filter(l => l.expert && l.expert.result === 'pass').length;
+  const returned = t.lines.filter(l => l.expert && l.expert.result === 'return').length;
+  const unsure = t.lines.filter(l => l.verdict === 'unsure' || l.verdict === 'mismatch' || l.verdict === 'missing').length;
+  return { total, pass, returned, unsure, left: total - pass - returned };
+}
+function taskStage(t){
+  if (isApproved(t)) return { key:'done', label:'专家已确认', tone:'verify' };
+  if (t.submitted) return { key:'expert', label:'待专家审核', tone:'accent' };
+  if (t.prechecked) return { key:'business', label: counts(t).unsure ? '待业务员处理' : '可提交专家', tone: counts(t).unsure ? 'doubt' : 'accent' };
+  return { key:'precheck', label:'待预审', tone:'idle' };
+}
+function lineState(l, role){
+  const expert = role === 'expert';
+  if (l.expert && l.expert.result === 'pass') return { key:'pass', label:'已通过', tone:'verify' };
+  if (l.expert && l.expert.result === 'return') return { key:'return', label:'已退回', tone:'stop' };
+  if (l.decision && !l.decision.code) return { key:'sup', label:'待补料', tone:'doubt' };
+  if (l.decision && l.decision.code) return { key:'ready', label: expert ? '待审核' : '已确认', tone: expert ? 'accent' : 'verify' };
+  if (!l.verdict) return { key:'none', label:'待预审', tone:'idle' };
+  if (l.verdict === 'missing') return { key:'missing', label:'待供应商补料', tone:'doubt' };
+  if (l.verdict === 'mismatch' || l.verdict === 'unsure') return { key:'need', label: expert ? '待人工判断' : '需业务员确认', tone:'doubt' };
+  if (l.verdict === 'invalid' || l.verdict === 'relation') return { key:'bad', label:'异常', tone:'stop' };
+  return { key:'ok', label: expert ? '待审核' : '可提交', tone: expert ? 'accent' : 'verify' };
+}
+const pill = (tone, text, dot = true) => `<span class="pill ${tone}">${dot?'<i></i>':''}${esc(text)}</span>`;
+const confHtml = (c, label='预审') => {
+  if (!c) return '<span class="conf"><b>—</b></span>';
+  return `<span class="conf ${c}"><span class="bars"><span></span><span></span><span></span></span><b>${label}${CONF[c]}</b></span>`;
+};
+
+/* ---------------------------- routing ---------------------------- */
+function parseRoute(){
+  const raw = location.hash.replace(/^#\/?/, '') || '';
+  const [seg, a, b, c] = raw.split('/');
+  return { seg: seg || '', a: a || '', b: b || '', c: c || '' };
+}
+function go(path){ location.hash = '#/' + path; }
+window.addEventListener('hashchange', () => { closeModal(); render(); window.scrollTo({top:0}); });
+
+function roleOf(){
+  const r = parseRoute();
+  if (r.seg === 'supplier' || r.seg === 'business' || r.seg === 'expert') return r.seg;
+  return S.role;
+}
+
+/* ---------------------------- entry ---------------------------- */
+function viewGate(){
+  return `<div class="gate">
+    <div class="gate-top">
+      <div class="brand">${brandMark()}<span class="brand-name">关务审核工作台</span><span class="brand-sub">采购合同 → 专家确认</span></div>
+      <span class="demo-chip">交互原型 · 演示数据</span>
+    </div>
+    <main class="gate-main">
+      <section class="gate-intro">
+        <h1>供应商上传，业务员预审，专家核查。<br>三段各看各的。</h1>
+        <p class="lede">一个审核任务 = 一份供应商 Excel。文件进来先解析留存，业务员点击预审才跑归类；AI 建议与原值并列保留，专家核查要素、附图、退税与监管依据后人工通过或退回。任一环节的输入版本都可追溯。</p>
+        <figure class="gate-fig">
+          <svg viewBox="0 0 704 210" role="img" aria-label="四段流转与预审结果三列：供应商原码、AI推荐HScode、预审结论">
+            <rect width="704" height="210" fill="#FCFCFD"/>
+
+            <!-- 四段 -->
+            <g>
+              <path d="M12 26h680" stroke="#E1E3E7" stroke-width="1"/>
+              <g fill="#FFFFFF" stroke="#B4BCC6">
+                <circle cx="12" cy="26" r="4"/><circle cx="184" cy="26" r="4"/><circle cx="356" cy="26" r="4"/><circle cx="686" cy="26" r="4"/>
+              </g>
+              <g fill="#5A6472"><circle cx="12" cy="26" r="2"/><circle cx="184" cy="26" r="2"/><circle cx="356" cy="26" r="2"/></g>
+              <circle cx="686" cy="26" r="2" fill="#0D6E5C"/>
+            </g>
+            <g font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="10">
+              <text x="12" y="12" fill="#9AA2AE">01</text><text x="32" y="12" fill="#3D4551">供应商上传</text>
+              <text x="184" y="12" fill="#9AA2AE">02</text><text x="204" y="12" fill="#3D4551">业务员预审</text>
+              <text x="356" y="12" fill="#9AA2AE">03</text><text x="376" y="12" fill="#3D4551">AI 归类与比较</text>
+              <text x="686" y="12" fill="#9AA2AE" text-anchor="end">04</text>
+              <text x="666" y="12" fill="#3D4551" text-anchor="end">专家确认</text>
+            </g>
+            <g font-size="10" fill="#6C7583">
+              <text x="12" y="46">两页签 + 原值 + 附图</text>
+              <text x="184" y="46">点预审才跑归类</text>
+              <text x="356" y="46">独立推荐，再比原码</text>
+              <text x="686" y="46" text-anchor="end">逐项核查后人工结论</text>
+            </g>
+
+            <!-- 结果列示意 -->
+            <g>
+              <rect x="12" y="62" width="680" height="132" fill="#FFFFFF" stroke="#DCE2E5"/>
+              <rect x="12" y="62" width="680" height="24" fill="#F2F3F5"/>
+              <path d="M12 86h680" stroke="#DCE2E5"/>
+
+              <g font-size="9.5" fill="#6C7583">
+                <text x="28" y="78">申报行</text>
+                <text x="152" y="78">商品</text>
+                <text x="318" y="78">海关编码（供应商原值）</text>
+                <text x="472" y="78" fill="#1B4A62">AI推荐HScode</text>
+                <text x="588" y="78">预审结论</text>
+              </g>
+              <g stroke="#EDEEF1"><path d="M142 62v132M308 62v132M462 62v132M578 62v132"/></g>
+
+              <!-- 行 1 -->
+              <g font-size="10.5">
+                <text x="28" y="108" font-family="ui-monospace,monospace" fill="#9AA2AE">3</text>
+                <text x="152" y="108" fill="#14181F">硫化水胎</text>
+                <text x="318" y="108" font-family="ui-monospace,monospace" fill="#3D4551">4016950090</text>
+                <text x="472" y="108" font-family="ui-monospace,monospace" fill="#14181F">4016950090</text>
+                <text x="588" y="108" fill="#0D6E5C">一致 · 高</text>
+              </g>
+              <path d="M12 120h680" stroke="#F2F3F5"/>
+              <!-- 行 2 -->
+              <g font-size="10.5">
+                <text x="28" y="142" font-family="ui-monospace,monospace" fill="#9AA2AE">36</text>
+                <text x="152" y="142" fill="#14181F">头戴式电筒</text>
+                <text x="318" y="142" font-family="ui-monospace,monospace" fill="#3D4551">8513101000</text>
+                <text x="472" y="142" font-family="ui-monospace,monospace" fill="#14181F">8513109000</text>
+                <text x="588" y="142" fill="#8D5A07">不一致 · 中</text>
+              </g>
+              <path d="M12 154h680" stroke="#F2F3F5"/>
+              <!-- 行 3 -->
+              <g font-size="10.5">
+                <text x="28" y="176" font-family="ui-monospace,monospace" fill="#9AA2AE">15</text>
+                <text x="152" y="176" fill="#14181F">压力传感器</text>
+                <text x="318" y="176" fill="#9AA2AE">未填写</text>
+                <text x="472" y="176" font-family="ui-monospace,monospace" fill="#14181F">9026201000</text>
+                <text x="588" y="176" fill="#A63024">供应商未填</text>
+              </g>
+            </g>
+          </svg>
+          <figcaption><span>2026-11-12 流程口径 · 两列插在原编码右侧</span><span>原值不覆盖 · 版本不复用</span></figcaption>
+        </figure>
+        <dl class="gate-rules">
+          <div><dt>上传 ≠ 归类</dt><dd>文件进来先解析、关联、留版本；业务员点预审才跑。</dd></div>
+          <div><dt>同码 ≠ 通过</dt><dd>编码一致但关键证据不足，结论仍为无法确认。</dd></div>
+          <div><dt>重传 ≠ 继承</dt><dd>任何补料版本整表重新预审，旧审批不生效。</dd></div>
+        </dl>
+      </section>
+      <section class="gate-panel" aria-label="选择角色">
+        <div class="gate-panel-hd"><h2>选择进入角色</h2><span>演示账号，可随时切换</span></div>
+        <div class="gate-list">
+          ${['supplier','business','expert'].map((k, idx) => {
+            const r = ROLE[k];
+            return `<button class="role-row" data-act="pick-role" data-role="${k}">
+              <span class="role-idx mono">0${idx + 1}</span>
+              <span class="role-glyph">${svg(r.glyph === 'clipboard' ? 'table' : r.glyph, 18)}</span>
+              <span>
+                <h3>${r.name}<em>${k === 'supplier' ? '供应商账号' : k === 'business' ? '业务员账号' : '关务专家'}</em></h3>
+                <p>${r.org}<br>${r.blurb}</p>
+              </span>
+              <span class="role-enter">进入 ${svg('arrowR', 13)}</span>
+            </button>`;
+          }).join('')}
+        </div>
+      </section>
+    </main>
+    <div class="gate-foot">
+      <b>演示数据</b>来自参考模板（象盛镍业 · 苏州淳鑫）结构，HS 编码与结论均不构成归类或税率依据。
+    </div>
+  </div>`;
+}
+
+/* ---------------------------- shell ---------------------------- */
+function navFor(role){
+  const pending = S.tasks.filter(t => !isApproved(t)).length;
+  if (role === 'supplier') return [
+    { id:'tasks', label:'我的任务', icon:'inbox', count: pending || null },
+    { id:'upload', label:'文件上传', icon:'upload' }
+  ];
+  if (role === 'business') return [
+    { id:'overview', label:'工作总览', icon:'table' },
+    { id:'tasks', label:'审核任务', icon:'inbox', count: pending || null }
+  ];
+  return [
+    { id:'queue', label:'待审队列', icon:'shield', count: S.tasks.filter(t => t.submitted && !isApproved(t)).length || null },
+    { id:'archive', label:'已确认任务', icon:'checkCircle' }
+  ];
+}
+
+function shell(role, active, crumbs, body, opts = {}){
+  const r = ROLE[role];
+  const nav = navFor(role);
+  return `<div class="app">
+    <aside class="rail">
+      <div class="rail-brand">${brandMark(22)}<span class="brand-name">关务审核工作台</span></div>
+      <nav class="rail-nav" aria-label="主导航">
+        <div class="rail-label">工作区</div>
+        ${nav.map(n => `<a class="rail-link" href="#/${role}/${n.id}" ${active === n.id ? 'aria-current="page"' : ''}>
+          ${svg(n.icon, 15)}<span>${n.label}</span>${n.count ? `<span class="count">${n.count}</span>` : ''}
+        </a>`).join('')}
+        <div class="rail-label">参考</div>
+        <span class="rail-link" disabled title="原型未实现">${svg('book', 15)}<span>税则与依据库</span></span>
+        <span class="rail-link" disabled title="原型未实现">${svg('log', 15)}<span>操作日志</span></span>
+      </nav>
+      <div class="rail-foot">
+        <button class="role-chip" data-act="open-role-menu" aria-haspopup="menu">
+          <span class="avatar">${r.person.slice(-2)}</span>
+          <span class="role-chip-meta">
+            <span class="role-chip-name">${r.person}</span>
+            <span class="role-chip-role">${role === 'supplier' ? '供应商账号' : role === 'business' ? '物流部 · 业务员' : '关务 · 专家'}</span>
+          </span>
+          ${svg('chevD', 12, 'caret')}
+        </button>
+      </div>
+    </aside>
+    <div class="main">
+      <header class="topbar">
+        <nav class="crumbs" aria-label="面包屑">
+          ${crumbs.map((c, i) => i === crumbs.length - 1
+            ? `<span class="cur">${esc(c.label)}</span>`
+            : `<a href="${c.href}">${esc(c.label)}</a><span class="sep">/</span>`).join('')}
+        </nav>
+        <div class="topbar-end">
+          <span class="demo-chip">演示数据</span>
+          ${opts.actions || ''}
+          <button class="icon-btn" title="通知（原型未实现）" aria-label="通知">${svg('bell', 15)}<span class="dot"></span></button>
+          <button class="icon-btn" data-act="switch-role" title="切换角色" aria-label="切换角色">${svg('users', 15)}</button>
+        </div>
+      </header>
+      <div class="content ${opts.wide ? 'wide' : ''}">${body}
+        <div class="foot-note">
+          <span><b>口径</b> 阶段 0 业务与流程约定（D1）· 数据与版本约定（D2）</span>
+          <span><b>说明</b> 原型仅演示界面与交互，未接后端；文件解析、归类与核查结果均为预置演示数据</span>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ---------------------------- shared blocks ---------------------------- */
+function taskCard(t, role){
+  const c = counts(t), st = taskStage(t);
+  const prog = `<span class="prog">
+    <i class="p-ok" style="width:${c.pass / c.total * 100}%"></i>
+    <i class="p-stop" style="width:${c.returned / c.total * 100}%"></i>
+    <i class="p-idle" style="width:${c.left / c.total * 100}%"></i>
+  </span>`;
+  const meta = role === 'supplier'
+    ? `<span>${svg('file', 11)} 当前 V${curVersion(t)}</span><span>${svg('clock', 11)} ${t.updatedAt}</span>`
+    : `<span>${svg('user', 11)} ${t.supplier}</span><span>${svg('file', 11)} V${curVersion(t)}</span><span>${svg('clock', 11)} ${t.updatedAt}</span>`;
+  return `<a class="task" href="#/${role}/task/${t.id}">
+    <span>
+      <span class="task-no">${t.id} · ${c.total} 条申报记录</span>
+      <span class="task-title mono">${esc(t.contract)}</span>
+      <span class="task-meta">${meta}</span>
+    </span>
+    <span class="task-prog">${prog}<b>${c.pass}/${c.total}</b></span>
+    <span>${pill(st.tone, st.label)}</span>
+    <span class="task-right"><span class="when">${role === 'supplier' ? '更新 ' + t.updatedAt.slice(5,10) : ''}</span></span>
+  </a>`;
+}
+
+function taskTableHead(role){
+  return `<thead><tr>
+    <th style="width:38%">商品 / 供应商编码</th>
+    <th style="width:14%">AI 推荐</th>
+    <th style="width:30%">预审结论</th>
+    <th style="width:18%">当前状态</th>
+  </tr></thead>`;
+}
+function taskTableRow(t, l, active, role){
+  const st = lineState(l, role), v = l.verdict ? VERDICT[l.verdict] : null;
+  const supplier = l.supplierCode ? `<span class="code">${l.supplierCode}</span>` : `<span class="code empty">未填</span>`;
+  const ai = l.aiCode ? `<span class="code">${l.aiCode}</span>` : `<span class="code empty">—</span>`;
+  const verdict = v
+    ? `<span class="verdict">${pill(v.tone, v.label)}<span class="why">${esc(l.aiGap || v.note)}</span></span>`
+    : `<span class="verdict"><span class="why">未执行预审</span></span>`;
+  return `<tr tabindex="0" data-act="open-line" data-task="${t.id}" data-line="${l.id}" class="${active ? 'is-active' : ''}">
+    <td><span class="name"><span class="mono muted" style="font-size:10.5px;margin-right:6px">${esc(l.no)}</span>${esc(l.name)}</span><span class="alias mono">${l.supplierCode ? esc(l.supplierCode) : '未填编码'}${l.alias !== l.name ? ' · ' + esc(l.alias) : ''}</span></td>
+    <td>${ai}</td>
+    <td>${verdict}</td>
+    <td>${pill(st.tone, st.label)}</td>
+  </tr>`;
+}
+
+const iconFor = t => t === '税则' ? 'book' : t === '归类决定' ? 'scale' : t === '监管' ? 'shield' : 'globe';
+const statusTone = s => s === '已核' ? 'verify' : s === '待核' ? 'doubt' : 'idle';
+
+function evidenceBlock(id){
+  const e = S.evidence[id];
+  if (!e) return '';
+  return `<div class="ev">
+    <div class="ev-top">
+      ${svg(iconFor(e.type), 13)}
+      <span class="ev-title">${esc(e.title)}</span>
+      <span class="tag src">${esc(e.type)}</span>
+      ${pill(statusTone(e.status), e.status, false)}
+    </div>
+    <div class="ev-meta"><code>${esc(e.locator)}</code> · 生效 ${esc(e.eff)} · 查询 ${esc(e.queried)}</div>
+    <div class="ev-quote">${esc(e.quote)}</div>
+    ${e.url ? `<div class="ev-links"><a href="${e.url}" target="_blank" rel="noopener">原文链接</a><span class="dim">来源：海关总署</span></div>` : `<div class="ev-links"><span class="dim">来源文本未取得，仅作线索</span></div>`}
+  </div>`;
+}
+
+/* ---------------------------- supplier ---------------------------- */
+function viewSupplierTasks(){
+  const tasks = S.tasks;
+  const open = tasks.filter(t => !isApproved(t));
+  const done = tasks.filter(isApproved);
+  const body = `
+    <div class="page-hd">
+      <div>
+        <h1>我的审核任务</h1>
+        <p class="sub">采购合同签订后，由你上传装箱明细与申报要素两页签。文件只做解析留存，业务员点击预审后才开始归类。</p>
+      </div>
+      <div class="hd-actions">
+        <button class="btn primary" data-act="open-upload" data-task="">${svg('upload', 14)} 上传业务 Excel</button>
+      </div>
+    </div>
+    ${open.length ? `<div class="kpi-row">
+      <div class="kpi"><div class="k">待处理任务</div><div class="v">${open.length}<small>个</small></div><div class="foot">含待补料与待解析</div></div>
+      <div class="kpi"><div class="k">需补料商品</div><div class="v">${open.reduce((n,t) => n + t.lines.filter(l => l.verdict === 'missing' || (l.expert && l.expert.result === 'return')).length, 0)}<small>条</small></div><div class="foot">按问题清单补充后重传</div></div>
+      <div class="kpi"><div class="k">已确认任务</div><div class="v">${done.length}<small>个</small></div><div class="foot">专家确认后不可修改</div></div>
+      <div class="kpi"><div class="k">上传文件版本</div><div class="v">${tasks.reduce((n,t)=>n+t.versions.length,0)}<small>版</small></div><div class="foot">原文件与历史版本均留存</div></div>
+    </div>` : ''}
+    <div class="sect">
+      <div class="sect-hd"><h2>进行中的任务</h2><span class="hint">按最后更新时间排序</span></div>
+      <div class="panel"><div class="task-list">
+        ${open.length ? open.map(t => taskCard(t, 'supplier')).join('') : `<div class="task-empty">${svg('inbox', 26)}暂无进行中的任务</div>`}
+      </div></div>
+    </div>
+    ${done.length ? `<div class="sect">
+      <div class="sect-hd"><h2>已完成</h2><span class="hint">专家确认版本</span></div>
+      <div class="panel"><div class="task-list">${done.map(t => taskCard(t, 'supplier')).join('')}</div></div>
+    </div>` : ''}`;
+  return shell('supplier', 'tasks', [{label:'我的任务'}], body);
+}
+
+function viewSupplierTask(t){
+  const c = counts(t), st = taskStage(t);
+  const issues = [];
+  t.lines.forEach(l => {
+    if (l.verdict === 'missing') issues.push({tone:'warn', title:`${l.name}（项 ${l.no}）未填海关编码`, meta:[`${l.position}`, '需补充：海关编码、输出信号'], code:'missing'});
+    if (l.verdict === 'unsure' || l.verdict === 'mismatch') issues.push({tone:'warn', title:`${l.name}（项 ${l.no}）关键信息不足`, meta:['需补充：' + (l.aiGap || '见预审结论')], code:'unsure'});
+    if (l.expert && l.expert.result === 'return') issues.push({tone:'stop', title:`${l.name}（项 ${l.no}）被专家退回`, meta:[l.expert.returnReason || '见退回记录', `责任人：${ROLE[l.expert.returnTo || 'supplier'].name}`], code:'return'});
+  });
+  const body = `
+    <div class="task-hd">
+      <div class="task-hd-top">
+        <div>
+          <div class="task-hd-no">${t.id} · 当前 V${curVersion(t)}</div>
+          <h1>${esc(t.contract)}</h1>
+        </div>
+        <div class="hd-actions">
+          ${isApproved(t) ? `<span class="btn" aria-disabled="true">${svg('checkCircle', 14)} 已确认</span>`
+            : `<button class="btn primary" data-act="open-upload" data-task="${t.id}">${svg('upload', 14)} 上传新版本</button>`}
+        </div>
+      </div>
+      <div class="facts">
+        <span class="fact"><span class="k">供应商</span><span class="v">${esc(t.supplier)}</span></span>
+        <span class="fact"><span class="k">项目</span><span class="v">${esc(t.project)}</span></span>
+        <span class="fact"><span class="k">申报记录</span><span class="v">${c.total} 条</span></span>
+        <span class="fact"><span class="k">最后更新</span><span class="v">${t.updatedAt}</span></span>
+        <span class="fact"><span class="k">状态</span><span class="v">${pill(st.tone, st.label)}</span></span>
+      </div>
+      ${stepBar(t)}
+    </div>
+    ${issues.length ? `<div class="panel">
+      <div class="panel-hd"><h2>待你处理的问题</h2><span class="meta">${issues.length} 项</span></div>
+      <div class="panel-bd stack-8">
+        ${issues.map(i => `<div class="issue ${i.tone}"><span class="ic">${svg('alert', 14)}</span><div class="body"><div class="t">${esc(i.title)}</div><div class="m">${i.meta.map(m => `<span>${esc(m)}</span>`).join('')}</div></div></div>`).join('')}
+        <div class="callout info" style="margin-top:4px">${svg('info', 14, 'ic')}<div>补充后请从本任务上传新版本，系统会整表重新预审，不沿用旧版结论。原文件与历史意见仍可追溯。</div></div>
+      </div>
+    </div>` : ''}
+    <div class="sect">
+      <div class="sect-hd"><h2>申报记录</h2><span class="hint">按申报要素页签一行一条，只读</span><span class="hint-r">${c.total} 条</span></div>
+      <div class="panel"><div class="tbl-wrap"><table class="tbl">
+        <thead><tr><th style="width:40%">商品 / 规格</th><th style="width:18%">供应商编码</th><th style="width:18%">AI 推荐</th><th style="width:24%">状态</th></tr></thead>
+        <tbody>${t.lines.map(l => {
+          const s = lineState(l);
+          return `<tr>
+            <td><span class="name"><span class="mono muted" style="font-size:10.5px;margin-right:6px">${l.no}</span>${esc(l.name)}</span><span class="alias">${esc(l.spec)}</span></td>
+            <td>${l.supplierCode ? `<span class="code">${l.supplierCode}</span>` : `<span class="code empty">未填</span>`}</td>
+            <td>${l.aiCode ? `<span class="code">${l.aiCode}</span>` : `<span class="code empty">—</span>`}</td>
+            <td>${pill(s.tone, s.label)}</td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table></div></div>
+    </div>
+    <div class="sect">
+      <div class="sect-hd"><h2>文件版本</h2><span class="hint">原文件保留，供追溯</span></div>
+      <div class="panel"><div class="tbl-wrap"><table class="tbl tbl-compact">
+        <thead><tr><th style="width:60px">版本</th><th>文件名</th><th style="width:88px">大小</th><th style="width:140px">上传人</th><th style="width:150px">时间</th></tr></thead>
+        <tbody>${[...t.versions].reverse().map(v => `<tr>
+          <td class="mono">V${v.v}</td>
+          <td>${svg('file', 12)} ${esc(v.file)}</td>
+          <td class="mono muted">${esc(v.size)}</td>
+          <td>${esc(v.by)}</td>
+          <td class="mono muted">${esc(v.at)}</td>
+        </tr>`).join('')}</tbody>
+      </table></div></div>
+    </div>
+    ${timeline(t.log)}`;
+  return shell('supplier', 'tasks', [{label:'我的任务', href:'#/supplier/tasks'}, {label:t.contract}], body);
+}
+
+function stepBar(t){
+  const s1 = t.versions.length ? 'done' : 'active';
+  const s2 = t.prechecked ? 'done' : (t.versions.length ? 'active' : '');
+  const s3 = t.submitted ? (isApproved(t) ? 'done' : 'active') : '';
+  const s4 = isApproved(t) ? 'done' : '';
+  const v = t.versions.length ? 'V' + curVersion(t) : '—';
+  return `<div class="steps">
+    <div class="step ${s1}"><div class="s-k">01 供应商上传</div><div class="s-v">${v} · ${t.versions[t.versions.length-1].at.slice(5)}</div></div>
+    <div class="step ${s2}"><div class="s-k">02 业务员预审</div><div class="s-v">${t.prechecked ? '已完成' : '待启动'}</div></div>
+    <div class="step ${s3}"><div class="s-k">03 专家核查审核</div><div class="s-v">${isApproved(t) ? '已通过' : t.submitted ? '进行中' : '未提交'}</div></div>
+    <div class="step ${s4}"><div class="s-k">04 形成确认版本</div><div class="s-v">${isApproved(t) ? t.approvedAt.slice(5) : '—'}</div></div>
+  </div>`;
+}
+
+function timeline(log){
+  return `<div class="sect">
+    <div class="sect-hd"><h2>操作记录</h2><span class="hint">按时间倒序，保留每个版本的处置</span></div>
+    <div class="panel"><div class="panel-bd"><div class="tl">
+      ${[...log].reverse().map((x, i) => `<div class="tl-item ${i === 0 ? 'key' : ''}">
+        <div class="tl-top"><span class="tl-act">${esc(x.act)}</span><span class="tl-by">${esc(x.by)}</span><span class="tl-time">${esc(x.at)}</span></div>
+        <div class="tl-desc">${esc(x.desc)}</div>
+      </div>`).join('')}
+    </div></div></div>
+  </div>`;
+}
+
+/* ---------------------------- business ---------------------------- */
+function viewBusinessOverview(){
+  const tasks = S.tasks;
+  const my = tasks.filter(t => !isApproved(t));
+  const needPre = my.filter(t => !t.prechecked);
+  const needBiz = my.filter(t => t.prechecked && !t.submitted);
+  const submitted = my.filter(t => t.submitted);
+  const flagged = my.reduce((n,t) => n + t.lines.filter(l => l.verdict && !l.decision).length, 0);
+  const body = `
+    <div class="page-hd">
+      <div>
+        <h1>工作总览</h1>
+        <p class="sub">今天待处理的是预审启动与待审编码确认。AI 只给建议，提交给专家的编码由你确认。</p>
+      </div>
+      <div class="hd-actions"><button class="btn" data-act="switch-role">${svg('users', 14)} 切换角色</button></div>
+    </div>
+    <div class="kpi-row">
+      <div class="kpi"><div class="k">待启动预审</div><div class="v">${needPre.length}<small>个任务</small></div><div class="foot">${needPre.length ? needPre.map(t=>t.id.slice(-4)).join(' · ') : '已全部启动'}</div></div>
+      <div class="kpi"><div class="k">待你确认编码</div><div class="v">${flagged}<small>条</small></div><div class="foot">不一致或无法确认，需人工判断</div></div>
+      <div class="kpi"><div class="k">待专家审核</div><div class="v">${submitted.length}<small>个任务</small></div><div class="foot">已提交快照，等待专家处置</div></div>
+      <div class="kpi"><div class="k">本月已确认</div><div class="v">${tasks.filter(isApproved).length}<small>个任务</small></div><div class="foot">形成专家确认版本</div></div>
+    </div>
+    <div class="sect">
+      <div class="sect-hd"><h2>需要你处理</h2><span class="hint">按任务阶段排序</span></div>
+      <div class="panel"><div class="task-list">
+        ${[...needPre, ...needBiz, ...submitted].map(t => taskCard(t, 'business')).join('') || `<div class="task-empty">${svg('checkCircle', 26)}没有待处理任务</div>`}
+      </div></div>
+    </div>
+    <div class="split-2 sect">
+      <div class="panel" style="margin:0">
+        <div class="panel-hd"><h2>规则提醒</h2><span class="meta">来自阶段 0 约定</span></div>
+        <div class="panel-bd stack-8 note-block">
+          <div>· AI 建议永远不覆盖供应商原码，新增列插在原编码右侧。</div>
+          <div>· 编码一致但关键证据不足，结论仍为「无法确认」，不自动通过。</div>
+          <div>· 导出补料不等于已退回或已通知，两个动作分开记录。</div>
+          <div>· 任何补料重传都整表重新预审，旧结论不继承。</div>
+          <div>· 提交后固定文件版本与确认编码，改稿须形成新的提交记录。</div>
+          <div>· 首期不支持任务内部分商品先通过，全部通过才算任务通过。</div>
+          <div>· 供应商补料走原任务入口，不新建任务。</div>
+        </div>
+      </div>
+      <div class="panel" style="margin:0">
+        <div class="panel-hd"><h2>最近操作</h2></div>
+        <div class="panel-bd"><div class="tl">
+          ${tasks.flatMap(t => t.log.map(x => ({...x, t}))).sort((a,b) => b.at.localeCompare(a.at)).slice(0,6).map((x,i) => `<div class="tl-item ${i===0?'key':''}">
+            <div class="tl-top"><span class="tl-act">${esc(x.act)}</span><span class="tl-by">${esc(x.by)}</span><span class="tl-time">${esc(x.at.slice(5))}</span></div>
+            <div class="tl-desc">${esc(x.t.contract)} · ${esc(x.desc)}</div>
+          </div>`).join('')}
+        </div></div>
+      </div>
+    </div>`;
+  return shell('business', 'overview', [{label:'工作总览'}], body);
+}
+
+function viewBusinessTasks(){
+  const tasks = S.tasks;
+  const body = `
+    <div class="page-hd">
+      <div><h1>审核任务</h1><p class="sub">一个任务对应一份供应商文件，可含多个版本。点击任务进入逐条审核。</p></div>
+    </div>
+    <div class="panel"><div class="tbl-wrap"><table class="tbl">
+      <thead><tr><th style="width:150px">任务</th><th>合同 / 供应商</th><th style="width:110px">当前版本</th><th style="width:170px">商品进度</th><th style="width:130px">待确认</th><th style="width:130px">阶段</th><th style="width:140px">更新</th></tr></thead>
+      <tbody>${tasks.map(t => {
+        const c = counts(t), st = taskStage(t);
+        const flagged = t.lines.filter(l => l.verdict && !l.decision).length;
+        return `<tr tabindex="0" data-act="open-task" data-task="${t.id}">
+          <td class="mono">${t.id}</td>
+          <td><span class="name">${esc(t.contract)}</span><span class="alias">${esc(t.supplier)}</span></td>
+          <td class="mono">V${curVersion(t)}</td>
+          <td><div class="task-prog"><span class="prog"><i class="p-ok" style="width:${c.pass/c.total*100}%"></i><i class="p-stop" style="width:${c.returned/c.total*100}%"></i><i class="p-idle" style="width:${c.left/c.total*100}%"></i></span><b>${c.pass}/${c.total}</b></div></td>
+          <td>${flagged ? `<span class="pill doubt"><i></i>${flagged} 条</span>` : `<span class="dim">—</span>`}</td>
+          <td>${pill(st.tone, st.label)}</td>
+          <td class="mono muted">${t.updatedAt.slice(5)}</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table></div></div>
+    <div class="callout info" style="margin-top:14px">${svg('info', 14, 'ic')}<div>任务阶段由商品进度决定：全部商品经专家通过后，任务才显示为「专家已确认」，首期不支持任务内部分商品先通过。</div></div>`;
+  return shell('business', 'tasks', [{label:'审核任务'}], body);
+}
+
+/* ---------------------------- expert ---------------------------- */
+function viewExpertQueue(){
+  const queue = S.tasks.filter(t => t.submitted && !isApproved(t));
+  const body = `
+    <div class="page-hd">
+      <div><h1>待审队列</h1><p class="sub">业务员提交后，专家 AI 核查已自动触发。你审的是业务员确认并提交的编码，不是 AI 建议值。</p></div>
+    </div>
+    <div class="kpi-row">
+      <div class="kpi"><div class="k">待审核任务</div><div class="v">${queue.length}<small>个</small></div><div class="foot">首期仅一名专家，不分派</div></div>
+      <div class="kpi"><div class="k">待审商品</div><div class="v">${queue.reduce((n,t)=>n+t.lines.filter(l=>!(l.expert&&l.expert.result)).length,0)}<small>条</small></div><div class="foot">逐条结论，整批通过</div></div>
+      <div class="kpi"><div class="k">预审低置信</div><div class="v">${queue.reduce((n,t)=>n+t.lines.filter(l=>l.verdictConf==='low').length,0)}<small>条</small></div><div class="foot">需重点核查依据</div></div>
+      <div class="kpi"><div class="k">本月已确认</div><div class="v">${S.tasks.filter(isApproved).length}<small>个任务</small></div><div class="foot">含历史任务</div></div>
+    </div>
+    <div class="callout" style="margin-bottom:14px">${svg('shield', 14, 'ic')}<div><b>核查与审批分开。</b>AI 核查结果只作为证据展示，不改变审批状态；即使专家置信度为高，仍需你人工点击通过。退回时必须指定对象角色、责任人和逐商品问题。</div></div>
+    <div class="sect" style="margin-top:0">
+      <div class="sect-hd"><h2>待审任务</h2><span class="hint">按提交时间排序</span></div>
+      <div class="panel">
+        ${queue.length ? queue.map(t => {
+          const c = counts(t);
+          const low = t.lines.filter(l => l.verdictConf === 'low').length;
+          return `<button class="q-row" data-act="open-task" data-task="${t.id}">
+            <span>
+              <span class="q-name mono">${esc(t.contract)}</span>
+              <span class="q-meta">${t.id} · ${esc(t.supplier)}</span>
+            </span>
+            <span style="display:flex;align-items:center;gap:8px;justify-content:flex-end">
+              <span class="mono" style="font-size:11.5px">${c.total} 条</span>
+              ${low ? `<span class="tag warn">低置信 ${low}</span>` : ''}
+            </span>
+            <span class="mono dim" style="font-size:11.5px;text-align:right">${t.submittedAt.slice(5)}</span>
+            <span style="text-align:right">${pill('accent', '待审核')}</span>
+          </button>`;
+        }).join('') : `<div class="task-empty">${svg('checkCircle', 26)}队列已清空</div>`}
+      </div>
+    </div>
+  `;
+  return shell('expert', 'queue', [{label:'待审队列'}], body);
+}
+
+function viewExpertArchive(){
+  const done = S.tasks.filter(isApproved);
+  const body = `
+    <div class="page-hd">
+      <div><h1>已确认任务</h1><p class="sub">专家确认版本。后续报关与交接动作不在本期范围，本页只保留确认结果与修改留痕。</p></div>
+    </div>
+    <div class="panel"><div class="tbl-wrap"><table class="tbl">
+      <thead><tr><th style="width:150px">任务</th><th>合同 / 供应商</th><th style="width:90px">商品</th><th style="width:140px">确认时间</th><th style="width:130px">结论</th></tr></thead>
+      <tbody>${done.map(t => `<tr tabindex="0" data-act="open-task" data-task="${t.id}">
+        <td class="mono">${t.id}</td>
+        <td><span class="name">${esc(t.contract)}</span><span class="alias">${esc(t.supplier)}</span></td>
+        <td class="mono">${t.lines.length} 条</td>
+        <td class="mono muted">${t.approvedAt}</td>
+        <td>${pill('verify', '已确认')}</td>
+      </tr>`).join('')}</tbody>
+    </table></div></div>`;
+  return shell('expert', 'archive', [{label:'已确认任务'}], body);
+}
+
+/* ---------------------------- task detail (business / expert) ---------------------------- */
+function notesBlock(t, lines){
+  const specials = lines.filter(l => l.special);
+  const unsure = lines.filter(l => l.verdict === 'unsure' || l.verdict === 'mismatch' || l.verdict === 'missing');
+  if (!unsure.length && !specials.length) return '';
+  const codePair = l => l.supplierCode && l.aiCode && l.supplierCode !== l.aiCode
+    ? `${l.supplierCode} → ${l.aiCode}`
+    : (l.supplierCode || l.aiCode || '编码未填');
+  return `<div class="panel notes-block">
+    <div class="panel-hd"><h2>本批要点</h2><span class="meta">共性风险与原文备注</span></div>
+    <div class="panel-bd">
+      ${unsure.length ? `<div class="dp-sec" style="margin:0 0 12px">
+        <div class="dp-sec-hd"><h3>编码存疑</h3><span class="r">${unsure.length} 条</span></div>
+        ${unsure.map(l => `<div class="issue warn"><span class="ic">${svg('alert', 13)}</span><div class="body"><div class="t">${esc(l.name)} · <span class="mono">${esc(codePair(l))}</span></div><div class="m">${esc(l.aiGap || '')}</div></div></div>`).join('')}
+      </div>` : ''}
+      ${specials.length ? `<div class="dp-sec" style="margin:0">
+        <div class="dp-sec-hd"><h3>含原文备注的条目</h3><span class="r">不改写、不删除</span></div>
+        <div class="note-block">${specials.map(l => esc(l.name)).join(' · ')}<span class="dim">　点击对应行查看原文</span></div>
+      </div>` : ''}
+    </div>
+  </div>`;
+}
+function viewTask(role, t, lineId){
+  S.ui = {...(S.ui || {}), task: t.id};
+  const lines = t.lines;
+  const cur = lines.find(l => l.id === lineId) || lines[0];
+  const c = counts(t), st = taskStage(t);
+  const isExpert = role === 'expert';
+  const myLines = isExpert ? lines.filter(l => l.expert && l.expert.result) : [];
+  const allReviewed = isExpert && lines.every(l => l.expert && l.expert.result === 'pass');
+  const verdictCount = k => lines.filter(l => l.verdict === k).length;
+
+  const hdActions = isExpert
+    ? (isApproved(t)
+        ? `<span class="btn" aria-disabled="true">${svg('checkCircle', 14)} 已确认</span>`
+        : `<button class="btn" data-act="batch-return">${svg('arrowL', 14)} 整批退回</button>
+           <button class="btn primary" data-act="batch-pass" ${allReviewed ? '' : 'disabled'} title="${allReviewed ? '' : '全部商品通过后才可整批确认'}">${svg('check', 14)} 整批确认</button>`)
+    : (t.submitted
+        ? `<span class="tag">已提交快照</span><button class="btn" data-act="batch-return" disabled title="原型演示：已提交">退回供应商</button>`
+        : t.prechecked
+          ? `<button class="btn" data-act="export" title="导出带结论的补料清单">${svg('download', 14)} 导出补料清单</button>
+             <button class="btn primary" data-act="open-submit" data-task="${t.id}">${svg('arrowR', 14)} 提交专家审核</button>`
+          : `<span class="tag">待启动预审</span>`);
+
+  const listPanel = `<div class="panel" style="margin:0">
+    <div class="panel-hd">
+      <h2>申报记录</h2>
+      <span class="meta">${lines.length} 条 · V${curVersion(t)}</span>
+      <div class="hd-r">
+        ${t.versions.length > 1 ? `<div class="versions">${t.versions.map(v => `<button class="version" data-act="switch-version" data-task="${t.id}" data-v="${v.v}" aria-current="${v.v === curVersion(t)}">V${v.v}</button>`).join('')}</div>` : ''}
+        <span class="tag">${t.prechecked ? '已预审' : '未预审'}</span>
+      </div>
+    </div>
+    <div class="tbl-wrap"><table class="tbl" id="line-table">${taskTableHead()}<tbody>
+      ${lines.map(l => taskTableRow(t, l, cur.id === l.id)).join('')}
+    </tbody></table></div>
+    <div class="panel-ft">
+      <span class="note">点击任意行查看对比与依据；状态列区分预审结论与人工处置。</span>
+      <span class="meta" style="margin-left:auto">${verdictCount('match')} 一致 · ${verdictCount('mismatch')} 不一致 · ${verdictCount('unsure')} 无法确认 · ${verdictCount('missing')} 未填</span>
+    </div>
+  </div>`;
+
+  const summary = `<div class="panel" style="margin:0 0 16px">
+    <div class="panel-hd"><h2>${isExpert ? '提交快照' : '当前进度'}</h2>
+      <span class="meta">${isExpert ? '业务员确认并提交的版本' : '逐条处理后整批提交'}</span>
+      <div class="hd-r">${pill(st.tone, st.label)}</div>
+    </div>
+    <div class="panel-bd">
+      <div class="split-3" style="gap:12px">
+        <div><div class="kpi" style="border:0;padding:0"><div class="k">待你处置</div><div class="v" style="font-size:20px">${isExpert ? lines.filter(l=>!(l.expert&&l.expert.result)).length : lines.filter(l=>l.verdict && !l.decision).length}<small>条</small></div></div></div>
+        <div><div class="k" style="font-size:11.5px;color:var(--ink-3)">已形成结论</div><div class="v" style="font-size:20px;font-weight:600;margin-top:7px">${isExpert ? myLines.length : lines.filter(l=>l.decision).length}<small style="font-size:12px;color:var(--ink-4)">条</small></div></div>
+        <div><div class="k" style="font-size:11.5px;color:var(--ink-3)">任务</div><div style="font-size:12px;margin-top:9px;line-height:1.6" class="dim">${isExpert ? `提交于 ${t.submittedAt || '—'}` : `预审于 ${t.precheckAt || '—'}`}</div></div>
+      </div>
+    </div>
+  </div>`;
+
+  const body = `
+    <div class="task-hd">
+      <div class="task-hd-top">
+        <div>
+          <div class="task-hd-no">${t.id} · V${curVersion(t)} · ${isExpert ? '专家审核' : '业务员预审'}</div>
+          <h1>${esc(t.contract)}</h1>
+        </div>
+        <div class="hd-actions">${hdActions}</div>
+      </div>
+      <div class="facts">
+        <span class="fact"><span class="k">供应商</span><span class="v">${esc(t.supplier)}</span></span>
+        <span class="fact"><span class="k">申报记录</span><span class="v">${c.total} 条</span></span>
+        <span class="fact"><span class="k">已通过</span><span class="v">${c.pass} 条</span></span>
+        <span class="fact"><span class="k">已退回</span><span class="v">${c.returned} 条</span></span>
+        <span class="fact"><span class="k">更新</span><span class="v">${t.updatedAt}</span></span>
+      </div>
+      ${stepBar(t)}
+    </div>
+    <div class="detail">
+      <div class="detail-l">${summary}${listPanel}${notesBlock(t, lines)}</div>
+      <aside class="detail-r" id="detail-panel"><div class="dp">${detailPanel(role, t, cur)}</div></aside>
+    </div>`;
+  return shell(role, isExpert ? 'queue' : 'tasks', [{label: isExpert ? '待审队列' : '审核任务', href:`#/${role}/${isExpert?'queue':'tasks'}`}, {label:t.contract}], body, {wide:true});
+}
+
+/* ---------------------------- detail panel ---------------------------- */
+function detailPanel(role, t, l){
+  const isExpert = role === 'expert';
+  const st = lineState(l, role);
+  const v = l.verdict ? VERDICT[l.verdict] : null;
+  const tabs = [
+    ['hs','HS 对比'],
+    ['elem','申报要素'],
+    ['ev','依据'],
+    ...(isExpert ? [['check','核查结果']] : []),
+    ['log','记录']
+  ];
+  const active = (S.ui && S.ui.tab) || 'hs';
+  const tabBtn = ([k,label]) => `<button class="tab" role="tab" aria-selected="${k===active}" data-act="set-tab" data-tab="${k}">${label}${k==='ev' && l.evidence.length ? `<span class="n">${l.evidence.length}</span>` : ''}</button>`;
+  return `<div class="dp-hd">
+    <div class="dp-hd-top">
+      <div style="min-width:0">
+        <h2>${esc(l.name)}</h2>
+        <div class="dp-sub">
+          <span>项 ${esc(l.no)}</span><span>${esc(l.spec)}</span>
+          <code>${esc(l.position)}</code>
+          <span>${pill(st.tone, st.label)}</span>
+        </div>
+      </div>
+      <button class="icon-btn dp-close" data-act="close-detail" title="收起">${svg('x', 14)}</button>
+    </div>
+    <div class="tabs" role="tablist">${tabs.map(tabBtn).join('')}</div>
+  </div>
+  <div class="dp-bd fade-in" role="tabpanel">${tabContent(active, role, t, l)}</div>
+  ${detailFooter(role, t, l)}`;
+}
+
+function tabContent(tab, role, t, l){
+  if (tab === 'hs') return tabHs(role, t, l);
+  if (tab === 'elem') return tabElem(role, t, l);
+  if (tab === 'ev') return tabEv(role, t, l);
+  if (tab === 'check') return tabCheck(role, t, l);
+  return tabLog(role, t, l);
+}
+
+function tabHs(role, t, l){
+  const isExpert = role === 'expert';
+  const v = l.verdict ? VERDICT[l.verdict] : null;
+  if (!l.verdict) return `<div class="empty">该商品尚未执行预审。<br><span class="dim">业务员点击「启动预审」后生成 AI 建议与比较结论。</span></div>`;
+  return `
+    <div class="cmp">
+      <div class="cmp-col">
+        <div class="cmp-k">${svg('user', 11)} 供应商原码</div>
+        <div class="cmp-v ${l.supplierCode ? '' : 'empty'}">${l.supplierCode ? esc(l.supplierCode) : '未填写'}</div>
+        <div class="cmp-note">原文保留 · ${esc(l.position)}</div>
+      </div>
+      <div class="cmp-col">
+        <div class="cmp-k">${svg('sparkle', 11)} AI 推荐 ${confHtml(l.verdictConf)}</div>
+        ${l.aiCode && l.aiCode === l.supplierCode
+          ? `<div class="cmp-v same">与左侧一致</div><div class="cmp-note">独立归类后得同一编码</div>`
+          : `<div class="cmp-v ${l.aiCode ? '' : 'empty'}">${l.aiCode ? esc(l.aiCode) : '暂不定码'}</div><div class="cmp-note">独立归类后再比较，不参考原码</div>`}
+      </div>
+      <div class="cmp-verdict">
+        ${v ? pill(v.tone, v.label) : ''}
+        <div class="txt">${esc(l.aiReason)}</div>
+      </div>
+    </div>
+    ${l.aiGap ? `<div class="dp-sec">
+      <div class="dp-sec-hd">${svg('alert', 12)}<h3>待补与风险</h3></div>
+      <div class="callout ${l.verdict === 'match' ? '' : 'warn'}">${svg(l.verdict === 'match' ? 'info' : 'alert', 14, 'ic')}<div>${esc(l.aiGap)}</div></div>
+    </div>` : ''}
+    ${l.special ? `<div class="dp-sec">
+      <div class="dp-sec-hd"><h3>供应商原备注</h3><span class="r">原文保留</span></div>
+      <div class="note-block">${esc(l.special.replace(/^供应商原备注：/, ''))}</div>
+    </div>` : ''}
+    <div class="dp-sec">
+      <div class="dp-sec-hd"><h3>商品事实</h3><span class="r">来自装箱明细 + 申报要素</span></div>
+      <dl class="kv-list">
+        <dt>主品名</dt><dd>${esc(l.name)}</dd>
+        ${l.alias !== l.name ? `<dt>别名</dt><dd>${esc(l.alias)}</dd>` : ''}
+        <dt>规格</dt><dd>${esc(l.spec)}</dd>
+        <dt>厂家型号</dt><dd>${esc(l.model || '—')}</dd>
+        <dt>材质</dt><dd>${esc(l.material || '—')}</dd>
+        <dt>用途</dt><dd>${esc(l.usage || '—')}</dd>
+        <dt>数量</dt><dd>${esc(l.qty)}</dd>
+        <dt>箱号</dt><dd class="mono">${esc(l.boxNo)}</dd>
+        <dt>附图</dt><dd>${l.photo === '—' ? '<span class="dim">该行无附图（单独提示，不视为无商品）</span>' : `<span class="tag src">${svg('image', 10)} ${esc(l.photo)}</span> <span class="dim">WPS DISPIMG 已提取</span>`}</dd>
+      </dl>
+    </div>
+    ${isExpert && t.submitted ? `<div class="dp-sec">
+      <div class="dp-sec-hd"><h3>业务员提交值</h3><span class="r">专家实际审核对象</span></div>
+      <div class="cmp" style="grid-template-columns:1fr">
+        <div class="cmp-col">
+          <div class="cmp-k">待审 HS</div>
+          <div class="cmp-v">${l.decision && l.decision.code ? esc(l.decision.code) : '<span class="dim" style="font-family:var(--sans);font-size:12px">' + (l.decision ? '待补料，未定编码' : '未确认') + '</span>'}</div>
+          <div class="cmp-note">${l.decision ? `业务员确认于 ${l.decision.at}${l.decision.note ? ' · ' + esc(l.decision.note) : ''}` : '尚未确认'}</div>
+        </div>
+      </div>
+    </div>` : ''}`;
+}
+
+function tabElem(role, t, l){
+  if (!l.verdict) return `<div class="empty">预审后生成要素比对。</div>`;
+  return `
+    <div class="dp-sec" style="margin-top:0">
+      <div class="dp-sec-hd"><h3>申报要素逐项比对</h3><span class="r">原值不覆盖</span></div>
+      <table class="elem">
+        <thead><tr><th style="width:70px">要素</th><th>供应商原值</th><th>AI 建议</th><th style="width:64px">附图</th><th style="width:58px">比对</th></tr></thead>
+        <tbody>${l.elements.map(e => `<tr>
+          <td class="el-name">${esc(e.name)}</td>
+          <td class="el-val">${esc(e.orig)}</td>
+          <td class="el-ai">${esc(e.ai || '—')}</td>
+          <td class="dim" style="font-size:11px">${esc(e.img)}</td>
+          <td>${elemState(e.state)}</td>
+        </tr>`).join('')}</tbody>
+      </table>
+    </div>
+    <div class="callout" style="margin-top:12px">${svg('info', 14, 'ic')}<div>图片只证实可见事实（形态、铭牌参数），不直接推断成分、工艺或退税率；未见不等于文字错误。</div></div>`;
+}
+const elemState = s => s === 'ok' ? `<span class="st ok">${svg('check', 11)} 匹配</span>`
+  : s === 'no' ? `<span class="st no">${svg('x', 11)} 缺失</span>`
+  : s === 'q' ? `<span class="st q">${svg('alert', 11)} 待核</span>`
+  : `<span class="st unk">${svg('minus', 11)} 未执行</span>`;
+
+function tabEv(role, t, l){
+  if (!l.verdict) return `<div class="empty">预审后关联依据。</div>`;
+  if (!l.evidence.length) return `<div class="empty">未关联到可用依据。<br><span class="dim">来源未取得时结论应降级，并单列查询失败。</span></div>`;
+  const sorted = [...l.evidence].sort((a,b) => (S.evidence[b].status === '已核') - (S.evidence[a].status === '已核'));
+  return `<div class="dp-sec" style="margin-top:0">
+      <div class="dp-sec-hd"><h3>归类依据</h3><span class="r">官方优先 · 第三方与历史补线索</span></div>
+      ${sorted.map(evidenceBlock).join('')}
+    </div>
+    <div class="callout warn" style="margin-top:12px">${svg('alert', 14, 'ic')}<div>标记「待核」的来源未取得当期官方文本时，不得据此评定高置信度。</div></div>`;
+}
+
+function tabCheck(role, t, l){
+  const ex = l.expert || {};
+  if (!t.submitted && !ex.result) return `<div class="empty">业务员提交后自动触发专家核查。</div>`;
+  const conf = ex.confidence;
+  const row = (k, ok, note) => `<div class="issue ${ok === 'ok' ? '' : ok === 'no' ? 'stop' : 'warn'}" style="margin-bottom:7px">
+    <span class="ic">${svg(ok === 'ok' ? 'checkCircle' : ok === 'no' ? 'x' : 'alert', 14)}</span>
+    <div class="body"><div class="t">${esc(k)}</div><div class="m">${esc(note)}</div></div>
+  </div>`;
+  const checks = ex.checks && ex.checks.length ? ex.checks : defaultChecks(l);
+  return `
+    <div class="dp-sec" style="margin-top:0">
+      <div class="dp-sec-hd"><h3>专家置信度</h3><span class="r">与预审置信度分开保存</span></div>
+      <div class="row-between">
+        ${conf ? `<span class="pill ${conf === 'high' ? 'verify' : conf === 'mid' ? 'doubt' : 'stop'}"><i></i>${CONF[conf]}置信度</span>` : '<span class="dim" style="font-size:12px">未评定</span>'}
+        <span class="dim" style="font-size:11px">专家高置信需同时满足：要素、退税、监管三项核清</span>
+      </div>
+    </div>
+    <div class="dp-sec">
+      <div class="dp-sec-hd"><h3>分项核查</h3><span class="r">${checks.length} 项</span></div>
+      ${checks.map(c => row(c.name, c.state, c.note)).join('')}
+    </div>
+    <div class="dp-sec">
+      <div class="dp-sec-hd"><h3>出口退税率</h3></div>
+      <dl class="kv-list">
+        <dt>原表退税率</dt><dd class="mono">13.00%</dd>
+        <dt>按待审 HS 查</dt><dd>${l.decision && l.decision.code ? `<span class="mono">${esc(l.decision.code)}</span> · 适用日期 ${esc((t.submittedAt || t.updatedAt).slice(0,10))}` : '<span class="dim">编码未定，退税率无从适用</span>'}</dd>
+        <dt>核查状态</dt><dd>${pill('doubt', '待核', false)} <span class="dim">未取得当期退税率文库条目，不猜 0% 或具体率</span></dd>
+      </dl>
+    </div>
+    <div class="dp-sec">
+      <div class="dp-sec-hd"><h3>监管条件</h3></div>
+      <div class="callout">${svg('shield', 14, 'ic')}<div>未命中两用物项清单关键词，但不得以关键词排除管制。需结合技术参数、用途、用户与目的地核查。</div></div>
+    </div>`;
+}
+function defaultChecks(l){
+  const base = [
+    {name:'编码与要素对应', state:'ok', note:'按最长前缀匹配官方要素模板，必填项齐全'},
+    {name:'图片可见事实', state: l.photo === '—' ? 'q' : 'ok', note: l.photo === '—' ? '该行无附图，无法据图核对形态与铭牌' : '形态与铭牌参数与申报描述一致'},
+    {name:'退税率适用', state:'q', note:'未取得适用日期内的官方退税率文库条目'},
+    {name:'归类法规引用', state: l.verdict === 'unsure' ? 'q' : 'ok', note: l.verdict === 'unsure' ? '关键参数缺失，未形成唯一归类依据' : '税则子目条文已定位'},
+    {name:'两用物项与监管', state:'ok', note:'未命中清单；保留技术参数供复核，不以关键词排除'}
+  ];
+  return base;
+}
+
+function tabLog(role, t, l){
+  const global = t.log.filter(x => x.act !== '启动预审');
+  const lineLog = [
+    ...(l.verdict ? [{at:t.precheckAt || t.updatedAt, by:'AI 预审', act:'出具预审结论', desc:`${VERDICT[l.verdict].label} · ${CONF[l.verdictConf] || '—'}置信度；来源 ${l.evidence.length} 条`}] : []),
+    ...(l.decision ? [{at:l.decision.at, by:'陈静', act:'确认待审编码', desc:`确认 ${l.decision.code}${l.decision.note ? '；' + l.decision.note : ''}`}] : []),
+    ...(l.expert && l.expert.done ? [{at:l.expert.at || t.updatedAt, by:'林国栋', act:l.expert.result === 'pass' ? '专家通过' : '专家退回', desc:l.expert.note || ''}] : [])
+  ];
+  const items = [...lineLog, ...global.map(g => ({...g, desc: g.desc}))].sort((a,b) => (b.at || '').localeCompare(a.at || ''));
+  return `<div class="tl">${items.map((x,i) => `<div class="tl-item ${i===0?'key':''}">
+    <div class="tl-top"><span class="tl-act">${esc(x.act)}</span><span class="tl-by">${esc(x.by)}</span><span class="tl-time">${esc((x.at||'').slice(5))}</span></div>
+    <div class="tl-desc">${esc(x.desc)}</div>
+  </div>`).join('')}</div>`;
+}
+
+/* ---------------------------- detail footer / decision ---------------------------- */
+function detailFooter(role, t, l){
+  const isExpert = role === 'expert';
+  if (isApproved(t)) return `<div class="dp-ft"><span class="note">${svg('checkCircle', 13)} 该任务已形成专家确认版本</span></div>`;
+  if (isExpert) return expertFooter(t, l);
+  return businessFooter(t, l);
+}
+
+function businessFooter(t, l){
+  if (!l.verdict) return `<div class="dp-ft"><span class="note">尚未预审</span><button class="btn primary sm" data-act="run-precheck" data-task="${t.id}">启动预审</button></div>`;
+  if (t.submitted) return `<div class="dp-ft"><span class="note">${svg('checkCircle', 13)} 已提交专家，编码锁定为 ${esc(l.decision ? l.decision.code : '—')}</span></div>`;
+  if (l.decision) {
+    return `<div class="dp-ft">
+      <span class="note">${svg('check', 13)} 已确认 <b class="mono">${esc(l.decision.code)}</b></span>
+      <button class="btn sm" data-act="undo-decision" data-task="${t.id}" data-line="${l.id}">撤回</button>
+    </div>`;
+  }
+  const v = VERDICT[l.verdict];
+  if (l.verdict === 'match') {
+    return `<div class="dp-ft">
+      <span class="note">预审一致，确认后进入可提交</span>
+      <button class="btn primary sm" data-act="confirm-code" data-task="${t.id}" data-line="${l.id}" data-code="${l.aiCode}">确认 ${l.aiCode}</button>
+    </div>`;
+  }
+  if (l.verdict === 'mismatch') {
+    return `<div class="dp-ft" style="flex-wrap:wrap">
+      <span class="note" style="width:100%;margin-bottom:2px">${svg('alert', 12)} 编码不一致，请选择待审编码</span>
+      <button class="btn sm" data-act="confirm-code" data-task="${t.id}" data-line="${l.id}" data-code="${l.supplierCode}">采用原码 ${l.supplierCode}</button>
+      <button class="btn sm primary" data-act="confirm-code" data-task="${t.id}" data-line="${l.id}" data-code="${l.aiCode}">采用建议 ${l.aiCode}</button>
+    </div>`;
+  }
+  if (l.verdict === 'missing') {
+    return `<div class="dp-ft">
+      <span class="note">原表缺编码，需供应商补填</span>
+      <button class="btn sm" data-act="need-supplement" data-task="${t.id}" data-line="${l.id}">标记待补料</button>
+    </div>`;
+  }
+  return `<div class="dp-ft">
+    <span class="note">${svg('alert', 12)} ${v.label}，需补资料</span>
+    <button class="btn sm" data-act="need-supplement" data-task="${t.id}" data-line="${l.id}">标记待补料</button>
+  </div>`;
+}
+
+function expertFooter(t, l){
+  const ex = l.expert || {};
+  if (ex.result === 'pass') return `<div class="dp-ft"><span class="note">${svg('checkCircle', 13)} 已通过 · ${esc(ex.note || '')}</span></div>`;
+  if (ex.result === 'return') return `<div class="dp-ft"><span class="note">${svg('arrowL', 13)} 已退回 ${esc(ROLE[ex.returnTo || 'supplier'].name)} · ${esc(ex.note || '')}</span></div>`;
+  const noCode = !(l.decision && l.decision.code);
+  return `<div class="dp-ft">
+    <span class="note">${noCode ? '编码未定，应退回补料' : (t.submitted ? '核查已完成，待人工结论' : '业务员尚未提交')}</span>
+    <button class="btn sm danger" data-act="open-expert" data-task="${t.id}" data-line="${l.id}" data-mode="return">退回</button>
+    <button class="btn sm primary" data-act="open-expert" data-task="${t.id}" data-line="${l.id}" data-mode="pass" ${noCode ? 'disabled title="编码未定，不能通过"' : ''}>通过</button>
+  </div>`;
+}
+
+/* ---------------------------- modals ---------------------------- */
+const modalRoot = () => document.getElementById('modal-root');
+let MODAL = null;
+
+function openModal(spec){ MODAL = spec; renderModal(); }
+function closeModal(){ MODAL = null; modalRoot().innerHTML = ''; }
+
+function renderModal(){
+  if (!MODAL){ modalRoot().innerHTML = ''; return; }
+  const m = MODAL;
+  modalRoot().innerHTML = `<div class="modal-mask" data-act="modal-mask">
+    <div class="modal ${m.wide ? 'wide' : ''}" role="dialog" aria-modal="true" aria-label="${esc(m.title)}">
+      <div class="modal-hd">
+        <div><h2>${esc(m.title)}</h2>${m.sub ? `<p>${esc(m.sub)}</p>` : ''}</div>
+        <button class="icon-btn" data-act="close-modal" aria-label="关闭">${svg('x', 14)}</button>
+      </div>
+      <div class="modal-bd">${m.body}</div>
+      ${m.footer ? `<div class="modal-ft">${m.footer}</div>` : ''}
+    </div>
+  </div>`;
+}
+
+function modalRolePicker(){
+  openModal({
+    title:'切换角色',
+    sub:'演示账号，切换后进入该角色的工作区',
+    body:`<div class="stack-8">${['supplier','business','expert'].map(k => {
+      const r = ROLE[k], cur = roleOf() === k;
+      return `<button class="role-row" data-act="pick-role" data-role="${k}" style="border:1px solid var(--line);border-radius:5px;background:${cur?'var(--accent-bg)':'var(--surface)'}">
+        <span class="role-glyph">${svg(k==='business'?'table':k==='expert'?'shield':'box', 18)}</span>
+        <span><h3>${r.name}${cur?'<em>当前</em>':''}</h3><p>${r.person} · ${r.org}</p></span>
+        <span class="role-enter">${cur?'返回工作区':svg('arrowR',13)}</span>
+      </button>`;
+    }).join('')}</div>
+    <div class="callout info" style="margin-top:14px">${svg('info', 14, 'ic')}<div>原型仅切换视角，不做真实权限校验。生产环境由登录账号决定角色。</div></div>`,
+    footer:`<button class="btn ghost" data-act="reset-demo" style="margin-right:auto">${svg('refresh', 13)} 重置演示数据</button>
+      <button class="btn" data-act="close-modal">取消</button>`
+  });
+}
+
+function modalUpload(taskId){
+  const t = taskId ? task(taskId) : null;
+  openModal({
+    title: t ? '上传新版本' : '上传业务 Excel',
+    sub: t ? `${t.contract} · 当前 V${curVersion(t)}` : '一个文件对应一个审核任务，可含多条申报记录',
+    wide:true,
+    body:`${t ? `<div class="callout warn" style="margin-bottom:14px">${svg('alert',14,'ic')}<div>新版本将整表重新解析并<b>重新预审</b>，旧版本的预审与审批结论保留但不再生效。补料文件不携带系统商品 ID。</div></div>` : ''}
+      <label class="drop" id="drop" for="file-input">
+        <div class="ic">${svg('upload', 22)}</div>
+        <div class="t">拖入文件，或点击选择</div>
+        <div class="s">支持 .xlsx；需含「装箱明细」「申报要素」两页签</div>
+      </label>
+      <input type="file" id="file-input" class="sr" accept=".xlsx,.xls">
+      <div id="file-slot"></div>
+      <div class="dp-sec" style="margin-top:16px">
+        <div class="dp-sec-hd"><h3>上传后会发生什么</h3></div>
+        <div class="note-block stack-8">
+          <div>① 系统保存原文件与版本，解析两个页签、合同项号与附图，<b>不自动启动归类</b>。</div>
+          <div>② 解析失败的行单独列出，由供应商修正后重传，不静默丢弃。</div>
+          <div>③ 业务员点击预审后，才对当前版本执行 HS 预审。</div>
+        </div>
+      </div>
+      <div class="callout" style="margin-top:14px">${svg('info',14,'ic')}<div>原型不解析真实文件；确认后仅演示版本追加与状态流转。</div></div>`,
+    footer:`<button class="btn" data-act="close-modal">取消</button>
+      <button class="btn primary" data-act="confirm-upload" data-task="${t ? t.id : ''}" disabled id="upload-confirm">确认上传</button>`
+  });
+  bindUpload();
+}
+
+function bindUpload(){
+  const input = $('#file-input'); if (!input) return;
+  input.addEventListener('change', () => {
+    const f = input.files && input.files[0]; if (!f) return;
+    const kb = Math.max(1, Math.round(f.size / 1024));
+    $('#file-slot').innerHTML = `<div class="file-row">${svg('file', 15, 'ic')}<span class="nm">${esc(f.name)}</span><span class="sz">${kb} KB</span>${svg('check', 13, 'ic')}</div>`;
+    const btn = $('#upload-confirm'); if (btn) btn.disabled = false;
+  });
+  const drop = $('#drop');
+  if (drop){
+    ['dragenter','dragover'].forEach(e => drop.addEventListener(e, ev => { ev.preventDefault(); drop.classList.add('over'); }));
+    ['dragleave','drop'].forEach(e => drop.addEventListener(e, ev => { ev.preventDefault(); drop.classList.remove('over'); }));
+    drop.addEventListener('drop', ev => {
+      const f = ev.dataTransfer.files && ev.dataTransfer.files[0]; if (!f) return;
+      const dt = new DataTransfer(); dt.items.add(f);
+      input.files = dt.files; input.dispatchEvent(new Event('change'));
+    });
+  }
+}
+
+function modalPrecheck(t){
+  openModal({
+    title:'启动预审',
+    sub:`${t.contract} · V${curVersion(t)} · ${t.lines.length} 条申报记录`,
+    wide:true,
+    body:`<div class="callout info" style="margin-bottom:14px">${svg('sparkle',14,'ic')}<div>对当前版本的每条商品：先按商品事实独立推荐 HS，再与供应商原码比较，写入「AI推荐HScode」「预审结论」两列，原码不动。</div></div>
+      <div class="bar" style="margin-bottom:14px"><i id="run-bar" style="width:0%"></i></div>
+      <div id="run-list">${t.lines.map(l => `<div class="run-row" data-run="${l.id}">
+        <span class="spin"></span>
+        <span class="nm">${esc(l.name)}</span>
+        <span class="bar"><i style="width:0%"></i></span>
+        <span class="st dim">排队</span>
+      </div>`).join('')}</div>`,
+    footer:`<button class="btn" data-act="close-modal" id="run-cancel">取消</button>
+      <button class="btn primary" data-act="finish-precheck" data-task="${t.id}" id="run-done" disabled>完成</button>`
+  });
+  runPrecheckAnimation(t);
+}
+
+function runPrecheckAnimation(t){
+  const rows = t.lines;
+  let i = 0;
+  const step = () => {
+    if (!document.querySelector('[data-run]')) return;
+    if (i >= rows.length){
+      const bar = $('#run-bar'); if (bar) bar.style.width = '100%';
+      const done = $('#run-done'); if (done) done.disabled = false;
+      return;
+    }
+    const l = rows[i];
+    const row = document.querySelector(`[data-run="${l.id}"]`);
+    if (!row) return;
+    row.querySelector('.st').textContent = '分析中';
+    row.querySelector('.st').className = 'st';
+    row.querySelector('.st').style.color = 'var(--accent-2)';
+    let p = 0;
+    const tick = setInterval(() => {
+      p += 18 + Math.random() * 22;
+      if (p > 100) p = 100;
+      row.querySelector('.bar i').style.width = p + '%';
+      if (p >= 100){
+        clearInterval(tick);
+        row.querySelector('.spin').outerHTML = svg('checkCircle', 13, 'checkmark');
+        const v = l.verdict ? VERDICT[l.verdict] : null;
+        row.querySelector('.st').textContent = v ? v.label : '完成';
+        row.querySelector('.st').style.color = v && v.tone === 'verify' ? 'var(--verify)' : v && v.tone === 'stop' ? 'var(--stop)' : 'var(--doubt)';
+        i += 1;
+        const bar = $('#run-bar');
+        if (bar) bar.style.width = Math.round(i / rows.length * 100) + '%';
+        setTimeout(step, 120);
+      }
+    }, 90);
+  };
+  setTimeout(step, 260);
+}
+
+function modalSubmit(t){
+  const pending = t.lines.filter(l => l.verdict && !l.decision);
+  const blocked = pending.filter(l => l.verdict !== 'missing');
+  const missing = pending.filter(l => l.verdict === 'missing');
+  const conflict = t.lines.filter(l => l.verdict === 'mismatch');
+  openModal({
+    title:'提交专家审核',
+    sub:`${t.contract} · V${curVersion(t)}`,
+    body:`
+      ${blocked.length ? `<div class="callout warn" style="margin-bottom:14px">${svg('alert',14,'ic')}<div>还有 <b>${blocked.length}</b> 条商品未确认待审编码，提交后专家看到的将是未定值。建议先逐条确认。</div></div>` : ''}
+      ${!blocked.length ? `<div class="callout info" style="margin-bottom:14px">${svg('checkCircle',14,'ic')}<div>全部 ${t.lines.length} 条已确认或标记补料。提交将固定 V${curVersion(t)} 与你的确认值，作为专家审核的输入快照。</div></div>` : ''}
+      <table class="tbl tbl-compact">
+        <thead><tr><th>商品</th><th style="width:110px">原码</th><th style="width:110px">待审 HS</th><th style="width:96px">结论</th></tr></thead>
+        <tbody>${t.lines.map(l => `<tr>
+          <td>${esc(l.name)}</td>
+          <td class="mono dim">${esc(l.supplierCode || '—')}</td>
+          <td class="mono">${l.decision ? esc(l.decision.code) : '<span class="dim">未确认</span>'}</td>
+          <td>${l.verdict ? pill(VERDICT[l.verdict].tone, VERDICT[l.verdict].label) : '<span class="dim">—</span>'}</td>
+        </tr>`).join('')}</tbody>
+      </table>
+      ${conflict.length ? `<div class="callout" style="margin-top:14px">${svg('info',14,'ic')}<div>${conflict.length} 条编码与供应商不一致已按你的选择提交；专家仍会独立核查，不默认采纳 AI 建议。</div></div>` : ''}
+      ${missing.length ? `<div class="callout" style="margin-top:14px">${svg('alert',14,'ic')}<div>${missing.length} 条标记为待补料：需供应商补填后重传新版本，整表重新预审。</div></div>` : ''}
+      <div class="callout" style="margin-top:14px">${svg('info',14,'ic')}<div>提交后不能静默修改；如需变更，须形成新的提交记录。</div></div>`,
+    footer:`<button class="btn" data-act="close-modal">取消</button>
+      <button class="btn primary" data-act="confirm-submit" data-task="${t.id}">${blocked.length ? '仍然提交' : '确认提交'}</button>`
+  });
+}
+
+function modalExpert(t, l, mode){
+  const pass = mode === 'pass';
+  openModal({
+    title: pass ? '专家通过' : '退回整改',
+    sub:`${esc(l.name)} · 项 ${esc(l.no)} · 待审 ${l.decision && l.decision.code ? esc(l.decision.code) : '待补料，未定编码'}`,
+    wide:true,
+    body:`<form id="expert-form" onsubmit="return false">
+      <div class="callout info" style="margin-bottom:14px">${svg('shield',14,'ic')}<div>人工结论单独保存。AI 核查结果不改变审批状态，即使置信度为高也不自动通过。</div></div>
+      <div class="field">
+        <span class="lb">最终确认编码</span>
+        <input class="input mono" name="code" value="${esc(l.decision && l.decision.code ? l.decision.code : '')}" ${pass ? '' : 'disabled'} placeholder="${l.decision && l.decision.code ? '' : '编码未定，建议退回补料'}">
+        <div class="hint">${pass ? '如与业务员提交值不同，请填写并在下方说明改码原因。' : '退回不改变编码，整改后重新预审。'}</div>
+      </div>
+      ${pass ? `<div class="field">
+        <span class="lb">专家置信度</span>
+        <div class="radio">
+          <label class="radio-btn"><input type="radio" name="conf" value="high"><span>高 · 三项核清</span></label>
+          <label class="radio-btn"><input type="radio" name="conf" value="mid"><span>中 · 细项待补</span></label>
+          <label class="radio-btn"><input type="radio" name="conf" value="low"><span>低 · 关键证据缺</span></label>
+        </div>
+      </div>
+      <div class="field">
+        <span class="lb">审核意见（通过必填）</span>
+        <textarea class="textarea" name="note" placeholder="说明核对结论、改码原因或保留条件"></textarea>
+      </div>
+      <div class="field" style="margin-bottom:0">
+        <span class="lb">退税率与监管核查</span>
+        <label class="check"><input type="checkbox" name="tax" ${l.verdict === 'match' ? 'checked' : ''}> 已核对适用日期的出口退税率</label>
+        <label class="check"><input type="checkbox" name="reg" ${l.verdict === 'match' ? 'checked' : ''}> 已核对两用物项与监管条件</label>
+      </div>` : `
+      <div class="field">
+        <span class="lb">退回对象</span>
+        <div class="radio">
+          <label class="radio-btn"><input type="radio" name="to" value="supplier" checked><span>供应商 · 补商品事实/图片</span></label>
+          <label class="radio-btn"><input type="radio" name="to" value="business"><span>业务员 · 处理编码分歧</span></label>
+        </div>
+      </div>
+      <div class="field">
+        <span class="lb">问题清单（退回必填）</span>
+        <textarea class="textarea" name="note" placeholder="逐条写清需要补什么、为什么，例如：手柄是否专用未说明，无法判断归 8467 零件还是按塑料件归类"></textarea>
+      </div>
+      <div class="field" style="margin-bottom:0">
+        <span class="lb">责任人</span>
+        <input class="input" name="owner" value="${pass ? '' : '王海涛（供应商）'}">
+      </div>`}
+      <div id="expert-err" class="callout warn" style="display:none;margin-top:14px">${svg('alert',14,'ic')}<div></div></div>
+    </form>`,
+    footer:`<button class="btn" data-act="close-modal">取消</button>
+      <button class="btn ${pass ? 'primary' : 'danger'}" data-act="confirm-expert" data-task="${t.id}" data-line="${l.id}" data-mode="${mode}">${pass ? '确认通过' : '确认退回'}</button>`
+  });
+}
+
+/* ---------------------------- actions ---------------------------- */
+document.addEventListener('click', e => {
+  const el = e.target.closest('[data-act]');
+  if (!el) return;
+  const act = el.dataset.act;
+
+  if (act === 'pick-role'){
+    const r = el.dataset.role;
+    S.role = r; S.sessionRole = r; S.ui = {tab:'hs'};
+    closeModal();
+    go(`${r}/tasks`);
+    if (r === 'business') go('business/overview');
+    if (r === 'expert') go('expert/queue');
+    return;
+  }
+  if (act === 'switch-role'){ modalRolePicker(); return; }
+  if (act === 'open-role-menu'){ modalRolePicker(); return; }
+  if (act === 'close-modal'){ closeModal(); return; }
+  if (act === 'modal-mask'){ if (e.target === el) closeModal(); return; }
+  if (act === 'open-upload'){ modalUpload(el.dataset.task || ''); return; }
+
+  if (act === 'open-task'){ go(`${roleOf()}/task/${el.dataset.task}`); return; }
+  if (act === 'open-line'){ go(`${roleOf()}/task/${el.dataset.task}/${el.dataset.line}`); S.ui = {tab:(S.ui&&S.ui.tab)||'hs'}; return; }
+  if (act === 'close-detail'){ go(`${roleOf()}/task/${el.dataset.task || parseRoute().a}`); return; }
+  if (act === 'set-tab'){ S.ui = {...(S.ui||{}), tab: el.dataset.tab}; render(); return; }
+
+  if (act === 'switch-version'){ toast(`原型演示：切到 V${el.dataset.v}（旧版结论仅作历史查看）`); return; }
+
+  if (act === 'confirm-upload'){
+    const t = task(el.dataset.task);
+    if (!t){ toast('原型演示：新任务创建未实现，请进入已有任务重传'); return; }
+    const fi = document.querySelector('#file-input');
+    const f = fi && fi.files && fi.files[0];
+    const name = f ? f.name : '（未选择文件）';
+    const size = f ? Math.max(1, Math.round(f.size / 1024)) + ' KB' : '—';
+    const v = curVersion(t) + 1;
+    t.versions.push({v, file:name, size, at:now(), by:ROLE.supplier.person});
+    t.prechecked = false; t.precheckAt = null;
+    t.submitted = false; t.submittedAt = null;
+    t.lines.forEach(l => { l.verdict = null; l.verdictConf = null; l.aiCode = null; l.aiReason = ''; l.aiGap = ''; l.decision = null; l.needSupplement = false; l.expert = {done:false, result:null, checks:[], confidence:null, note:'', issues:[]}; });
+    t.updatedAt = now();
+    t.log.unshift({at:now(), by:ROLE.supplier.person, role:'供应商', act:'上传 V' + v, desc:`${name}；整表重新解析，待业务员重新预审，V${v-1} 结论保留为历史。`});
+    closeModal();
+    go('supplier/task/' + t.id);
+    toast(`已上传 V${v}：需业务员重新预审，旧版结论不再生效`);
+    return;
+  }
+  if (act === 'run-precheck'){
+    const t = task(el.dataset.task);
+    if (!t) return;
+    t.prechecked = true; t.precheckAt = now();
+    t.lines.forEach(l => { if (!l.verdict){ l.verdict = 'unsure'; l.verdictConf = 'mid'; l.aiCode = l.supplierCode; l.aiReason = '按商品事实独立归类后与供应商原码比较，关键参数不足，暂不能形成唯一结论。'; l.aiGap = '需补充关键归类参数。'; } });
+    t.log.unshift({at:now(), by:ROLE.business.person, role:'业务员', act:'启动预审', desc:`对 V${curVersion(t)} 全部 ${t.lines.length} 条商品执行 HS 预审。`});
+    modalPrecheck(t);
+    return;
+  }
+  if (act === 'finish-precheck'){
+    closeModal();
+    const t = task(el.dataset.task);
+    render();
+    toast(`预审完成：${t.lines.filter(l=>l.verdict==='match').length} 条一致 · ${t.lines.filter(l=>l.verdict==='mismatch').length} 条不一致 · ${t.lines.filter(l=>l.verdict==='unsure').length} 条无法确认`);
+    return;
+  }
+
+  if (act === 'confirm-code'){
+    const t = task(el.dataset.task), l = line(t, el.dataset.line);
+    l.decision = {code: el.dataset.code, at: now(), by: ROLE.business.person, note: el.dataset.code === l.aiCode ? '采纳 AI 建议' : '采用供应商原码'};
+    t.log.unshift({at:now(), by:ROLE.business.person, role:'业务员', act:'确认待审编码', desc:`${l.name}：${l.decision.code}（${l.decision.note}）`});
+    render(); toast(`已确认 ${l.name} → ${l.decision.code}`);
+    return;
+  }
+  if (act === 'undo-decision'){
+    const t = task(el.dataset.task), l = line(t, el.dataset.line);
+    l.decision = null; render(); toast('已撤回确认');
+    return;
+  }
+  if (act === 'need-supplement'){
+    const t = task(el.dataset.task), l = line(t, el.dataset.line);
+    l.decision = {code: null, at: now(), by: ROLE.business.person, note: '标记待补料'};
+    l.needSupplement = true;
+    t.log.unshift({at:now(), by:ROLE.business.person, role:'业务员', act:'标记待补料', desc:`${l.name}：${l.aiGap || '待供应商补充资料'}`});
+    render(); toast(`已标记 ${l.name} 待补料`);
+    return;
+  }
+
+  if (act === 'open-submit'){ modalSubmit(task(el.dataset.task)); return; }
+  if (act === 'confirm-submit'){
+    const t = task(el.dataset.task);
+    t.submitted = true; t.submittedAt = now(); t.updatedAt = now();
+    t.lines.forEach(l => { if (!l.decision && l.verdict === 'match') l.decision = {code:l.aiCode, at:now(), by:ROLE.business.person, note:'自动沿用一致结论'}; });
+    t.log.unshift({at:now(), by:ROLE.business.person, role:'业务员', act:'提交专家', desc:`提交 V${curVersion(t)} 快照；${t.lines.length} 条商品，${t.lines.filter(l=>l.verdict!=='match').length} 条附补料问题。`});
+    closeModal(); render();
+    toast('已提交专家审核，专家核查自动触发');
+    return;
+  }
+
+  if (act === 'open-expert'){ modalExpert(task(el.dataset.task), line(task(el.dataset.task), el.dataset.line), el.dataset.mode); return; }
+  if (act === 'confirm-expert'){
+    const t = task(el.dataset.task), l = line(t, el.dataset.line);
+    const pass = el.dataset.mode === 'pass';
+    const form = $('#expert-form');
+    const data = new FormData(form);
+    const note = (data.get('note') || '').toString().trim();
+    const errBox = $('#expert-err');
+    const fail = msg => { errBox.style.display = 'flex'; errBox.querySelector('div').textContent = msg; };
+    if (!note) return fail(pass ? '通过必须填写审核意见。' : '退回必须写明具体问题。');
+    if (pass && !(data.get('code') || '').toString().trim()) return fail('待审编码为空时不能通过；请退回补料或先填写编码。');
+    if (pass && !data.get('conf')) return fail('请选择专家置信度。');
+    const finalCode = (data.get('code') || '').toString().trim();
+    const changed = finalCode && l.decision && finalCode !== l.decision.code;
+    l.expert = {
+      done:true, result: pass ? 'pass' : 'return',
+      confidence: pass ? data.get('conf') : null,
+      note: note,
+      code: pass ? finalCode : null,
+      changedFrom: changed ? l.decision.code : null,
+      returnTo: pass ? null : data.get('to'),
+      owner: pass ? null : (data.get('owner') || '').toString().trim(),
+      at: now()
+    };
+    t.log.unshift({at:now(), by:ROLE.expert.person, role:'专家',
+      act: pass ? '专家通过' : `专家退回·${ROLE[l.expert.returnTo || 'supplier'].name}`,
+      desc:`${l.name}：${pass ? `确认 ${finalCode}${changed ? `（改码自 ${l.expert.changedFrom}）` : ''}；${note}` : note}`});
+    t.updatedAt = now();
+    closeModal();
+    if (t.lines.every(x => x.expert && x.expert.result === 'pass')){
+      t.approvedAt = now();
+      t.log.unshift({at:now(), by:'系统', role:'系统', act:'形成确认版本', desc:`全部 ${t.lines.length} 条商品通过，任务标记为专家已确认。`});
+    }
+    render();
+    toast(pass ? `已通过 ${l.name}` : `已退回 ${l.name}`);
+    return;
+  }
+
+  if (act === 'batch-pass'){
+    const t = task(S.ui && S.ui.task);
+    if (!t) return;
+    const notPassed = t.lines.filter(l => !(l.expert && l.expert.result === 'pass'));
+    if (notPassed.length){ toast(`还有 ${notPassed.length} 条未通过（含退回），不能整批通过`); return; }
+    t.lines.forEach(l => { if (l.expert.result === 'pass') l.expert.batch = true; });
+    t.approvedAt = now();
+    t.log.unshift({at:now(), by:ROLE.expert.person, role:'专家', act:'整批通过', desc:`${t.lines.length} 条商品全部通过，形成专家确认版本。`});
+    render(); toast('整批通过，已形成专家确认版本');
+    return;
+  }
+  if (act === 'batch-return'){ toast('退回需逐条指定对象与问题（原型演示）'); return; }
+
+  if (act === 'export'){ exportCsv(); return; }
+  if (act === 'reset-demo'){
+    S = seed(); S.role = null; closeModal(); go(''); render();
+    return;
+  }
+});
+
+/* keyboard: rows */
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape'){ closeModal(); return; }
+  if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('tr[data-act]')){
+    e.preventDefault(); e.target.click();
+  }
+});
+
+/* ---------------------------- export & toast ---------------------------- */
+function exportCsv(){
+  const r = parseRoute();
+  const t = task(r.b || (S.ui && S.ui.task));
+  if (!t){ toast('未定位到任务，导出取消'); return; }
+  const head = ['合同号','项号','主品名','别名','规格','供应商海关编码','AI推荐HScode','预审结论','预审置信度','待审HS','专家结论','备注'];
+  const rows = t.lines.map(l => [
+    t.contract, l.no, l.name, l.alias, l.spec,
+    l.supplierCode || '', l.aiCode || '',
+    l.verdict ? VERDICT[l.verdict].label : '',
+    l.verdictConf ? CONF[l.verdictConf] : '',
+    l.decision ? (l.decision.code || '待补料') : '',
+    l.expert && l.expert.result ? (l.expert.result === 'pass' ? '通过' : '退回') : '',
+    (l.aiGap || '').replace(/\s+/g, ' ')
+  ]);
+  const csv = [head, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\r\n');
+  const blob = new Blob(['\ufeff' + csv], {type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = window.URL.createObjectURL(blob);
+  a.download = `${t.contract}_预审结论_${t.id}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  toast('已导出预审结论（原型为 CSV，正式版需插列保真写回原表）');
+}
+
+let toastTimer = null;
+function toast(msg){
+  let el = $('#toast');
+  if (!el){
+    el = document.createElement('div');
+    el.id = 'toast';
+    el.style.cssText = 'position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:#14181F;color:#fff;font-size:12px;line-height:1.5;padding:8px 14px;border-radius:5px;box-shadow:0 8px 28px -6px rgba(16,22,32,.3);z-index:200;max-width:min(560px,90vw);opacity:0;transition:opacity .16s,transform .16s';
+    document.body.appendChild(el);
+  }
+  el.textContent = msg;
+  requestAnimationFrame(() => { el.style.opacity = '1'; el.style.transform = 'translateX(-50%) translateY(0)'; });
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.style.opacity = '0'; }, 2600);
+}
+
+/* ---------------------------- render ---------------------------- */
+function render(){
+  const role = roleOf();
+  const r = parseRoute();
+  const root = document.getElementById('root');
+  if (!role){ root.innerHTML = viewGate(); return; }
+  S.role = role;
+
+  if (r.seg === 'supplier'){
+    if (r.a === 'task' && r.b) root.innerHTML = viewSupplierTask(task(r.b));
+    else root.innerHTML = viewSupplierTasks();
+    return;
+  }
+  if (r.seg === 'business'){
+    if (r.a === 'overview') root.innerHTML = viewBusinessOverview();
+    else if (r.a === 'task' && r.b) root.innerHTML = viewTask('business', task(r.b), r.c || '');
+    else root.innerHTML = viewBusinessTasks();
+    return;
+  }
+  if (r.seg === 'expert'){
+    if (r.a === 'archive') root.innerHTML = viewExpertArchive();
+    else if (r.a === 'task' && r.b) root.innerHTML = viewTask('expert', task(r.b), r.c || '');
+    else root.innerHTML = viewExpertQueue();
+  }
+}
+
+/* ---------------------------- boot ---------------------------- */
+(function boot(){
+  const r = parseRoute();
+  if (r.seg === 'supplier' || r.seg === 'business' || r.seg === 'expert') S.role = r.seg;
+  render();
+})();
+</script>
+</body>
+</html>
