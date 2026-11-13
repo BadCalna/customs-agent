@@ -40,3 +40,9 @@ htmlcov/
 # Local business documents and uploads
 /data/private/
 /uploads/
+
+# Real business templates (local reference only)
+/docs/参考模板/
+
+# Local assistant memory
+.workbuddy/
