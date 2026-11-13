@@ -1037,7 +1037,7 @@ function viewGate(){
     <main class="gate-main">
       <section class="gate-intro">
         <h1>供应商上传，业务员预审，专家核查。<br>三段各看各的。</h1>
-        <p class="lede">一个审核任务 = 一份供应商 Excel。文件进来先解析留存，业务员点击预审才跑归类；AI 建议与原值并列保留，专家核查要素、附图、退税与监管依据后人工通过或退回。任一环节的输入版本都可追溯。</p>
+        <p class="lede">一个审核任务 = 一份供应商 Excel。文件进来先解析留存并自动预审；AI 建议与原值并列保留，专家核查要素、附图、退税与监管依据后人工通过或退回。任一环节的输入版本都可追溯。</p>
         <figure class="gate-fig">
           <svg viewBox="0 0 704 210" role="img" aria-label="四段流转与预审结果三列：供应商原码、AI推荐HScode、预审结论">
             <rect width="704" height="210" fill="#FCFCFD"/>
@@ -1281,7 +1281,7 @@ function viewSupplierTasks(){
     <div class="page-hd">
       <div>
         <h1>我的审核任务</h1>
-        <p class="sub">采购合同签订后，由你上传装箱明细与申报要素两页签。文件只做解析留存，业务员点击预审后才开始归类。</p>
+        <p class="sub">采购合同签订后，由你上传装箱明细与申报要素两页签。文件解析留存后自动预审。</p>
       </div>
       <div class="hd-actions">
         <button class="btn primary" data-act="open-upload" data-task="">${svg('upload', 14)} 上传业务 Excel</button>
@@ -1417,7 +1417,7 @@ function viewBusinessOverview(){
       <div class="hd-actions"><button class="btn" data-act="switch-role">${svg('users', 14)} 切换角色</button></div>
     </div>
     <div class="kpi-row">
-      <div class="kpi"><div class="k">待启动预审</div><div class="v">${needPre.length}<small>个任务</small></div><div class="foot">${needPre.length ? needPre.map(t=>t.id.slice(-4)).join(' · ') : '已全部启动'}</div></div>
+      <div class="kpi"><div class="k">待预审</div><div class="v">${needPre.length}<small>个任务</small></div><div class="foot">${needPre.length ? needPre.map(t=>t.id.slice(-4)).join(' · ') : '已全部预审'}</div></div>
       <div class="kpi"><div class="k">待你确认编码</div><div class="v">${flagged}<small>条</small></div><div class="foot">不一致或无法确认，需人工判断</div></div>
       <div class="kpi"><div class="k">待专家审核</div><div class="v">${submitted.length}<small>个任务</small></div><div class="foot">已提交快照，等待专家处置</div></div>
       <div class="kpi"><div class="k">本月已确认</div><div class="v">${tasks.filter(isApproved).length}<small>个任务</small></div><div class="foot">形成专家确认版本</div></div>
@@ -1580,7 +1580,7 @@ function viewTask(role, t, lineId){
         : t.prechecked
           ? `<button class="btn" data-act="export" title="导出带结论的补料清单">${svg('download', 14)} 导出补料清单</button>
              <button class="btn primary" data-act="open-submit" data-task="${t.id}">${svg('arrowR', 14)} 提交专家审核</button>`
-          : `<span class="tag">待启动预审</span>`);
+          : `<span class="tag">待预审</span>`);
 
   const listPanel = `<div class="panel" style="margin:0">
     <div class="panel-hd">
@@ -1682,7 +1682,7 @@ function tabContent(tab, role, t, l){
 function tabHs(role, t, l){
   const isExpert = role === 'expert';
   const v = l.verdict ? VERDICT[l.verdict] : null;
-  if (!l.verdict) return `<div class="empty">该商品尚未执行预审。<br><span class="dim">业务员点击「启动预审」后生成 AI 建议与比较结论。</span></div>`;
+  if (!l.verdict) return `<div class="empty">该商品尚未执行预审。<br><span class="dim">上传后自动预审生成 AI 建议与比较结论。</span></div>`;
   return `
     <div class="cmp">
       <div class="cmp-col">
@@ -1837,7 +1837,7 @@ function detailFooter(role, t, l){
 }
 
 function businessFooter(t, l){
-  if (!l.verdict) return `<div class="dp-ft"><span class="note">尚未预审</span><button class="btn primary sm" data-act="run-precheck" data-task="${t.id}">启动预审</button></div>`;
+  if (!l.verdict) return `<div class="dp-ft"><span class="note">尚未预审</span><button class="btn primary sm" data-act="run-precheck" data-task="${t.id}">重新预审</button></div>`;
   if (t.submitted) return `<div class="dp-ft"><span class="note">${svg('checkCircle', 13)} 已提交专家，编码锁定为 ${esc(l.decision ? l.decision.code : '—')}</span></div>`;
   if (l.decision) {
     return `<div class="dp-ft">
@@ -1940,9 +1940,9 @@ function modalUpload(taskId){
       <div class="dp-sec" style="margin-top:16px">
         <div class="dp-sec-hd"><h3>上传后会发生什么</h3></div>
         <div class="note-block stack-8">
-          <div>① 系统保存原文件与版本，解析两个页签、合同项号与附图，<b>不自动启动归类</b>。</div>
+          <div>① 系统保存原文件与版本，解析两个页签、合同项号与附图，<b>随后自动启动预审</b>。</div>
           <div>② 解析失败的行单独列出，由供应商修正后重传，不静默丢弃。</div>
-          <div>③ 业务员点击预审后，才对当前版本执行 HS 预审。</div>
+          <div>③ 预审自动执行；需要时业务员可手动重新预审。</div>
         </div>
       </div>
       <div class="callout" style="margin-top:14px">${svg('info',14,'ic')}<div>原型不解析真实文件；确认后仅演示版本追加与状态流转。</div></div>`,
@@ -1972,9 +1972,16 @@ function bindUpload(){
   }
 }
 
+function startPrecheck(t, auto){
+  t.prechecked = true; t.precheckAt = now();
+  t.lines.forEach(l => { if (!l.verdict){ l.verdict = 'unsure'; l.verdictConf = 'mid'; l.aiCode = l.supplierCode; l.aiReason = '按商品事实独立归类后与供应商原码比较，关键参数不足，暂不能形成唯一结论。'; l.aiGap = '需补充关键归类参数。'; } });
+  t.log.unshift({at:now(), by: auto ? '系统' : ROLE.business.person, role: auto ? '系统' : '业务员', act:'启动预审', desc:`对 V${curVersion(t)} 全部 ${t.lines.length} 条商品执行 HS 预审${auto ? '（上传后自动触发）' : ''}。`});
+  modalPrecheck(t);
+}
+
 function modalPrecheck(t){
   openModal({
-    title:'启动预审',
+    title:'自动预审',
     sub:`${t.contract} · V${curVersion(t)} · ${t.lines.length} 条申报记录`,
     wide:true,
     body:`<div class="callout info" style="margin-bottom:14px">${svg('sparkle',14,'ic')}<div>对当前版本的每条商品：先按商品事实独立推荐 HS，再与供应商原码比较，写入「AI推荐HScode」「预审结论」两列，原码不动。</div></div>
@@ -2149,19 +2156,17 @@ document.addEventListener('click', e => {
     t.submitted = false; t.submittedAt = null;
     t.lines.forEach(l => { l.verdict = null; l.verdictConf = null; l.aiCode = null; l.aiReason = ''; l.aiGap = ''; l.decision = null; l.needSupplement = false; l.expert = {done:false, result:null, checks:[], confidence:null, note:'', issues:[]}; });
     t.updatedAt = now();
-    t.log.unshift({at:now(), by:ROLE.supplier.person, role:'供应商', act:'上传 V' + v, desc:`${name}；整表重新解析，待业务员重新预审，V${v-1} 结论保留为历史。`});
+    t.log.unshift({at:now(), by:ROLE.supplier.person, role:'供应商', act:'上传 V' + v, desc:`${name}；整表重新解析并自动预审，V${v-1} 结论保留为历史。`});
     closeModal();
     go('supplier/task/' + t.id);
-    toast(`已上传 V${v}：需业务员重新预审，旧版结论不再生效`);
+    toast(`已上传 V${v}：自动预审已启动，旧版结论不再生效`);
+    startPrecheck(t, true);
     return;
   }
   if (act === 'run-precheck'){
     const t = task(el.dataset.task);
     if (!t) return;
-    t.prechecked = true; t.precheckAt = now();
-    t.lines.forEach(l => { if (!l.verdict){ l.verdict = 'unsure'; l.verdictConf = 'mid'; l.aiCode = l.supplierCode; l.aiReason = '按商品事实独立归类后与供应商原码比较，关键参数不足，暂不能形成唯一结论。'; l.aiGap = '需补充关键归类参数。'; } });
-    t.log.unshift({at:now(), by:ROLE.business.person, role:'业务员', act:'启动预审', desc:`对 V${curVersion(t)} 全部 ${t.lines.length} 条商品执行 HS 预审。`});
-    modalPrecheck(t);
+    startPrecheck(t, false);
     return;
   }
   if (act === 'finish-precheck'){

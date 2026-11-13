@@ -37,10 +37,10 @@ h1 { font-size:22px; font-weight:700; color:#30285b; text-align:center; margin:0
 <div class="flow" aria-label="供应商上传、业务员预审、专家审核及退回补料流程">
   <div class="step boundary"><span class="num">起点</span><span class="role">合同</span><div class="action"><strong>采购合同签订完成</strong><small>本轮流程从合同完成后开始。</small></div></div>
   <div class="arrow" aria-hidden="true">↓</div>
-  <div class="step supplier"><span class="num">01</span><span class="role">供应商</span><div class="action"><strong>上传业务Excel</strong><small>提交装箱明细和申报要素页，保留供应商HS、申报要素、退税率及附图。系统只做解析、关联和版本留存，上传不自动触发归类。</small></div></div>
+  <div class="step supplier"><span class="num">01</span><span class="role">供应商</span><div class="action"><strong>上传业务Excel</strong><small>提交装箱明细和申报要素页，保留供应商HS、申报要素、退税率及附图。系统完成解析、关联和版本留存后自动启动预审。</small></div></div>
   <div class="branch"><b>文件/关联异常：</b>缺页签、合同项关系不清、无法读取图片分别说明。文件解析失败由供应商修正重传；查询失败与商品低置信度分开记录。</div>
   <div class="arrow" aria-hidden="true">↓</div>
-  <div class="step business" id="business-precheck"><span class="num">02</span><span class="role">业务员</span><div class="action"><strong>点击“预审”</strong><small>以当前上传版本启动HS预审，预审任务与专家审核任务分开。</small></div></div>
+  <div class="step business" id="business-precheck"><span class="num">02</span><span class="role">系统</span><div class="action"><strong>自动预审</strong><small>以当前上传版本自动启动HS预审，预审执行与专家审核执行分开。</small></div></div>
   <div class="arrow" aria-hidden="true">↓</div>
   <div class="step system"><span class="num">03</span><span class="role">AI预审</span><div class="action"><strong>独立推荐HS，与供应商编码比较</strong><small>装箱明细：合同第一条品名＝主品名，附件清单品名＝别名，结合规格和厂家/供应商型号；按合同号＋项号定位申报行，读取该行附图。查官方与第三方形成建议，再比较供应商HS。结果写入“海关编码 → AI推荐HScode → 预审结论”三列，供应商原码保持。</small></div></div>
   <div class="branch"><b>预审结论：</b>一致 / 不一致 / 无法确认 / 供应商未填 / 编码格式或有效性异常 / 关联异常；写明事实、原因、预审置信度和需补资料。同码但缺关键证据仍为“无法确认”，不自动通过。</div>
@@ -61,7 +61,7 @@ h1 { font-size:22px; font-weight:700; color:#30285b; text-align:center; margin:0
 <h2>Excel结果列与标记</h2>
 <table><colgroup><col style="width:23%"><col><col style="width:24%"></colgroup><thead><tr><th>字段</th><th>写入内容</th><th>责任阶段</th></tr></thead><tbody>
 <tr><td>海关编码</td><td>供应商原HS，原文保留。</td><td>供应商填写；AI不覆盖</td></tr>
-<tr><td>AI推荐HScode</td><td>紧邻海关编码右侧；有依据的完整10位建议，无法定码注明待补。</td><td>业务员点击预审</td></tr>
+<tr><td>AI推荐HScode</td><td>紧邻海关编码右侧；有依据的完整10位建议，无法定码注明待补。</td><td>上传后自动预审</td></tr>
 <tr><td>预审结论</td><td>紧邻AI推荐HScode右侧；比较状态、差异原因、预审置信度、具体补料问题及来源状态。</td><td>AI输出，业务员处置</td></tr>
 <tr><td>申报要素、退税率、附图</td><td>供应商原值保留；图片只证实可见事实，不直接推税率或工艺。</td><td>专家审核输入</td></tr>
 <tr><td>专家审核结论及置信度</td><td>逐项匹配与冲突、实际适用法规、退税/监管待核条件、低置信度原因和补料清单。</td><td>专家审核AI辅助</td></tr>
