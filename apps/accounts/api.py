@@ -3,9 +3,10 @@
 业务读写端点由 P02 起在各自任务包里实现，统一复用本文件的错误语义和
 ``accounts.permissions`` 的对象级校验。
 
-CSRF 说明：Django Ninja 1.8 的 API 视图在中间件层被豁免 CSRF，cookie/session
-认证的校验改由认证器或视图显式执行。本文件对写端点显式调用 ``check_csrf``，
-登录同样防护；GET 只种下 csrftoken cookie，不产生业务副作用。
+CSRF 说明：Django Ninja 1.8 的 API 视图在中间件层被豁免 CSRF，因此由
+``apps.accounts.auth`` 的公共认证器统一校验带 session 的写请求；登录端点使用
+``auth=None``，在本文件显式调用 ``enforce_csrf``。GET 只种下 csrftoken cookie，
+不产生业务副作用。
 """
 from django.contrib.auth import authenticate
 from django.contrib.auth import login as django_login
@@ -14,9 +15,8 @@ from django.core.exceptions import PermissionDenied
 from django.http import Http404, JsonResponse
 from ninja import Router, Schema
 from ninja.errors import AuthenticationError, HttpError
-from ninja.utils import check_csrf
 
-from .auth import session_auth
+from .auth import enforce_csrf, session_auth
 from .errors import ApiError, AuthenticationRequired, error_payload
 from .models import Role
 
@@ -50,15 +50,10 @@ def _session_payload(user) -> dict:
     }
 
 
-def _enforce_csrf(request):
-    if check_csrf(request):
-        raise ApiError(403, "csrf_failed", "CSRF 校验失败，请重新获取令牌后重试")
-
-
 @router.post("/auth/login", auth=None, response=SessionOut)
 def login(request, payload: LoginIn):
     """账号密码登录。写请求同样做 CSRF 校验；失败不区分“用户不存在”和“密码错误”。"""
-    _enforce_csrf(request)
+    enforce_csrf(request)
     user = authenticate(request, username=payload.username, password=payload.password)
     if user is None or not user.is_active:
         raise ApiError(401, "invalid_credentials", "用户名或密码不正确")
@@ -70,7 +65,7 @@ def login(request, payload: LoginIn):
 
 @router.post("/auth/logout", auth=session_auth, response=OkOut)
 def logout(request):
-    _enforce_csrf(request)
+    # CSRF 已由公共认证器统一校验（auth.py），视图不再重复。
     django_logout(request)
     return {"status": "ok"}
 

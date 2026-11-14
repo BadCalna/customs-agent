@@ -114,8 +114,15 @@ class ModelConstraintTests(TestCase):
             )
 
     def test_decision_item_unique(self):
+        confirmation = Confirmation.objects.create(
+            item=self.item, revision=2, confirmed_hs="8544", created_by=self.operator,
+        )
         submission = Submission.objects.create(
             task=self.task, version=self.version, revision=1, created_by=self.operator,
+        )
+        SubmissionItem.objects.create(
+            submission=submission, item=self.item, confirmation=confirmation,
+            submitted_hs="8544", item_revision=2,
         )
         decision = Decision.objects.create(
             submission=submission, action=Decision.Action.APPROVE, created_by=self.expert,
@@ -195,8 +202,15 @@ class ValueSeparationTests(TestCase):
         self.assertEqual(snapshot.item_revision, 2)
 
     def test_decision_records_change_before_and_after(self):
+        confirmation = Confirmation.objects.create(
+            item=self.item, revision=2, confirmed_hs="8544422900", created_by=self.operator,
+        )
         submission = Submission.objects.create(
             task=self.task, version=self.version, revision=1, created_by=self.operator,
+        )
+        SubmissionItem.objects.create(
+            submission=submission, item=self.item, confirmation=confirmation,
+            submitted_hs="8544422900", item_revision=2,
         )
         decision = Decision.objects.create(
             submission=submission, action=Decision.Action.APPROVE,

@@ -10,7 +10,18 @@
 import uuid
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import models
+
+
+def _related_or_none(obj, name):
+    """安全读取外键关联；关联未设置或指向不存在对象时返回 None。"""
+    if getattr(obj, f"{name}_id", None) is None:
+        return None
+    try:
+        return getattr(obj, name)
+    except models.ObjectDoesNotExist:
+        return None
 
 
 class Task(models.Model):
@@ -225,6 +236,16 @@ class Submission(models.Model):
             ),
         ]
 
+    def clean(self):
+        # 快照内部一致性：提交的文件版本必须属于该任务。
+        version = _related_or_none(self, "version")
+        if version is not None and self.task_id and version.task_id != self.task_id:
+            raise ValidationError("提交的文件版本必须属于该任务，不能跨任务引用。")
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        return super().save(*args, **kwargs)
+
 
 class SubmissionItem(models.Model):
     """提交快照行：固定提交时的商品修订和待审 HS，后续编辑不得静默改变。"""
@@ -247,6 +268,30 @@ class SubmissionItem(models.Model):
         constraints = [
             models.UniqueConstraint(fields=["submission", "item"], name="uniq_submission_item"),
         ]
+
+    def clean(self):
+        """快照内部一致性：版本、商品、确认记录、修订与 HS 必须互相对应。
+
+        只保证“这一份快照自洽”，不保证“提交用的是最新确认”——后者是提交事务的
+        时效校验（409），由 P09 负责；旧快照在商品后续被修改后仍应原样可查。
+        """
+        submission = _related_or_none(self, "submission")
+        item = _related_or_none(self, "item")
+        confirmation = _related_or_none(self, "confirmation")
+        if submission is None or item is None or confirmation is None:
+            return
+        if item.version_id != submission.version_id:
+            raise ValidationError("提交快照行的商品必须属于该提交的文件版本，不能把旧版本商品放进新版本提交。")
+        if confirmation.item_id != item.pk:
+            raise ValidationError("提交快照行引用的确认记录必须属于同一商品。")
+        if self.item_revision != confirmation.revision:
+            raise ValidationError("提交快照行的商品修订必须与所引用确认记录的修订一致。")
+        if self.submitted_hs != confirmation.confirmed_hs:
+            raise ValidationError("提交快照行的 HS 必须取自所引用的确认记录，不能另填。")
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        return super().save(*args, **kwargs)
 
 
 class Decision(models.Model):
@@ -301,6 +346,23 @@ class DecisionItem(models.Model):
         constraints = [
             models.UniqueConstraint(fields=["decision", "item"], name="uniq_decision_item"),
         ]
+
+    def clean(self):
+        decision = _related_or_none(self, "decision")
+        if decision is None or self.item_id is None:
+            return
+        submission = _related_or_none(decision, "submission")
+        if submission is None:
+            return
+        row = submission.items.filter(item_id=self.item_id).first()
+        if row is None:
+            raise ValidationError("专家逐行终值只能针对该提交快照中的商品。")
+        if self.previous_hs and self.previous_hs != row.submitted_hs:
+            raise ValidationError("专家改码的前值必须等于提交快照中的待审 HS。")
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        return super().save(*args, **kwargs)
 
 
 class Issue(models.Model):

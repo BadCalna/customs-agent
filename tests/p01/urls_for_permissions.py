@@ -9,6 +9,8 @@ from django.http import Http404, JsonResponse
 from django.urls import path
 from ninja import NinjaAPI
 
+from config.urls import urlpatterns as project_urlpatterns
+
 from apps.accounts.api import install_error_handlers
 from apps.accounts.auth import session_auth
 from apps.accounts.permissions import DECIDE, READ, require_action
@@ -42,4 +44,4 @@ def decide(request, submission_id: str):
     return JsonResponse({"submission_id": str(submission.pk), "decided": True})
 
 
-urlpatterns = [path("probe/", api.urls)]
+urlpatterns = [*project_urlpatterns, path("probe/", api.urls)]

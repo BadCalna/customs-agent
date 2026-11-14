@@ -6,7 +6,18 @@
 import uuid
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import models
+
+
+def _related_or_none(obj, name):
+    """安全读取外键关联；关联未设置或指向不存在对象时返回 None。"""
+    if getattr(obj, f"{name}_id", None) is None:
+        return None
+    try:
+        return getattr(obj, name)
+    except models.ObjectDoesNotExist:
+        return None
 
 
 class Run(models.Model):
@@ -53,6 +64,19 @@ class Run(models.Model):
             models.Index(fields=["task", "kind", "is_current"], name="idx_run_task_kind_current"),
         ]
 
+    def clean(self):
+        version = _related_or_none(self, "version")
+        if version is not None and self.task_id and version.task_id != self.task_id:
+            raise ValidationError("分析执行的文件版本必须属于该任务，不能跨任务引用。")
+        submission = _related_or_none(self, "submission")
+        if submission is not None:
+            if submission.task_id != self.task_id or submission.version_id != self.version_id:
+                raise ValidationError("专家核查必须绑定同任务、同文件版本的提交快照。")
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        return super().save(*args, **kwargs)
+
 
 class RunItem(models.Model):
     class Status(models.TextChoices):
@@ -94,3 +118,17 @@ class RunItem(models.Model):
         constraints = [
             models.UniqueConstraint(fields=["run", "item"], name="uniq_run_item"),
         ]
+
+    def clean(self):
+        run = _related_or_none(self, "run")
+        item = _related_or_none(self, "item")
+        if run is None or item is None:
+            return
+        if item.version_id != run.version_id:
+            raise ValidationError("执行行的商品必须属于该执行的文件版本，不能把旧版本商品挂到新执行上。")
+        if run.submission_id and not run.submission.items.filter(item_id=item.pk).exists():
+            raise ValidationError("专家核查的执行行商品必须属于所引用的提交快照。")
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        return super().save(*args, **kwargs)
