@@ -31,6 +31,9 @@ CONTENT_TYPES = {
 
 def _served_file(root: Path, relative: str) -> FileResponse:
     """把仓内相对路径变成响应，越界或后缀不合法一律 404。"""
+    if not settings.DEBUG:
+        # 演示壳含演示账号与本地样例，只在开发模式可用；生产由正式页面替代。
+        raise Http404("演示壳只在开发模式可用")
     relative = relative or ""
     suffix = Path(relative).suffix.lower()
     if suffix not in CONTENT_TYPES:

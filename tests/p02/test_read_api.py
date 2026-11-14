@@ -114,6 +114,54 @@ class ReadApiTest(TestCase):
         response = self.get("/api/v1/tasks")
         self.assertEqual([entry["title"] for entry in response.json()["items"]], ["演示任务-供应商乙"])
 
+    def test_invalid_uuid_is_404_not_500(self):
+        self.login()
+        run = Run.objects.get(version=self.v2)
+        paths = (
+            "/api/v1/tasks/not-a-uuid",
+            "/api/v1/versions/not-a-uuid/items",
+            f"/api/v1/versions/{self.v2.pk}/items/not-a-uuid",
+            "/api/v1/runs/not-a-uuid",
+            f"/api/v1/tasks/{self.main.pk}",
+        )
+        for path in paths[:-1]:
+            with self.subTest(path=path):
+                response = self.get(path)
+                self.assertEqual(response.status_code, 404)
+                self.assertEqual(response.json()["error"]["code"], "not_found")
+        # 非法游标保持 400，不与 404 混淆
+        self.assertEqual(self.get("/api/v1/tasks?cursor=not-base64").status_code, 400)
+
+    def test_tampered_cursor_is_400_not_500(self):
+        import base64
+        import json
+
+        def cursor(payload):
+            return base64.urlsafe_b64encode(json.dumps(payload).encode()).decode().rstrip("=")
+
+        self.login()
+        bad_task_cursors = (
+            {"created_at": 123, "id": "x"},
+            {"created_at": "2026-01-01T00:00:00+08:00", "id": 123},
+            {"created_at": "not-a-time", "id": "00000000-0000-0000-0000-000000000000"},
+            {"created_at": "2026-01-01T00:00:00+08:00", "id": "not-a-uuid"},
+        )
+        for payload in bad_task_cursors:
+            with self.subTest(kind="tasks", payload=payload):
+                response = self.get(f"/api/v1/tasks?cursor={cursor(payload)}")
+                self.assertEqual(response.status_code, 400)
+                self.assertEqual(response.json()["error"]["code"], "invalid_cursor")
+        bad_item_cursors = (
+            {"sheet": "申报要素", "row": "x"},
+            {"sheet": 1, "row": 1},
+            {"sheet": "申报要素", "row": 0},
+        )
+        for payload in bad_item_cursors:
+            with self.subTest(kind="items", payload=payload):
+                response = self.get(f"/api/v1/versions/{self.v2.pk}/items?cursor={cursor(payload)}")
+                self.assertEqual(response.status_code, 400)
+                self.assertEqual(response.json()["error"]["code"], "invalid_cursor")
+
     def test_pagination_and_bad_params(self):
         self.login()
         first = self.get("/api/v1/tasks?limit=2").json()

@@ -13,7 +13,7 @@ from pathlib import Path
 
 from django.conf import settings
 from django.core.management import call_command
-from django.test import Client, SimpleTestCase, TestCase
+from django.test import Client, SimpleTestCase, TestCase, override_settings
 
 from apps.accounts.models import User
 from apps.api.fixtures import DemoSet
@@ -50,6 +50,7 @@ class DemoAssetsTest(SimpleTestCase):
         self.assertIn("isCurrent", state)
 
 
+@override_settings(DEBUG=True)
 class DemoRouteTest(SimpleTestCase):
     """受控静态路由：能取到文件，越界与非法后缀返回 404。"""
 
@@ -95,6 +96,13 @@ class DemoRouteTest(SimpleTestCase):
             "/demo/fixtures/../DEMO-SET.json.bak",
         ):
             self.assertEqual(self.client.get(path).status_code, 404, path)
+
+    @override_settings(DEBUG=False)
+    def test_shell_is_disabled_outside_dev(self):
+        # 演示壳含演示账号与本地样例，非开发模式必须整体不可见。
+        for path in ("/demo/", "/demo/assets/app.js", "/demo/fixtures/DEMO-SET.json"):
+            with self.subTest(path=path):
+                self.assertEqual(self.client.get(path).status_code, 404)
 
     def test_missing_asset_is_404(self):
         self.assertEqual(self.client.get("/demo/assets/missing.js").status_code, 404)

@@ -30,7 +30,7 @@ make seed-contracts    # 契约演示任务、V1/V2、商品与 mock 执行（�
 make contracts         # 重新生成 schemas、openapi；有演示数据时同时刷新 fixtures 与 DEMO-SET
 make demo-components   # seed-contracts + contracts + 启动服务，打开 /demo/ 看组件
 make test-contracts    # schema 漂移、OpenAPI 漂移、枚举对齐、样例校验、端点行为
-make test TASK=P02     # 与上一条同入口，55 项
+make test TASK=P02     # 与上一条同入口，58 项
 ```
 
 修改任何 schema、枚举或端点后必须重新执行 `make contracts` 并提交差异；
