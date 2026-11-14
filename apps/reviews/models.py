@@ -13,6 +13,8 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 
+from apps.model_guards import FixedInputModel, protect_from_direct_delete
+
 
 def _related_or_none(obj, name):
     """安全读取外键关联；关联未设置或指向不存在对象时返回 None。"""
@@ -180,8 +182,13 @@ class ItemImage(models.Model):
         ]
 
 
-class Confirmation(models.Model):
-    """业务员确认 HS 的追加式记录；当前确认值取该商品最大 revision（D2）。"""
+class Confirmation(FixedInputModel):
+    """业务员确认 HS 的追加式记录；当前确认值取该商品最大 revision（D2）。
+
+    一次确认落库后内容固定：新确认只能追加新行，不能改写或删除旧行。
+    """
+
+    fixed_input_fields = ("item", "revision", "previous_hs", "confirmed_hs", "reason", "created_by")
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     item = models.ForeignKey(Item, on_delete=models.CASCADE, related_name="confirmations", verbose_name="商品行")
@@ -195,7 +202,7 @@ class Confirmation(models.Model):
     )
     created_at = models.DateTimeField("确认时间", auto_now_add=True)
 
-    class Meta:
+    class Meta(FixedInputModel.Meta):
         verbose_name = "业务员确认"
         verbose_name_plural = "业务员确认"
         ordering = ["item_id", "revision"]
@@ -204,8 +211,10 @@ class Confirmation(models.Model):
         ]
 
 
-class Submission(models.Model):
+class Submission(FixedInputModel):
     """业务员整批提交给专家的不可变快照（D2、R09：整批提交，不做部分通过）。"""
+
+    fixed_input_fields = ("task", "version", "revision", "created_by")
 
     class Status(models.TextChoices):
         PENDING = "pending", "待专家审核"
@@ -226,7 +235,7 @@ class Submission(models.Model):
     )
     created_at = models.DateTimeField("提交时间", auto_now_add=True)
 
-    class Meta:
+    class Meta(FixedInputModel.Meta):
         verbose_name = "提交快照"
         verbose_name_plural = "提交快照"
         ordering = ["-created_at"]
@@ -242,29 +251,11 @@ class Submission(models.Model):
         if version is not None and self.task_id and version.task_id != self.task_id:
             raise ValidationError("提交的文件版本必须属于该任务，不能跨任务引用。")
 
-    def _check_immutable(self):
-        """已创建的快照不允许改挂任务/版本/修订/提交人，只允许业务状态更新。
 
-        否则“父记录换版本、明细仍是旧版本”会绕过 SubmissionItem 的版本校验，
-        让专家看到的不是业务员当时提交的那一批商品。
-        """
-        if self._state.adding:
-            return
-        original = type(self).objects.filter(pk=self.pk).first()
-        if original is None:
-            return
-        for field in ("task_id", "version_id", "revision", "created_by_id"):
-            if getattr(original, field) != getattr(self, field):
-                raise ValidationError("已创建的提交快照不可更换任务、文件版本、修订或提交人；只允许更新业务状态。")
-
-    def save(self, *args, **kwargs):
-        self.clean()
-        self._check_immutable()
-        return super().save(*args, **kwargs)
-
-
-class SubmissionItem(models.Model):
+class SubmissionItem(FixedInputModel):
     """提交快照行：固定提交时的商品修订和待审 HS，后续编辑不得静默改变。"""
+
+    fixed_input_fields = ("submission", "item", "confirmation", "item_revision", "submitted_hs")
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     submission = models.ForeignKey(
@@ -277,7 +268,7 @@ class SubmissionItem(models.Model):
     submitted_hs = models.CharField("提交时 HS", max_length=32)
     item_revision = models.PositiveIntegerField("提交时商品修订")
 
-    class Meta:
+    class Meta(FixedInputModel.Meta):
         verbose_name = "提交快照行"
         verbose_name_plural = "提交快照行"
         ordering = ["submission_id", "item_id"]
@@ -305,13 +296,14 @@ class SubmissionItem(models.Model):
         if self.submitted_hs != confirmation.confirmed_hs:
             raise ValidationError("提交快照行的 HS 必须取自所引用的确认记录，不能另填。")
 
-    def save(self, *args, **kwargs):
-        self.clean()
-        return super().save(*args, **kwargs)
 
+class Decision(FixedInputModel):
+    """专家人工决定：整批批准或退回（R09）；专家可直接改码后通过（R08）。
 
-class Decision(models.Model):
-    """专家人工决定：整批批准或退回（R09）；专家可直接改码后通过（R08）。"""
+    决定是历史结论：落库后动作、对象、原因和审核人固定，不能被事后改写或删除。
+    """
+
+    fixed_input_fields = ("submission", "action", "return_to", "reason", "created_by")
 
     class Action(models.TextChoices):
         APPROVE = "approve", "通过"
@@ -337,14 +329,19 @@ class Decision(models.Model):
     )
     created_at = models.DateTimeField("决定时间", auto_now_add=True)
 
-    class Meta:
+    class Meta(FixedInputModel.Meta):
         verbose_name = "专家决定"
         verbose_name_plural = "专家决定"
         ordering = ["-created_at"]
 
 
-class DecisionItem(models.Model):
-    """专家逐行终值；改码必须保存前后值与原因（R08），不改码时最终值等于提交值。"""
+class DecisionItem(FixedInputModel):
+    """专家逐行终值；改码必须保存前后值与原因（R08），不改码时最终值等于提交值。
+
+    逐行终值是历史结论：落库后固定，如需更正只能产生新的专家决定记录。
+    """
+
+    fixed_input_fields = ("decision", "item", "previous_hs", "final_hs", "change_reason")
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     decision = models.ForeignKey(
@@ -355,7 +352,7 @@ class DecisionItem(models.Model):
     final_hs = models.CharField("专家终值", max_length=32, blank=True, default="")
     change_reason = models.TextField("改码原因", blank=True, default="")
 
-    class Meta:
+    class Meta(FixedInputModel.Meta):
         verbose_name = "专家逐行终值"
         verbose_name_plural = "专家逐行终值"
         ordering = ["decision_id", "item_id"]
@@ -447,3 +444,8 @@ class AuditEvent(models.Model):
         verbose_name = "审计事件"
         verbose_name_plural = "审计事件"
         ordering = ["-created_at"]
+
+
+# 历史记录：内容固定（fixed_input_fields）且禁止单独删除；随父记录级联删除仍允许。
+for _model in (SubmissionItem, Confirmation, Decision, DecisionItem):
+    protect_from_direct_delete(_model)

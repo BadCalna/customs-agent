@@ -9,6 +9,8 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 
+from apps.model_guards import FixedInputModel, protect_from_direct_delete
+
 
 def _related_or_none(obj, name):
     """安全读取外键关联；关联未设置或指向不存在对象时返回 None。"""
@@ -20,7 +22,9 @@ def _related_or_none(obj, name):
         return None
 
 
-class Run(models.Model):
+class Run(FixedInputModel):
+    fixed_input_fields = ("task", "version", "kind", "submission")
+
     class Kind(models.TextChoices):
         PRECHECK = "precheck", "业务员预审"
         EXPERT_CHECK = "expert_check", "专家核查"
@@ -37,7 +41,7 @@ class Run(models.Model):
         "reviews.FileVersion", on_delete=models.PROTECT, related_name="runs", verbose_name="文件版本",
     )
     submission = models.ForeignKey(
-        "reviews.Submission", on_delete=models.SET_NULL, null=True, blank=True,
+        "reviews.Submission", on_delete=models.PROTECT, null=True, blank=True,
         related_name="runs", verbose_name="关联提交快照",
         help_text="专家核查绑定业务员提交快照；预审为空。",
     )
@@ -56,7 +60,7 @@ class Run(models.Model):
     started_at = models.DateTimeField("开始时间", null=True, blank=True)
     finished_at = models.DateTimeField("结束时间", null=True, blank=True)
 
-    class Meta:
+    class Meta(FixedInputModel.Meta):
         verbose_name = "分析执行"
         verbose_name_plural = "分析执行"
         ordering = ["-created_at"]
@@ -79,12 +83,10 @@ class Run(models.Model):
             if submission.task_id != self.task_id or submission.version_id != self.version_id:
                 raise ValidationError("专家核查必须绑定同任务、同文件版本的提交快照。")
 
-    def save(self, *args, **kwargs):
-        self.clean()
-        return super().save(*args, **kwargs)
 
+class RunItem(FixedInputModel):
+    fixed_input_fields = ("run", "item")
 
-class RunItem(models.Model):
     class Status(models.TextChoices):
         QUEUED = "queued", "排队中"
         RUNNING = "running", "执行中"
@@ -117,7 +119,7 @@ class RunItem(models.Model):
     error_message = models.TextField("技术失败原因", blank=True, default="")
     updated_at = models.DateTimeField("更新时间", auto_now=True)
 
-    class Meta:
+    class Meta(FixedInputModel.Meta):
         verbose_name = "执行行结果"
         verbose_name_plural = "执行行结果"
         ordering = ["run_id", "item_id"]
@@ -135,6 +137,8 @@ class RunItem(models.Model):
         if run.submission_id and not run.submission.items.filter(item_id=item.pk).exists():
             raise ValidationError("专家核查的执行行商品必须属于所引用的提交快照。")
 
-    def save(self, *args, **kwargs):
-        self.clean()
-        return super().save(*args, **kwargs)
+
+# 执行记录是历史：结果行禁止单独删除，执行本身也禁止单独删除；
+# 随任务级联清理仍允许，避免整库/整任务清理完全不可用。
+for _model in (Run, RunItem):
+    protect_from_direct_delete(_model)

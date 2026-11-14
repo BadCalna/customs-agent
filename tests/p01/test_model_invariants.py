@@ -7,6 +7,7 @@
 """
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
+from django.db.models.deletion import ProtectedError
 from django.test import TestCase, override_settings
 
 from apps.accounts.models import Role
@@ -291,6 +292,118 @@ class RunKindBindingTests(InvariantFixture):
     def test_precheck_without_submission_is_allowed(self):
         run = Run.objects.create(task=self.task, version=self.v2, kind=Run.Kind.PRECHECK)
         self.assertIsNone(run.submission_id)
+
+
+class HistoricalInputTests(InvariantFixture):
+    def setUp(self):
+        super().setUp()
+        self.first = self.make_submission_v2()
+        self.second = self.make_submission_v2(revision=2)
+        self.line = self.make_submission_item(self.first)
+        self.run = Run.objects.create(
+            task=self.task, version=self.v2, kind=Run.Kind.EXPERT_CHECK, submission=self.first,
+        )
+        self.result = RunItem.objects.create(run=self.run, item=self.item_v2)
+
+    def test_new_confirmation_can_only_enter_a_new_snapshot(self):
+        decision = Decision.objects.create(
+            submission=self.first, action=Decision.Action.APPROVE, created_by=self.expert,
+        )
+        original_hs = self.line.submitted_hs
+        trace = DecisionItem.objects.create(
+            decision=decision, item=self.item_v2, previous_hs=original_hs, final_hs=original_hs,
+        )
+        later = Confirmation.objects.create(
+            item=self.item_v2, revision=3, confirmed_hs="8544422910", created_by=self.operator,
+        )
+        self.line.confirmation = later
+        self.line.item_revision = later.revision
+        self.line.submitted_hs = later.confirmed_hs
+        with self.assertRaises(ValidationError):
+            self.line.save()
+        self.make_submission_item(self.second, confirmation=later, revision=3, hs=later.confirmed_hs)
+        self.line.refresh_from_db()
+        self.line.save()
+        self.assertEqual(self.line.confirmation_id, self.confirmation_v2.pk)
+        self.assertEqual(self.line.item_revision, 2)
+        self.assertEqual(self.line.submitted_hs, trace.previous_hs)
+        self.assertEqual(self.second.items.get().submitted_hs, later.confirmed_hs)
+
+    def test_line_cannot_be_moved_or_replaced_by_a_delete(self):
+        self.line.submission = self.second
+        with self.assertRaises(ValidationError):
+            self.line.save(update_fields=["submission"])
+        with self.assertRaises(ProtectedError), transaction.atomic():
+            self.line.delete()
+        with self.assertRaises(ProtectedError), transaction.atomic():
+            self.first.items.all().delete()
+        self.assertTrue(self.first.items.filter(pk=self.line.pk).exists())
+        self.assertFalse(self.second.items.exists())
+
+    def test_run_cannot_be_rebound_but_progress_can_be_saved(self):
+        self.run.submission = self.second
+        with self.assertRaises(ValidationError):
+            self.run.save(update_fields=["submission"])
+        self.run.refresh_from_db()
+        self.assertEqual(self.run.submission_id, self.first.pk)
+        self.run.status = Run.Status.RUNNING
+        self.run.save(update_fields=["status"])
+        self.result.status = RunItem.Status.SUCCEEDED
+        self.result.save(update_fields=["status"])
+        self.assertEqual(self.first.runs.get().status, Run.Status.RUNNING)
+        self.assertEqual(self.run.items.get().status, RunItem.Status.SUCCEEDED)
+
+    def test_run_result_cannot_move_to_another_valid_run(self):
+        self.make_submission_item(self.second)
+        other_run = Run.objects.create(
+            task=self.task, version=self.v2, kind=Run.Kind.EXPERT_CHECK, submission=self.second,
+        )
+        self.result.run = other_run
+        with self.assertRaises(ValidationError):
+            self.result.save()
+        self.assertEqual(self.run.items.get().pk, self.result.pk)
+
+    def test_delete_preserves_referenced_submission_and_unreferenced_cascade(self):
+        self.make_submission_item(self.second)
+        with self.assertRaises(ProtectedError):
+            self.first.delete()
+        self.assertEqual(self.first.runs.get().items.get().item_id, self.first.items.get().item_id)
+        self.second.delete()
+        self.assertEqual(SubmissionItem.objects.count(), 1)
+
+    def test_batch_writes_protect_input_but_allow_progress(self):
+        with self.assertRaises(ValidationError):
+            self.first.items.update(submission_id=self.second.pk)
+        self.run.submission = self.second
+        with self.assertRaises(ValidationError):
+            Run.objects.bulk_update([self.run], ["submission"])
+        with self.assertRaises(ValidationError):
+            Run.objects.bulk_create(
+                [self.run], update_conflicts=True, update_fields=["submission"], unique_fields=["pk"],
+            )
+        self.run.refresh_from_db()
+        self.assertEqual(self.run.submission_id, self.first.pk)
+        self.run.status = Run.Status.SUCCEEDED
+        Run.objects.bulk_update([self.run], ["status"])
+        self.assertEqual(self.first.runs.get().status, Run.Status.SUCCEEDED)
+
+    def test_reverse_relations_cannot_move_historical_inputs(self):
+        with self.assertRaises(ValidationError):
+            self.second.items.add(self.line)
+        with self.assertRaises(ValidationError):
+            self.second.runs.add(self.run)
+        self.assertEqual(self.first.items.get().pk, self.line.pk)
+        self.assertEqual(self.first.runs.get().pk, self.run.pk)
+
+    def test_invalid_batch_insert_leaves_no_partial_snapshots(self):
+        def row(item):
+            return SubmissionItem(
+                submission=self.second, item=item, confirmation=self.confirmation_v2,
+                submitted_hs=self.confirmation_v2.confirmed_hs, item_revision=2,
+            )
+        with self.assertRaises(ValidationError):
+            SubmissionItem.objects.bulk_create([row(self.item_v2), row(self.item_v1)])
+        self.assertFalse(self.second.items.exists())
 
 
 class DecisionChangeTraceTests(InvariantFixture):
