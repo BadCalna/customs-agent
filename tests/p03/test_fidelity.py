@@ -9,7 +9,7 @@ from experiments.excel_fidelity.insert import insert_columns
 from experiments.excel_fidelity.mapping import detect_layout, map_workbook, parse_items
 from experiments.excel_fidelity.references import effective_formulas, transform_formula
 from experiments.excel_fidelity.workbook import FidelityError, NS, Workbook, sha256, xml
-from .fixtures import make_fixture
+from .fixtures import cell, make_fixture
 
 
 class FidelityTests(unittest.TestCase):
@@ -40,6 +40,41 @@ class FidelityTests(unittest.TestCase):
         self.assertNotIn('manufacturer_model', mapping['packing']['fields'])
         self.assertEqual(mapping['packing']['fields']['merge_hint'], 'G')
         self.assertEqual([a['members'][0]['packing_row'] for a in mapping['associations']], [2,3,4])
+
+    def test_result_columns_located_by_labels_at_different_positions(self):
+        labels = (' AI推荐 hsCode ', '业务员确认HS编码', '置信度', '预审结论')
+        fields = ('ai_hs', 'confirmed_hs', 'confidence', 'precheck_conclusion')
+        values = ('SYNTHETIC_AI', 'SYNTHETIC_CONFIRM', '中', '需核对合成参数')
+        for columns in (('AF', 'AG', 'AH', 'AI'), ('M', 'N', 'O', 'Q'), ('J', 'AF', 'N', 'Z')):
+            with self.subTest(columns=columns):
+                make_fixture(self.source)
+                headers = ''.join(cell(f'{column}1', label) for column, label in zip(columns, labels))
+                data = ''.join(cell(f'{column}2', value) for column, value in zip(columns, values))
+                self.edit_part('xl/worksheets/sheet2.xml', lambda text:
+                    text.replace('</row>', headers + '</row>', 1)
+                        .replace(cell('H2', '0') + '</row>', cell('H2', '0') + data + '</row>', 1))
+                before_hash = sha256(self.source.read_bytes())
+                layout = self.layout()
+                self.assertEqual(layout['fields']['hs'], 'D')
+                for field, column, value in zip(fields, columns, values):
+                    self.assertEqual(layout['fields'][field], column)
+                    self.assertEqual(layout['records'][0]['facts'][field],
+                                     {'value': value, 'cell': f'{column}2'})
+                destination = self.root / ('existing-' + columns[0] + '.xlsx')
+                with self.assertRaisesRegex(FidelityError, 'Result columns already present'):
+                    insert_columns(self.source, destination, layout)
+                self.assertFalse(destination.exists())
+                self.assertEqual(sha256(self.source.read_bytes()), before_hash)
+
+    def test_missing_result_columns_reported_and_duplicate_labels_rejected(self):
+        layout = self.layout()
+        for field in ('ai_hs', 'confirmed_hs', 'confidence', 'precheck_conclusion'):
+            self.assertNotIn(field, layout['fields'])
+            self.assertIn(f'missing_column:{field}', layout['warnings'])
+        self.edit_part('xl/worksheets/sheet2.xml', lambda text:
+            text.replace('</row>', cell('M1', 'AI推荐hscode') + cell('AF1', 'AI推荐 HS编码') + '</row>', 1))
+        with self.assertRaisesRegex(FidelityError, 'Duplicate semantic header'):
+            self.layout()
 
     def test_missing_sheet_and_duplicate_headers_fail(self):
         self.edit_part('xl/workbook.xml', lambda text: text.replace('装箱明细', '其他数据'))
@@ -195,9 +230,13 @@ class FidelityTests(unittest.TestCase):
                 self.assertFalse(destination.exists())
 
     def test_result_columns_not_duplicated(self):
-        self.edit_part('xl/worksheets/sheet2.xml', lambda text: text.replace('历史意见', 'AI推荐HScode'))
-        with self.assertRaises(FidelityError):
-            insert_columns(self.source,self.root/'blocked.xlsx',self.layout())
+        for label in ('AI推荐HScode', 'AI推荐hscode', 'AI推荐 HS编码', '业务员确认HScode', '置信度', '预审结论'):
+            with self.subTest(label=label):
+                make_fixture(self.source)
+                self.edit_part('xl/worksheets/sheet2.xml', lambda text: text.replace('历史意见', label))
+                with self.assertRaises(FidelityError):
+                    insert_columns(self.source,self.root/'blocked.xlsx',self.layout())
+                self.assertFalse((self.root/'blocked.xlsx').exists())
 
     def test_cli_reports_and_empty_ai_cells(self):
         report = run(self.source,self.root/'private','SYNTHETIC')

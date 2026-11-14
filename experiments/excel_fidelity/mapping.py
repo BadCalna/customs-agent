@@ -22,6 +22,13 @@ ALIASES = {
     "merge_hint": ("合并申报",),
 }
 
+RESULT_ALIASES = {
+    "ai_hs": ("AI推荐HScode", "AI推荐HS编码", "AI推荐海关编码"),
+    "confirmed_hs": ("业务员确认HScode", "业务员确认HS编码"),
+    "confidence": ("置信度",),
+    "precheck_conclusion": ("预审结论",),
+}
+
 
 def normalized(value: str) -> str:
     return re.sub(r"\s+", "", unicodedata.normalize("NFKC", value)).upper()
@@ -40,11 +47,12 @@ def detect_layout(workbook, role: str) -> dict:
     if len(sheets) != 1:
         raise FidelityError(f"Expected one {label} worksheet; found {len(sheets)}")
     sheet = sheets[0]
+    aliases_by_field = ALIASES | (RESULT_ALIASES if role == "declaration" else {})
     rows = defaultdict(dict)
     for ref, cell in sheet["cells"].items():
         column, row = cell_position(ref)
         if row <= 25:
-            for field, aliases in ALIASES.items():
+            for field, aliases in aliases_by_field.items():
                 if any(field_matches(cell["value"], alias) for alias in aliases):
                     rows[row].setdefault(field, []).append(column)
     required = {"contract", "item"} | ({"hs", "elements"} if role == "declaration" else set())
@@ -59,7 +67,8 @@ def detect_layout(workbook, role: str) -> dict:
     if role == "packing" and "primary_name" not in fields and "name" in fields:
         fields["primary_name"] = fields["name"]
         warnings.append("legacy_name_header: 品名用于本样本主品名，未声称存在合同第一条品名列")
-    optional = ("primary_name", "alias", "specification", "manufacturer_model") if role == "packing" else ("image",)
+    optional = (("primary_name", "alias", "specification", "manufacturer_model")
+                if role == "packing" else ("image", *RESULT_ALIASES))
     warnings.extend(f"missing_column:{field}" for field in optional if field not in fields)
     merges = []
     for merge in sheet["root"].findall("s:mergeCells/s:mergeCell", NS):

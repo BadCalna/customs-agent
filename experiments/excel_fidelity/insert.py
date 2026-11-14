@@ -15,6 +15,7 @@ from pathlib import Path
 from xml.sax.saxutils import escape
 from zipfile import ZipFile
 
+from .mapping import RESULT_ALIASES, field_matches
 from .references import effective_formulas, shift_range, transform_formula
 from .workbook import (FidelityError, NS, Workbook, cell_position, col_label,
                        col_number, resolve_part, sha256, xml)
@@ -396,7 +397,8 @@ def insert_columns(source: str | Path, destination: str | Path, layout: dict) ->
     rows = layout["data_rows"]
     start = col_number(layout["fields"]["hs"]) + 1
     for cell in target["cells"].values():
-        if cell["value"] in ("AI推荐HScode", "预审结论"):
+        if any(field_matches(cell["value"], alias)
+               for aliases in RESULT_ALIASES.values() for alias in aliases):
             raise FidelityError("Result columns already present; resolve reuse explicitly")
     check_supported(original, target, start, [header_row] + rows)
     parts = copy.copy(original.parts)
