@@ -1,0 +1,612 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>P11 处置表单与版本历史 · 组件自测页</title>
+  <meta name="description" content="P11 组件自测页：确认/提交、专家通过/退回、只读版本历史；写端点当前为 501">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%230E4B4F'/%3E%3Cpath d='M4 5h6M4 8h8M4 11h4' stroke='%23F5F1E8' stroke-width='1.2' stroke-linecap='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/demo/assets/styles.css">
+  <link rel="stylesheet" href="/demo/assets/styles/review-actions.css">
+  <style>
+    .p11-shell { min-height: 100vh; display: flex; flex-direction: column; }
+    .p11-main {
+      width: 100%; max-width: 1320px; margin: 0 auto; padding: 18px;
+      display: grid; gap: 20px;
+    }
+    .p11-intro {
+      padding: 16px 18px; background: var(--surface); border: 1px solid var(--line);
+      border-radius: var(--r-l); box-shadow: var(--sh);
+    }
+    .p11-intro h1 {
+      margin: 0; font-family: var(--serif); font-size: 20px; font-weight: 600; color: var(--teal);
+    }
+    .p11-intro .lede { margin-top: 6px; font-size: 12px; color: var(--ink-2); max-width: 980px; }
+    .p11-block { display: grid; gap: 10px; }
+    .p11-block > h2 {
+      margin: 0; font-family: var(--serif); font-size: 17px; font-weight: 600; color: var(--ink);
+      padding-bottom: 5px; border-bottom: 1px solid var(--line);
+    }
+    .p11-block > .lede { font-size: 11.5px; color: var(--ink-3); max-width: 980px; }
+    .p11-pair { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+    .p11-stack { display: grid; gap: 14px; }
+    .p11-toolbar {
+      display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+      padding: 9px 11px; background: var(--surface-2); border: 1px solid var(--line);
+      border-radius: var(--r);
+    }
+    .p11-toolbar label { font-size: 11.5px; color: var(--ink-2); }
+    .p11-toolbar select {
+      padding: 4px 8px; border: 1px solid var(--line-strong); border-radius: var(--r);
+      background: var(--surface); color: var(--ink); font-size: 11.5px;
+    }
+    .p11-toolbar .spacer { flex: 1; }
+    .p11-status { font-size: 11px; color: var(--ink-3); }
+    .p11-fixture {
+      display: grid; gap: 4px; padding: 10px 12px; font-size: 11px;
+      background: var(--surface-2); border: 1px solid var(--line-soft); border-radius: var(--r);
+      color: var(--ink-2);
+    }
+    .p11-fixture b { color: var(--ink); }
+    .p11-log {
+      margin: 0; padding: 10px 12px; max-height: 210px; overflow: auto;
+      background: var(--ink); color: #f4f1e7; border-radius: var(--r);
+      font-family: var(--mono); font-size: 10.5px; line-height: 1.55; white-space: pre-wrap;
+    }
+    .p11-panel-title { font-size: 12px; font-weight: 600; color: var(--ink-2); margin-bottom: 6px; }
+    .p11-foot { padding: 0 18px 22px; max-width: 1320px; margin: 0 auto; width: 100%; font-size: 10.5px; color: var(--ink-4); }
+    @media (max-width: 1080px) { .p11-pair { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="p11-shell">
+    <header class="topbar">
+      <div class="brand">
+        <svg width="26" height="26" viewBox="0 0 30 30" fill="none" aria-hidden="true">
+          <rect x="1" y="1" width="28" height="28" rx="4" stroke="#0E4B4F" stroke-width="1.3"/>
+          <path d="M8 10h10M8 15h13M8 20h7" stroke="#0E4B4F" stroke-width="1.3" stroke-linecap="round"/>
+          <path d="M22 18.5v6M19 21.5h6" stroke="#BE3E2B" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        <div>
+          <div class="brand-name">关务审核工作台</div>
+          <div class="brand-sub">P11 处置表单与版本历史 · 组件自测页</div>
+        </div>
+      </div>
+      <div class="topbar-spacer"></div>
+      <button class="btn" id="reset" type="button">重新读取 fixture 并挂载</button>
+      <a class="btn" href="/demo/" style="text-decoration:none">返回 P02 演示壳</a>
+    </header>
+
+    <div class="mock-banner" role="note">
+      <b>组件自测页，不是正式页面</b>
+      <span>数据来自 <span class="mono">contracts/fixtures/</span> 与页内手工装配；不校验权限、不写库。</span>
+      <span class="fixture-warn">写端点当前为 501；本页的成功响应是演示假响应，不能当作接口可用性证明。</span>
+    </div>
+
+    <main class="p11-main">
+      <section class="p11-intro" aria-labelledby="p11-intro-title">
+        <h1 id="p11-intro-title">处置表单与只读版本历史</h1>
+        <p class="lede">
+          左侧是业务员确认与整批提交，右侧是专家通过/退回；下方历史按版本、提交、专家决定分组。
+          所有写动作都集中在传入的 <span class="mono">api</span> 对象；当前后端返回 501，组件显示“未实现（501）”而不是成功。
+          409 会提示“内容已被他人修改，已刷新”并调用页面提供的重新拉取回调；失败时表单草稿保留。
+        </p>
+        <div class="p11-toolbar" style="margin-top:10px">
+          <label for="scenario">模拟后端响应</label>
+          <select id="scenario">
+            <option value="not_implemented" selected>默认：501 未实现（当前真实行为）</option>
+            <option value="conflict">409 修订冲突（FIX-08）</option>
+            <option value="forbidden">403 没有权限</option>
+            <option value="unauthenticated">401 未登录 / 会话失效</option>
+            <option value="network">网络中断（无 HTTP 状态）</option>
+            <option value="accepted">模拟 2xx 假响应（只看组件如何读服务器状态）</option>
+          </select>
+          <span class="spacer"></span>
+          <span class="p11-status" id="scene-status" role="status" aria-live="polite">场景：501</span>
+        </div>
+        <div class="p11-fixture" id="fixture-summary" style="margin-top:10px" aria-live="polite">
+          <b>fixture 自检</b>
+          <span>正在读取 FIX-08 / FIX-09 / FIX-10 / DEMO-SET…</span>
+        </div>
+      </section>
+
+      <section class="p11-block" aria-labelledby="operator-section-title">
+        <h2 id="operator-section-title">业务员：确认 HS / 整批提交</h2>
+        <p class="lede">
+          左：主流程 V2（8 行，尚未确认）。右：FIX-10 的已确认行，用于看“可提交”的快照预览。
+          主流程每一行都缺少业务确认，整批提交会被拦截；组件不会用预审建议、原码或专家建议补位。
+          注意：右侧样例任务在 fixture 中已是“已通过”，但 P02 的 <span class="mono">allowed_actions</span> 只按角色生成，
+          仍会显示提交入口；真实页面必须由服务端按阶段拒绝，前端禁用不能替代校验。
+        </p>
+        <div class="p11-pair">
+          <div>
+            <div class="p11-panel-title">主流程 V2 · 8 行待确认（DEMO-SET）</div>
+            <div id="operator-panel"></div>
+          </div>
+          <div>
+            <div class="p11-panel-title">FIX-10 · 已确认行（历史样例，仅看快照）</div>
+            <div id="operator-confirmed-panel"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="p11-block" aria-labelledby="expert-section-title">
+        <h2 id="expert-section-title">专家：通过 / 退回</h2>
+        <p class="lede">
+          以 FIX-10 的历史提交值重演表单：提交值 8544422900、专家终值 8536901900、核查目标仍是 8544422900。
+          这里不会预填专家终值，改码必须填写原因；通过和退回都只生成操作意图，最终状态读服务端。
+          注意：fixture 卡片的 allowed_actions 是业务员角色，本页为专家表单显式装配了 <span class="mono">decision.resolve</span>，仅用于组件演示。
+        </p>
+        <div id="expert-panel"></div>
+      </section>
+
+      <section class="p11-block" aria-labelledby="history-section-title">
+        <h2 id="history-section-title">只读版本历史</h2>
+        <p class="lede">
+          V1 是“旧版本已通过”，V2 是“当前版本”且没有提交。V1 的通过只属于 V1，不授予 V2。
+          下方按钮模拟 FIX-09 的 V1 晚到响应：组件按 version_id 拒绝错配渲染，当前 V2 视图保持不变。
+        </p>
+        <div class="p11-toolbar">
+          <button class="btn" id="late-v1" type="button">模拟 V1 历史晚到（应被丢弃）</button>
+          <button class="btn" id="restore-history" type="button">恢复当前 V2 历史</button>
+          <span class="p11-status" id="history-status" role="status" aria-live="polite">历史视图：V2</span>
+        </div>
+        <div id="history-panel"></div>
+      </section>
+
+      <section class="p11-block" aria-labelledby="log-section-title">
+        <h2 id="log-section-title">操作与回调记录</h2>
+        <p class="lede">写动作不会发真实请求；这里记录场景、409 的重新拉取回调、成功回调与 V1 丢弃结果，便于核对交互顺序。</p>
+        <pre class="p11-log" id="event-log" role="log" aria-live="polite">尚未操作。选择上方响应场景后，在表单里填写并提交。</pre>
+      </section>
+    </main>
+
+    <p class="p11-foot">
+      测试页地址：<span class="mono">/demo/assets/pages/p11.html</span>；仅在 Django <span class="mono">DEBUG=True</span> 时由
+      <span class="mono">apps/api/demo.py</span> 提供。正式页面由后续任务包接入，写端点实现前不宣称任何审批已验收。
+    </p>
+  </div>
+
+  <script type="module">
+    import { createReviewActions } from "../components/review-actions.js";
+    import { createVersionHistory } from "../components/version-history.js";
+
+    const FIXTURE_PATHS = {
+      fix08: "/demo/fixtures/FIX-08.json",
+      fix09: "/demo/fixtures/FIX-09.json",
+      fix10: "/demo/fixtures/FIX-10.json",
+      demo: "/demo/fixtures/DEMO-SET.json",
+    };
+
+    const ACTION_PATH = {
+      confirm: "PATCH /versions/{version_id}/items/{item_id}/confirmation",
+      submit: "POST /tasks/{task_id}/submissions",
+      decide: "POST /submissions/{submission_id}/decisions",
+    };
+    const ACTION_OWNER = { confirm: "P09", submit: "P09", decide: "P10" };
+
+    const scenarioSelect = document.querySelector("#scenario");
+    const sceneStatus = document.querySelector("#scene-status");
+    const historyStatus = document.querySelector("#history-status");
+    const fixtureSummary = document.querySelector("#fixture-summary");
+    const logNode = document.querySelector("#event-log");
+
+    let fixtures = null;
+    let currentData = null;
+    let booted = false;
+    const panels = { operator: null, confirmed: null, expert: null, history: null };
+
+    const esc = (value) =>
+      String(value ?? "").replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]);
+
+    const text = (value) => String(value ?? "").trim();
+
+    function log(message) {
+      const stamp = new Date().toLocaleTimeString("zh-CN", { hour12: false });
+      const line = `[${stamp}] ${message}`;
+      if (!booted || logNode.textContent.startsWith("尚未操作")) logNode.textContent = line;
+      else logNode.textContent = `${logNode.textContent}\n${line}`;
+      logNode.scrollTop = logNode.scrollHeight;
+    }
+
+    function demoError(status, code, message, details) {
+      const error = new Error(message);
+      error.name = "DemoApiError";
+      error.status = status;
+      error.code = code;
+      error.details = details || {};
+      error.requestId = "p11-demo";
+      return error;
+    }
+
+    function createDemoApi() {
+      async function respond(action, payload) {
+        await new Promise((resolve) => setTimeout(resolve, 180));
+        const mode = scenarioSelect.value;
+        if (mode === "not_implemented") {
+          throw demoError(
+            501,
+            "not_implemented",
+            `${ACTION_PATH[action]} 尚未实现，由 ${ACTION_OWNER[action]} 交付；本响应不代表任何业务动作已执行`,
+            { owner: ACTION_OWNER[action] },
+          );
+        }
+        if (mode === "conflict") throw demoError(409, "conflict", "商品修订已变化，请刷新后重试（FIX-08 错误体）");
+        if (mode === "forbidden") throw demoError(403, "forbidden", "当前角色不允许该动作（演示）");
+        if (mode === "unauthenticated") throw demoError(401, "unauthorized", "未登录或会话已失效（演示）");
+        if (mode === "network") throw demoError(0, "network_error", "演示：网络中断，未收到 HTTP 响应");
+        log(`演示假响应（非真实接口）：${action} → ${JSON.stringify(payload)}`);
+        return {
+          status: "accepted_for_review",
+          revision: Number(payload.expected_revision || 0) + 1,
+          submission_id: action === "submit" ? "demo-submission-p11" : undefined,
+          request_id: "p11-demo",
+        };
+      }
+
+      return {
+        mode: "demo",
+        confirm(payload) {
+          return respond("confirm", payload);
+        },
+        submit(payload) {
+          return respond("submit", payload);
+        },
+        decide(payload) {
+          return respond("decide", payload);
+        },
+      };
+    }
+
+    const demoApi = createDemoApi();
+
+    async function loadJson(path) {
+      const response = await fetch(path, { cache: "no-store" });
+      if (!response.ok) throw new Error(`${path} → HTTP ${response.status}`);
+      return response.json();
+    }
+
+    async function loadFixtures() {
+      const [fix08, fix09, fix10, demo] = await Promise.all([
+        loadJson(FIXTURE_PATHS.fix08),
+        loadJson(FIXTURE_PATHS.fix09),
+        loadJson(FIXTURE_PATHS.fix10),
+        loadJson(FIXTURE_PATHS.demo),
+      ]);
+      fixtures = { fix08, fix09, fix10, demo };
+    }
+
+    function submittedValue(card) {
+      if (card.business_confirmed_hs && text(card.business_confirmed_hs.value)) return text(card.business_confirmed_hs.value);
+      if (card.precheck_suggested_hs && text(card.precheck_suggested_hs.value)) return text(card.precheck_suggested_hs.value);
+      return text(card.facts && card.facts.supplier_hs_raw);
+    }
+
+    function buildData() {
+      const { fix08, fix09, fix10, demo } = fixtures;
+      const mainTask = demo.tasks.find((task) => task.title && task.title.includes("主流程")) || demo.tasks[0];
+      const mainVersion = mainTask.versions.find((version) => version.is_current) || mainTask.versions[mainTask.versions.length - 1];
+      const versionOne = mainTask.versions.find((version) => version.number === 1) || mainTask.versions[0];
+      const mainItems = (demo.items[mainVersion.version_id] || [])
+        .map((row) => demo.cards[row.item_id])
+        .filter(Boolean);
+      const v1Items = (demo.items[versionOne.version_id] || [])
+        .map((row) => demo.cards[row.item_id])
+        .filter(Boolean);
+
+      const recodeCard = fix10.card;
+      const recodeTask = demo.tasks.find((task) => task.task_id === recodeCard.task_id) || {
+        task_id: recodeCard.task_id,
+        title: "契约演示-专家改码",
+        stage: recodeCard.task_stage,
+        revision: recodeCard.revision,
+        current_version_id: recodeCard.version_id,
+        allowed_actions: recodeCard.allowed_actions,
+        result_mode: recodeCard.result_mode,
+        versions: [],
+      };
+      const recodeVersion = (recodeTask.versions || []).find((version) => version.version_id === recodeCard.version_id) || {
+        version_id: recodeCard.version_id,
+        number: 1,
+        original_filename: "契约演示-改码.xlsx",
+        is_current: true,
+      };
+      const expertCheck = recodeCard.latest_expert_check || {};
+
+      const main = {
+        task: { ...mainTask, allowed_actions: mainTask.allowed_actions || mainItems[0]?.allowed_actions || [] },
+        version: mainVersion,
+        items: mainItems,
+        submission: null,
+      };
+
+      const confirmed = {
+        task: { ...recodeTask, allowed_actions: recodeCard.allowed_actions || recodeTask.allowed_actions || [] },
+        version: recodeVersion,
+        items: [recodeCard],
+        submission: null,
+      };
+
+      // fixture 的 allowed_actions 是按业务员角色生成的，没有 decision.resolve；
+      // 专家视图在真实接口下由服务端按角色返回，这里显式装配为专家动作用于组件自测。
+      const expert = {
+        task: { ...recodeTask, allowed_actions: ["read", "decision.resolve"] },
+        version: recodeVersion,
+        items: [recodeCard],
+        submission: {
+          submission_id: expertCheck.submission_id || "demo-submission-fix10",
+          revision: recodeCard.revision,
+          status: "pending",
+          created_at: null,
+          created_by: "业务员甲（历史样例）",
+          items: [{
+            item_id: recodeCard.item_id,
+            name: recodeCard.facts.name,
+            source_location: recodeCard.source_location,
+            submitted_hs: text(recodeCard.submitted_hs && recodeCard.submitted_hs.value),
+            item_revision: recodeCard.revision,
+          }],
+          decisions: [],
+        },
+        expert_check: {
+          target_hs: expertCheck.target_hs || text(recodeCard.submitted_hs && recodeCard.submitted_hs.value),
+          status: expertCheck.run_id ? "succeeded" : "",
+          run_id: expertCheck.run_id || "",
+        },
+      };
+
+      const decisionItems = v1Items.map((card, index) => {
+        const submitted = submittedValue(card);
+        const recoded = index === 0;
+        return {
+          item_id: card.item_id,
+          name: card.facts.name,
+          source_location: card.source_location,
+          previous_hs: submitted,
+          final_hs: recoded ? "8536901900" : submitted,
+          change_reason: recoded
+            ? "mock：申报要素与提交码不一致，按要素改为 8536901900（数值与理由取自 FIX-10 演示）"
+            : "",
+        };
+      });
+
+      const history = {
+        task_id: mainTask.task_id,
+        current_version_id: mainVersion.version_id,
+        versions: [
+          {
+            version_id: versionOne.version_id,
+            number: versionOne.number,
+            original_filename: versionOne.original_filename,
+            uploaded_at: versionOne.uploaded_at,
+            is_current: false,
+            approved: true,
+            submissions: [{
+              submission_id: "demo-submission-v1",
+              revision: 1,
+              status: "approved",
+              created_at: versionOne.uploaded_at,
+              created_by: "业务员甲（演示装配）",
+              expert_check: {
+                target_hs: expertCheck.target_hs || "8544422900",
+                status: "succeeded",
+                run_id: expertCheck.run_id || "",
+              },
+              items: v1Items.map((card) => ({
+                item_id: card.item_id,
+                name: card.facts.name,
+                source_location: card.source_location,
+                submitted_hs: submittedValue(card),
+                item_revision: card.revision,
+              })),
+              decisions: [{
+                decision_id: "demo-decision-v1",
+                action: "approve",
+                reason: "演示装配：引用 FIX-10 的改码数值与核查目标；不代表真实审批记录。",
+                created_at: versionOne.uploaded_at,
+                created_by: "专家（演示装配）",
+                expert_check: {
+                  target_hs: expertCheck.target_hs || "8544422900",
+                  status: "succeeded",
+                  run_id: expertCheck.run_id || "",
+                },
+                items: decisionItems,
+              }],
+            }],
+          },
+          {
+            version_id: mainVersion.version_id,
+            number: mainVersion.number,
+            original_filename: mainVersion.original_filename,
+            uploaded_at: mainVersion.uploaded_at,
+            is_current: true,
+            approved: false,
+            submissions: [],
+          },
+        ],
+        candidates: [],
+      };
+
+      const leftCard = v1Items.find((card) => card.source_location.row_number === 5) || v1Items[0];
+      const rightCard = mainItems.find((card) => card.source_location.row_number === 5) || mainItems[0];
+      if (leftCard && rightCard) {
+        history.candidates.push({
+          basis: "同合同号 + 项号（演示装配，仅候选）",
+          left: {
+            version_number: versionOne.number,
+            row_number: leftCard.source_location.row_number,
+            name: leftCard.facts.name,
+            hs: submittedValue(leftCard),
+          },
+          right: {
+            version_number: mainVersion.number,
+            row_number: rightCard.source_location.row_number,
+            name: rightCard.facts.name,
+            hs: submittedValue(rightCard),
+          },
+        });
+      }
+
+      const lateV1 = {
+        task_id: mainTask.task_id,
+        version_id: versionOne.version_id,
+        number: versionOne.number,
+        original_filename: versionOne.original_filename,
+        submissions: history.versions[0].submissions,
+      };
+
+      return { main, confirmed, expert, history, lateV1, fixtures: { fix08, fix09, fix10, demo }, mainTask, mainVersion, recodeCard, expertCheck };
+    }
+
+    function renderFixtureSummary(data) {
+      const { fix08, fix09, fix10, demo } = data.fixtures;
+      const code = fix08.error && fix08.error.error ? fix08.error.error.code : "（未提供）";
+      const requestId = fix08.error ? fix08.error.request_id : "（未提供）";
+      const fix09Card = fix09.card || {};
+      const fix09Run = fix09.run || {};
+      const submitted = text(fix10.card.submitted_hs && fix10.card.submitted_hs.value);
+      const final = text(fix10.card.expert_final_hs && fix10.card.expert_final_hs.value);
+      const target = text(fix10.card.latest_expert_check && fix10.card.latest_expert_check.target_hs);
+      fixtureSummary.innerHTML = `
+        <b>fixture 自检（只读解析，不证明接口可用）</b>
+        <span>FIX-08：<span class="mono">409 ${esc(code)}</span> · request_id=<span class="mono">${esc(requestId)}</span> —— 409 分支使用的错误形状。</span>
+        <span>FIX-09：卡片 version=<span class="mono">${esc(fix09Card.version_id || "—")}</span>，执行 version=<span class="mono">${esc(fix09Run.version_id || "—")}</span>；两者不同，正是“V1 晚到”的样例。</span>
+        <span>FIX-10：提交值 <span class="mono">${esc(submitted || "—")}</span> → 专家终值 <span class="mono">${esc(final || "—")}</span>；旧核查目标仍是 <span class="mono">${esc(target || "—")}</span>。</span>
+        <span>DEMO-SET：主流程 V2 共 <span class="mono">${esc((demo.items[data.mainVersion.version_id] || []).length)}</span> 行，阶段 <span class="mono">${esc(data.mainTask.stage)}</span>。</span>
+      `;
+    }
+
+    async function conflictRefresh(label) {
+      log(`${label}：收到 409，调用 onConflict 重新拉取（真实页面应重读任务/商品/历史；本页重读 fixture）。`);
+      try {
+        await loadFixtures();
+        currentData = buildData();
+        applyDataToPanels();
+      } catch (error) {
+        log(`409 后的重新拉取失败：${error.message}`);
+      }
+    }
+
+    function onChanged(detail) {
+      log(`${detail.action} 成功回调（演示）：${JSON.stringify(detail.response)}`);
+    }
+
+    function applyDataToPanels() {
+      panels.operator?.update(currentData.main);
+      panels.confirmed?.update(currentData.confirmed);
+      panels.expert?.update(currentData.expert);
+      panels.history?.update({
+        data: currentData.history,
+        taskId: currentData.mainTask.task_id,
+        activeVersionId: currentData.mainVersion.version_id,
+        currentVersionId: currentData.mainVersion.version_id,
+        activeVersionLabel: `V${currentData.mainVersion.number}`,
+        currentVersionLabel: `V${currentData.mainVersion.number}`,
+      });
+    }
+
+    function mountPanels() {
+      Object.values(panels).forEach((panel) => panel?.destroy());
+      panels.operator = createReviewActions({
+        api: demoApi,
+        role: "operator",
+        data: currentData.main,
+        onConflict: () => conflictRefresh("业务员确认/提交"),
+        onChanged,
+      });
+      panels.operator.mount(document.querySelector("#operator-panel"));
+
+      panels.confirmed = createReviewActions({
+        api: demoApi,
+        role: "operator",
+        data: currentData.confirmed,
+        onConflict: () => conflictRefresh("已确认样例"),
+        onChanged,
+      });
+      panels.confirmed.mount(document.querySelector("#operator-confirmed-panel"));
+
+      panels.expert = createReviewActions({
+        api: demoApi,
+        role: "expert",
+        data: currentData.expert,
+        onConflict: () => conflictRefresh("专家决定"),
+        onChanged,
+      });
+      panels.expert.mount(document.querySelector("#expert-panel"));
+
+      panels.history = createVersionHistory({
+        data: currentData.history,
+        taskId: currentData.mainTask.task_id,
+        activeVersionId: currentData.mainVersion.version_id,
+        currentVersionId: currentData.mainVersion.version_id,
+        activeVersionLabel: `V${currentData.mainVersion.number}`,
+        currentVersionLabel: `V${currentData.mainVersion.number}`,
+      });
+      panels.history.mount(document.querySelector("#history-panel"));
+    }
+
+    async function boot() {
+      try {
+        await loadFixtures();
+        currentData = buildData();
+        renderFixtureSummary(currentData);
+        mountPanels();
+        booted = true;
+        log("fixture 已加载：FIX-08 / FIX-09 / FIX-10 / DEMO-SET；组件已挂载。默认模拟 501。");
+        sceneStatus.textContent = "场景：501 未实现（当前真实行为）";
+      } catch (error) {
+        fixtureSummary.innerHTML = `<b>fixture 读取失败</b><span>${esc(error.message)}</span><span>确认服务由 <span class="mono">make demo-components</span> 启动，且地址为 <span class="mono">/demo/assets/pages/p11.html</span>。</span>`;
+        log(`启动失败：${error.message}`);
+      }
+    }
+
+    scenarioSelect.addEventListener("change", () => {
+      const label = scenarioSelect.options[scenarioSelect.selectedIndex].textContent;
+      sceneStatus.textContent = `场景：${label}`;
+      panels.operator?.clearFeedback();
+      panels.confirmed?.clearFeedback();
+      panels.expert?.clearFeedback();
+      log(`响应场景切换为：${label}`);
+    });
+
+    document.querySelector("#late-v1").addEventListener("click", () => {
+      if (!panels.history || !currentData) return;
+      const accepted = panels.history.accept(currentData.lateV1, {
+        taskId: currentData.mainTask.task_id,
+        versionId: currentData.mainVersion.version_id,
+      });
+      historyStatus.textContent = accepted ? "历史视图：V1（不符合预期）" : "历史视图：V2（V1 响应已丢弃）";
+      log(accepted ? "V1 历史被接受（不符合预期，请检查守卫）" : "V1 晚到历史按 version_id 被拒绝；当前 V2 视图保持不变（FIX-09）。");
+    });
+
+    document.querySelector("#restore-history").addEventListener("click", () => {
+      if (!panels.history || !currentData) return;
+      panels.history.update({
+        data: currentData.history,
+        taskId: currentData.mainTask.task_id,
+        activeVersionId: currentData.mainVersion.version_id,
+        currentVersionId: currentData.mainVersion.version_id,
+        activeVersionLabel: `V${currentData.mainVersion.number}`,
+        currentVersionLabel: `V${currentData.mainVersion.number}`,
+      });
+      historyStatus.textContent = "历史视图：V2";
+      log("重新接受与当前版本匹配的历史数据，恢复 V2 视图。");
+    });
+
+    document.querySelector("#reset").addEventListener("click", async () => {
+      try {
+        await loadFixtures();
+        currentData = buildData();
+        renderFixtureSummary(currentData);
+        mountPanels();
+        historyStatus.textContent = "历史视图：V2";
+        log("重新读取 fixture 并重新挂载全部组件；草稿已随重挂载清空。");
+      } catch (error) {
+        log(`重新挂载失败：${error.message}`);
+      }
+    });
+
+    boot();
+  </script>
+</body>
+</html>
