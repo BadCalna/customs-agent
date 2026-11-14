@@ -129,7 +129,9 @@ class ModelConstraintTests(TestCase):
         )
         DecisionItem.objects.create(decision=decision, item=self.item, previous_hs="8544", final_hs="8544")
         with self.assertRaises(IntegrityError), transaction.atomic():
-            DecisionItem.objects.create(decision=decision, item=self.item)
+            DecisionItem.objects.create(
+                decision=decision, item=self.item, previous_hs="8544", final_hs="8544",
+            )
 
     def test_task_assignment_unique_per_user_and_task(self):
         with self.assertRaises(IntegrityError), transaction.atomic():

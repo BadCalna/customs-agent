@@ -69,6 +69,12 @@ class Run(models.Model):
         if version is not None and self.task_id and version.task_id != self.task_id:
             raise ValidationError("分析执行的文件版本必须属于该任务，不能跨任务引用。")
         submission = _related_or_none(self, "submission")
+        # 执行类型与提交的绑定关系是强制的：专家核查必须能回答“核查的是哪次提交”，
+        # 普通预审则不允许绑提交，避免把两种执行混成一种语义。
+        if self.kind == self.Kind.EXPERT_CHECK and submission is None:
+            raise ValidationError("专家核查必须绑定业务员的提交快照，不能凭空核查。")
+        if self.kind == self.Kind.PRECHECK and submission is not None:
+            raise ValidationError("普通预审不能绑定提交快照；专家核查才绑定提交。")
         if submission is not None:
             if submission.task_id != self.task_id or submission.version_id != self.version_id:
                 raise ValidationError("专家核查必须绑定同任务、同文件版本的提交快照。")

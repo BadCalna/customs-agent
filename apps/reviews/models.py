@@ -242,8 +242,24 @@ class Submission(models.Model):
         if version is not None and self.task_id and version.task_id != self.task_id:
             raise ValidationError("提交的文件版本必须属于该任务，不能跨任务引用。")
 
+    def _check_immutable(self):
+        """已创建的快照不允许改挂任务/版本/修订/提交人，只允许业务状态更新。
+
+        否则“父记录换版本、明细仍是旧版本”会绕过 SubmissionItem 的版本校验，
+        让专家看到的不是业务员当时提交的那一批商品。
+        """
+        if self._state.adding:
+            return
+        original = type(self).objects.filter(pk=self.pk).first()
+        if original is None:
+            return
+        for field in ("task_id", "version_id", "revision", "created_by_id"):
+            if getattr(original, field) != getattr(self, field):
+                raise ValidationError("已创建的提交快照不可更换任务、文件版本、修订或提交人；只允许更新业务状态。")
+
     def save(self, *args, **kwargs):
         self.clean()
+        self._check_immutable()
         return super().save(*args, **kwargs)
 
 
@@ -357,8 +373,15 @@ class DecisionItem(models.Model):
         row = submission.items.filter(item_id=self.item_id).first()
         if row is None:
             raise ValidationError("专家逐行终值只能针对该提交快照中的商品。")
-        if self.previous_hs and self.previous_hs != row.submitted_hs:
-            raise ValidationError("专家改码的前值必须等于提交快照中的待审 HS。")
+        changed = self.final_hs != row.submitted_hs
+        if changed:
+            # R08：改码必须留痕，原码取提交快照，不允许空白或另填。
+            if self.previous_hs != row.submitted_hs:
+                raise ValidationError("专家改码时的原码必须取自提交快照中的待审 HS，不能留空或另填。")
+            if not (self.change_reason or "").strip():
+                raise ValidationError("专家改码必须填写改码原因。")
+        elif self.previous_hs and self.previous_hs != row.submitted_hs:
+            raise ValidationError("专家终值未改变时，前值若填写也必须等于快照中的待审 HS。")
 
     def save(self, *args, **kwargs):
         self.clean()

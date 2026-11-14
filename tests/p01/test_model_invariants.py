@@ -147,7 +147,8 @@ class DecisionItemInvariantTests(InvariantFixture):
     def test_accepts_item_in_submission(self):
         decision = self._decision()
         row = DecisionItem.objects.create(
-            decision=decision, item=self.item_v2, previous_hs="8544422900", final_hs="8544422910",
+            decision=decision, item=self.item_v2, previous_hs="8544422900",
+            final_hs="8544422910", change_reason="归类依据更新",
         )
         self.assertEqual(row.final_hs, "8544422910")
 
@@ -225,3 +226,107 @@ class RunItemInvariantTests(InvariantFixture):
         )
         with self.assertRaises(ValidationError):
             RunItem.objects.create(run=run, item=self.extra_item_v2)
+
+
+class SubmissionImmutabilityTests(InvariantFixture):
+    """复审 ①：已创建的快照不能换任务/版本/修订/提交人，业务状态仍可更新。"""
+
+    def _submitted(self):
+        submission = self.make_submission_v2()
+        self.make_submission_item(submission)
+        return submission
+
+    def test_existing_submission_cannot_move_to_another_version(self):
+        submission = self._submitted()
+        submission.version = self.v1  # 模拟“父记录换版本、明细仍是旧版本”
+        with self.assertRaises(ValidationError):
+            submission.save()
+        submission.refresh_from_db()
+        # 原快照仍可读，且未被改动。
+        self.assertEqual(submission.version_id, self.v2.pk)
+        self.assertEqual(submission.items.get().item_id, self.item_v2.pk)
+
+    def test_existing_submission_cannot_change_task_revision_or_submitter(self):
+        submission = self._submitted()
+        for field, value in (
+            ("task", self.other_task),
+            ("revision", 99),
+            ("created_by", self.expert),
+        ):
+            with self.subTest(field=field):
+                submission.refresh_from_db()
+                setattr(submission, field, value)
+                with self.assertRaises(ValidationError):
+                    submission.save()
+
+    def test_status_update_is_still_allowed(self):
+        submission = self._submitted()
+        submission.status = Submission.Status.APPROVED
+        submission.save()
+        submission.refresh_from_db()
+        self.assertEqual(submission.status, Submission.Status.APPROVED)
+
+
+class RunKindBindingTests(InvariantFixture):
+    """复审 ②：执行类型与提交快照的绑定关系。"""
+
+    def test_expert_check_without_submission_is_rejected(self):
+        with self.assertRaises(ValidationError):
+            Run.objects.create(task=self.task, version=self.v2, kind=Run.Kind.EXPERT_CHECK)
+
+    def test_precheck_with_submission_is_rejected(self):
+        submission = self.make_submission_v2()
+        with self.assertRaises(ValidationError):
+            Run.objects.create(
+                task=self.task, version=self.v2, submission=submission, kind=Run.Kind.PRECHECK,
+            )
+
+    def test_expert_check_with_submission_is_allowed(self):
+        submission = self.make_submission_v2()
+        run = Run.objects.create(
+            task=self.task, version=self.v2, submission=submission, kind=Run.Kind.EXPERT_CHECK,
+        )
+        self.assertEqual(run.submission_id, submission.pk)
+
+    def test_precheck_without_submission_is_allowed(self):
+        run = Run.objects.create(task=self.task, version=self.v2, kind=Run.Kind.PRECHECK)
+        self.assertIsNone(run.submission_id)
+
+
+class DecisionChangeTraceTests(InvariantFixture):
+    """复审 ③：改码必须留原码与原因，未改码允许留空（R08）。"""
+
+    def _decision(self):
+        submission = self.make_submission_v2()
+        self.make_submission_item(submission)  # submitted_hs = 8544422900
+        return Decision.objects.create(
+            submission=submission, action=Decision.Action.APPROVE, created_by=self.expert,
+        )
+
+    def test_change_without_original_hs_is_rejected(self):
+        with self.assertRaises(ValidationError):
+            DecisionItem.objects.create(
+                decision=self._decision(), item=self.item_v2,
+                previous_hs="", final_hs="8544422910", change_reason="归类依据更新",
+            )
+
+    def test_change_without_reason_is_rejected(self):
+        with self.assertRaises(ValidationError):
+            DecisionItem.objects.create(
+                decision=self._decision(), item=self.item_v2,
+                previous_hs="8544422900", final_hs="8544422910", change_reason="  ",
+            )
+
+    def test_change_with_trace_is_allowed(self):
+        row = DecisionItem.objects.create(
+            decision=self._decision(), item=self.item_v2,
+            previous_hs="8544422900", final_hs="8544422910", change_reason="归类依据更新",
+        )
+        self.assertEqual(row.final_hs, "8544422910")
+
+    def test_unchanged_final_hs_allows_blank_trace(self):
+        row = DecisionItem.objects.create(
+            decision=self._decision(), item=self.item_v2,
+            previous_hs="", final_hs="8544422900", change_reason="",
+        )
+        self.assertEqual(row.final_hs, "8544422900")
