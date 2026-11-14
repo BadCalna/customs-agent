@@ -11,7 +11,7 @@ from django.conf import settings
 from django.core.management.base import BaseCommand
 
 from adapters.engines import protocols
-from apps.api.fixtures import FixtureDoc
+from apps.api.fixtures import DemoSet, FixtureDoc
 from apps.api.schemas import (
     CONTRACT_VERSION,
     ErrorBody,
@@ -28,7 +28,7 @@ from apps.api.schemas import (
 from apps.reviews.management.commands.seed_contracts import MAIN_TITLE, RECODE_TITLE
 from apps.reviews.models import Task
 from apps.reviews.schemas import ItemCard, ItemFacts, ItemListEntry, ItemPage, TaskDetail, TaskListEntry, TaskPage, VersionEntry
-from apps.reviews.serializers import item_to_card
+from apps.reviews.serializers import item_to_card, item_to_list_entry, task_to_detail
 from apps.runs.models import Run
 from apps.runs.schemas import RunDetail, RunItemEntry
 from apps.runs.serializers import run_to_detail
@@ -89,6 +89,26 @@ class Command(BaseCommand):
             }
             dump(root / "fixtures" / f"{scenario}.json", payload)
         self.stdout.write(self.style.SUCCESS(f"已导出 {len(fixtures)} 份 FIX 样例到 contracts/fixtures/"))
+
+        demo = build_demo_set(main, recode)
+        dump(root / "fixtures" / "DEMO-SET.json", demo.model_dump(mode="json"))
+        self.stdout.write(self.style.SUCCESS("已导出 fixture 模式数据集 contracts/fixtures/DEMO-SET.json"))
+
+
+def build_demo_set(main: Task, recode: Task) -> DemoSet:
+    """把演示数据组装成 fixture 模式的完整数据集，形状与 live 端点逐字段一致。"""
+    tasks, items, cards, runs = [], {}, {}, {}
+    for task in (main, recode):
+        user = task.assignments.get(role="operator").user
+        tasks.append(task_to_detail(user, task))
+        for version in task.versions.all():
+            rows = list(version.items.all())
+            items[str(version.pk)] = [item_to_list_entry(item) for item in rows]
+            for item in rows:
+                cards[str(item.pk)] = item_to_card(user, item)
+            for run in Run.objects.filter(version=version, is_current=True):
+                runs[str(run.pk)] = run_to_detail(run)
+    return DemoSet(tasks=tasks, items=items, cards=cards, runs=runs)
 
 
 def _error(status_code: str, message: str, scenario: str) -> ErrorEnvelope:

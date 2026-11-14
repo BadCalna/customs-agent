@@ -4,6 +4,7 @@ from ninja import NinjaAPI, Schema
 
 from apps.accounts.api import install_error_handlers
 from apps.accounts.api import router as accounts_router
+from apps.api.demo import demo_asset, demo_fixture, demo_index
 from apps.api.not_implemented import router as pending_router
 from apps.reviews.api.read import router as reviews_read_router
 from apps.runs.api import router as runs_router
@@ -32,4 +33,8 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/v1/", api_v1.urls),
     path("api/", api.urls),
+    # P02 组件演示壳：只读静态资源，不参与 API 契约。
+    path("demo/", demo_index, name="demo-index"),
+    path("demo/assets/<path:path>", demo_asset, name="demo-asset"),
+    path("demo/fixtures/<path:path>", demo_fixture, name="demo-fixture"),
 ]

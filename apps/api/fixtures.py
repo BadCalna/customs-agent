@@ -6,7 +6,7 @@
 from ninja import Schema
 from pydantic import Field
 
-from apps.reviews.schemas import ItemCard, TaskPage
+from apps.reviews.schemas import ItemCard, ItemListEntry, TaskDetail, TaskPage
 from apps.runs.schemas import RunDetail
 
 from .schemas import CONTRACT_VERSION, ErrorEnvelope
@@ -22,3 +22,17 @@ class FixtureDoc(Schema):
     run: RunDetail | None = None
     task_page: TaskPage | None = None
     error: ErrorEnvelope | None = None
+
+
+class DemoSet(Schema):
+    """fixture 模式的完整数据集：与 live 端点返回同构，供 web 演示壳离线使用。
+
+    ``items`` 按版本 ID 索引，``cards`` 按商品 ID 索引，``runs`` 按执行 ID 索引；
+    不保存生成时间，使同一份演示数据重复导出字节一致（漂移检查依赖这一点）。
+    """
+
+    contract_version: str = CONTRACT_VERSION
+    tasks: list[TaskDetail] = Field(default_factory=list)
+    items: dict[str, list[ItemListEntry]] = Field(default_factory=dict)
+    cards: dict[str, ItemCard] = Field(default_factory=dict)
+    runs: dict[str, RunDetail] = Field(default_factory=dict)

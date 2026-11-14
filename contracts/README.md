@@ -20,20 +20,26 @@
 | `schemas/fixtures/` | 固定样例文档结构 | `apps/api/fixtures.py` |
 | `openapi/v1.json` | 由 `api_v1.get_openapi_schema()` 生成 | `config/urls.py` |
 | `fixtures/FIX-01.json` ~ `FIX-10.json` | D3 第 4 节场景样例 | 由演示数据真实序列化生成 |
+| `fixtures/DEMO-SET.json` | 组件演示壳 fixture 模式的完整数据集（任务/版本商品/卡片/执行） | `export_contracts.py::build_demo_set`，与 live 端点同构 |
 
 ## 生成与校验
 
 ```sh
 make seed-demo         # 演示账号（幂等）
 make seed-contracts    # 契约演示任务、V1/V2、商品与 mock 执行（幂等）
-make contracts         # 重新生成 schemas、openapi；有演示数据时同时刷新 fixtures
+make contracts         # 重新生成 schemas、openapi；有演示数据时同时刷新 fixtures 与 DEMO-SET
+make demo-components   # seed-contracts + contracts + 启动服务，打开 /demo/ 看组件
 make test-contracts    # schema 漂移、OpenAPI 漂移、枚举对齐、样例校验、端点行为
-make test TASK=P02     # 与上一条同入口，42 项
+make test TASK=P02     # 与上一条同入口，55 项
 ```
 
 修改任何 schema、枚举或端点后必须重新执行 `make contracts` 并提交差异；
 `make test-contracts` 会在漂移时失败。fixture 的 `null` 字段不得删除——
 “未产生的阶段值为 `null`”是契约语义。
+
+`fixtures/DEMO-SET.json` 被 `web/api.js` 的 fixture adapter 直接读取，
+`tests/p02/test_web_shell.py` 会用 live 端点响应做逐字段等值断言：改了序列化器
+却不重导 DEMO-SET，测试会失败。它不保存生成时间，同一份演示数据重复导出字节一致。
 
 ## 关键口径
 
