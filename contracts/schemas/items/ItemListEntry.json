@@ -1,0 +1,181 @@
+{
+  "$defs": {
+    "ComparisonStatus": {
+      "description": "D4 第 2 节六类比较结论，优先级按声明顺序递减。",
+      "enum": [
+        "association_error",
+        "supplier_missing",
+        "supplier_invalid",
+        "needs_confirmation",
+        "consistent",
+        "inconsistent"
+      ],
+      "title": "ComparisonStatus",
+      "type": "string"
+    },
+    "ImageStatus": {
+      "enum": [
+        "available",
+        "absent",
+        "read_failed"
+      ],
+      "title": "ImageStatus",
+      "type": "string"
+    },
+    "ResultMode": {
+      "description": "结果来源模式。mock 结果必须在页面上可识别，不冒充真实引擎结论。",
+      "enum": [
+        "mock",
+        "live"
+      ],
+      "title": "ResultMode",
+      "type": "string"
+    },
+    "SourceLocation": {
+      "description": "商品行在原 Excel 中的位置；行号为 1 起始。",
+      "properties": {
+        "cells": {
+          "default": "",
+          "title": "Cells",
+          "type": "string"
+        },
+        "row_number": {
+          "minimum": 1,
+          "title": "Row Number",
+          "type": "integer"
+        },
+        "sheet_name": {
+          "title": "Sheet Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "sheet_name",
+        "row_number"
+      ],
+      "title": "SourceLocation",
+      "type": "object"
+    }
+  },
+  "description": "商品列表行：身份、位置、原值与各阶段编码的当前值。",
+  "properties": {
+    "business_confirmed_hs": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Business Confirmed Hs"
+    },
+    "comparison_status": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ComparisonStatus"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "expert_final_hs": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Expert Final Hs"
+    },
+    "image_status": {
+      "$ref": "#/$defs/ImageStatus"
+    },
+    "item_id": {
+      "title": "Item Id",
+      "type": "string"
+    },
+    "latest_run_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Latest Run Id"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "precheck_suggested_hs": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Precheck Suggested Hs"
+    },
+    "result_mode": {
+      "$ref": "#/$defs/ResultMode"
+    },
+    "revision": {
+      "title": "Revision",
+      "type": "integer"
+    },
+    "source_location": {
+      "$ref": "#/$defs/SourceLocation"
+    },
+    "submitted_hs": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Submitted Hs"
+    },
+    "supplier_hs_raw": {
+      "description": "供应商原 HS，空白原样保留",
+      "title": "Supplier Hs Raw",
+      "type": "string"
+    },
+    "task_id": {
+      "title": "Task Id",
+      "type": "string"
+    },
+    "version_id": {
+      "title": "Version Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "task_id",
+    "version_id",
+    "item_id",
+    "revision",
+    "source_location",
+    "name",
+    "supplier_hs_raw",
+    "image_status",
+    "result_mode"
+  ],
+  "title": "ItemListEntry",
+  "type": "object"
+}

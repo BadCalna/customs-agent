@@ -1,0 +1,18 @@
+{
+  "contract_version": "1.0.0",
+  "error": {
+    "error": {
+      "code": "not_found",
+      "details": {},
+      "message": "对象不存在或不在可见范围"
+    },
+    "request_id": "fixture-fix-07"
+  },
+  "notes": "空列表是 200 空集合；越权读取是 404，不泄露对象是否存在。",
+  "scenario": "FIX-07",
+  "task_page": {
+    "items": [],
+    "next_cursor": null
+  },
+  "title": "空列表与无权"
+}

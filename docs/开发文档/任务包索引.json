@@ -138,7 +138,7 @@
         "更新：D3/D4 契约版本及样例索引、D6 演示命令；回交：交接/P02.md，供全部执行 Agent 使用。"
       ],
       "verification_command": "make test TASK=P02",
-      "status": "待开始"
+      "status": "第一/二批技术自验通过，待 Jay 手工测试"
     },
     {
       "id": "P03",

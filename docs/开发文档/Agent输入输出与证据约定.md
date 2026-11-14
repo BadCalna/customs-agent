@@ -1,6 +1,6 @@
 # D4 Agent 输入输出与证据约定
 
-版本：0.1，2026-11-13。状态：待 P02 实现并发布的接口设计。本文件规定系统内关务 AI 引擎；编程 Agent 的分工见 [协作与交接约定](Agent协作与交接约定.md)。
+版本：0.2，2026-11-14。状态：P02 第一批已发布引擎协议与 mock 实现。协议 DTO 在 `adapters/engines/protocols.py`，固定场景实现与比较优先级在 `adapters/engines/mock.py`，JSON Schema 见 `contracts/schemas/engine/`。本文件规定系统内关务 AI 引擎；编程 Agent 的分工见 [协作与交接约定](Agent协作与交接约定.md)。
 
 ## 1. 引擎边界
 
@@ -51,6 +51,13 @@
 ```
 
 mock 的固定结果由测试场景选择，不依赖随机数或请求轮询次数。涉及真实编码格式的测试可使用明确标注的合成格式样本，不把它们描述为真实归类结论。
+
+P02 第一批落地情况：
+
+- 场景由 `ExecutionContext.mock_scenario` 显式选择，已登记 `normal`、`missing_facts`、`image_failed`、`query_failed`、`tech_failure`、`association_error`、`supplier_invalid`、`expert_conflict`；未登记的场景显式报错，不随意成功。
+- 比较结论的判定顺序只有 `adapters/engines/mock.py::compare_original` 一份实现，P16 真实引擎应复用。
+- 技术失败用 `EngineTechnicalError` 表达，落库为行级 `status=failed` 与 `error_message`，不与业务待确认混用。
+- 上面的 JSON 示例字段名与正式契约一致，但正式结构以 `contracts/schemas/engine/` 为准；示例中的 `T001` 等标识在真实响应里是 UUID。
 
 ## 3. 证据结构
 

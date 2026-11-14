@@ -1,0 +1,354 @@
+{
+  "$defs": {
+    "Candidate": {
+      "properties": {
+        "confidence": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Confidence"
+        },
+        "hs": {
+          "title": "Hs",
+          "type": "string"
+        },
+        "reason": {
+          "default": "",
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "hs"
+      ],
+      "title": "Candidate",
+      "type": "object"
+    },
+    "ComparisonStatus": {
+      "description": "D4 第 2 节六类比较结论，优先级按声明顺序递减。",
+      "enum": [
+        "association_error",
+        "supplier_missing",
+        "supplier_invalid",
+        "needs_confirmation",
+        "consistent",
+        "inconsistent"
+      ],
+      "title": "ComparisonStatus",
+      "type": "string"
+    },
+    "EvidenceEntry": {
+      "description": "一条可定位的依据。查询无结果时不生成虚构条款。",
+      "properties": {
+        "document": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Document"
+        },
+        "effective_from": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effective From"
+        },
+        "effective_to": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effective To"
+        },
+        "evidence_id": {
+          "title": "Evidence Id",
+          "type": "string"
+        },
+        "excerpt": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Excerpt"
+        },
+        "issued_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Issued At"
+        },
+        "locator": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "条款、页码或章节定位",
+          "title": "Locator"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        },
+        "query": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Query"
+        },
+        "retrieved_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Retrieved At"
+        },
+        "scope": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scope"
+        },
+        "source_type": {
+          "title": "Source Type",
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/EvidenceStatus"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Url"
+        }
+      },
+      "required": [
+        "evidence_id",
+        "source_type",
+        "title",
+        "status"
+      ],
+      "title": "EvidenceEntry",
+      "type": "object"
+    },
+    "EvidenceStatus": {
+      "description": "逐来源的证据取得状态；查询失败与确实未查得必须分开。",
+      "enum": [
+        "obtained",
+        "not_found",
+        "query_failed",
+        "version_unverified"
+      ],
+      "title": "EvidenceStatus",
+      "type": "string"
+    },
+    "IssueEntry": {
+      "description": "补料或异常问题，定位到具体商品与字段。",
+      "properties": {
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "field": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Field"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "missing": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "缺少什么事实或资料",
+          "title": "Missing"
+        },
+        "suggested_role": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "建议由哪个角色补充；最终责任人由人工决定",
+          "title": "Suggested Role"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "title": "IssueEntry",
+      "type": "object"
+    }
+  },
+  "description": "一次预审的完整行结果：推荐与比较字段互不覆盖。",
+  "properties": {
+    "candidates": {
+      "items": {
+        "$ref": "#/$defs/Candidate"
+      },
+      "title": "Candidates",
+      "type": "array"
+    },
+    "comparison_reason": {
+      "default": "",
+      "title": "Comparison Reason",
+      "type": "string"
+    },
+    "comparison_status": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ComparisonStatus"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "confidence": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Confidence"
+    },
+    "evidence": {
+      "items": {
+        "$ref": "#/$defs/EvidenceEntry"
+      },
+      "title": "Evidence",
+      "type": "array"
+    },
+    "evidence_status": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/EvidenceStatus"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "issues": {
+      "items": {
+        "$ref": "#/$defs/IssueEntry"
+      },
+      "title": "Issues",
+      "type": "array"
+    },
+    "suggested_hs": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Suggested Hs"
+    }
+  },
+  "title": "PrecheckOutput",
+  "type": "object"
+}

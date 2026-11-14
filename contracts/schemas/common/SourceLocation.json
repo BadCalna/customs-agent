@@ -1,0 +1,25 @@
+{
+  "description": "商品行在原 Excel 中的位置；行号为 1 起始。",
+  "properties": {
+    "cells": {
+      "default": "",
+      "title": "Cells",
+      "type": "string"
+    },
+    "row_number": {
+      "minimum": 1,
+      "title": "Row Number",
+      "type": "integer"
+    },
+    "sheet_name": {
+      "title": "Sheet Name",
+      "type": "string"
+    }
+  },
+  "required": [
+    "sheet_name",
+    "row_number"
+  ],
+  "title": "SourceLocation",
+  "type": "object"
+}

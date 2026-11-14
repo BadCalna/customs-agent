@@ -1,0 +1,62 @@
+{
+  "$defs": {
+    "ImageStatus": {
+      "enum": [
+        "available",
+        "absent",
+        "read_failed"
+      ],
+      "title": "ImageStatus",
+      "type": "string"
+    }
+  },
+  "description": "商品附图；读取失败与确无图片分开，并保留来源单元格。",
+  "properties": {
+    "dispimg_id": {
+      "default": "",
+      "title": "Dispimg Id",
+      "type": "string"
+    },
+    "download_url": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "受控下载路由，不暴露服务器绝对路径",
+      "title": "Download Url"
+    },
+    "error_message": {
+      "default": "",
+      "title": "Error Message",
+      "type": "string"
+    },
+    "image_id": {
+      "title": "Image Id",
+      "type": "string"
+    },
+    "source_cell": {
+      "title": "Source Cell",
+      "type": "string"
+    },
+    "source_sheet": {
+      "title": "Source Sheet",
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/ImageStatus"
+    }
+  },
+  "required": [
+    "image_id",
+    "status",
+    "source_sheet",
+    "source_cell"
+  ],
+  "title": "ImageEntry",
+  "type": "object"
+}

@@ -1,0 +1,167 @@
+{
+  "$defs": {
+    "Action": {
+      "description": "``allowed_actions`` 的取值，与服务层权限常量一一对应。",
+      "enum": [
+        "read",
+        "version.create",
+        "confirmation.write",
+        "submission.create",
+        "decision.resolve"
+      ],
+      "title": "Action",
+      "type": "string"
+    },
+    "ResultMode": {
+      "description": "结果来源模式。mock 结果必须在页面上可识别，不冒充真实引擎结论。",
+      "enum": [
+        "mock",
+        "live"
+      ],
+      "title": "ResultMode",
+      "type": "string"
+    },
+    "RunKind": {
+      "enum": [
+        "precheck",
+        "expert_check"
+      ],
+      "title": "RunKind",
+      "type": "string"
+    },
+    "RunStatus": {
+      "description": "技术执行状态。部分行失败由 ``progress.failed`` 表达，不改写本状态。",
+      "enum": [
+        "queued",
+        "running",
+        "succeeded",
+        "failed"
+      ],
+      "title": "RunStatus",
+      "type": "string"
+    },
+    "TaskStage": {
+      "enum": [
+        "uploaded",
+        "prechecking",
+        "awaiting_confirmation",
+        "submitted",
+        "approved",
+        "returned"
+      ],
+      "title": "TaskStage",
+      "type": "string"
+    }
+  },
+  "properties": {
+    "allowed_actions": {
+      "items": {
+        "$ref": "#/$defs/Action"
+      },
+      "title": "Allowed Actions",
+      "type": "array"
+    },
+    "created_at": {
+      "title": "Created At",
+      "type": "string"
+    },
+    "current_version_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Current Version Id"
+    },
+    "current_version_number": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Current Version Number"
+    },
+    "latest_run_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Latest Run Id"
+    },
+    "latest_run_kind": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RunKind"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "latest_run_status": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RunStatus"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "result_mode": {
+      "$ref": "#/$defs/ResultMode"
+    },
+    "revision": {
+      "title": "Revision",
+      "type": "integer"
+    },
+    "stage": {
+      "$ref": "#/$defs/TaskStage"
+    },
+    "supplier": {
+      "description": "供应商显示名",
+      "title": "Supplier",
+      "type": "string"
+    },
+    "task_id": {
+      "title": "Task Id",
+      "type": "string"
+    },
+    "title": {
+      "title": "Title",
+      "type": "string"
+    },
+    "updated_at": {
+      "title": "Updated At",
+      "type": "string"
+    }
+  },
+  "required": [
+    "task_id",
+    "title",
+    "stage",
+    "supplier",
+    "revision",
+    "allowed_actions",
+    "result_mode",
+    "created_at",
+    "updated_at"
+  ],
+  "title": "TaskListEntry",
+  "type": "object"
+}

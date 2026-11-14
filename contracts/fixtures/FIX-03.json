@@ -1,0 +1,190 @@
+{
+  "card": {
+    "allowed_actions": [
+      "confirmation.write",
+      "read",
+      "submission.create"
+    ],
+    "business_confirmed_hs": {
+      "source_id": null,
+      "value": null
+    },
+    "comparison_status": "needs_confirmation",
+    "confidence": 0.62,
+    "evidence": [
+      {
+        "document": "MOCK-ONLY",
+        "effective_from": null,
+        "effective_to": null,
+        "evidence_id": "mock-obtained",
+        "excerpt": null,
+        "issued_at": null,
+        "locator": "合成样例，无真实条款",
+        "note": "mock 合成依据，仅用于演示",
+        "query": {
+          "mode": "mock"
+        },
+        "retrieved_at": "2026-11-14T00:00:00+08:00",
+        "scope": null,
+        "source_type": "synthetic",
+        "status": "obtained",
+        "title": "mock 合成依据（非真实法规）",
+        "url": null
+      }
+    ],
+    "evidence_status": "obtained",
+    "expert_final_hs": {
+      "source_id": null,
+      "value": null
+    },
+    "expert_suggested_hs": {
+      "source_id": null,
+      "value": null
+    },
+    "facts": {
+      "attributes": {
+        "品名": "镍合金带（附图读取失败）",
+        "规格型号": "SPEC-8"
+      },
+      "name": "镍合金带（附图读取失败）",
+      "supplier_elements_raw": "品名:镍合金带（附图读取失败）|规格型号:SPEC-8",
+      "supplier_hs_raw": "8544422900",
+      "supplier_tax_rate_raw": ""
+    },
+    "image_status": "read_failed",
+    "images": [
+      {
+        "dispimg_id": "DISPIMG_8",
+        "download_url": null,
+        "error_message": "mock：DISPIMG 嵌入资源缺失",
+        "image_id": "6c8eb8b5-90d3-405c-933c-41018e2d91df",
+        "source_cell": "H8",
+        "source_sheet": "申报要素",
+        "status": "read_failed"
+      }
+    ],
+    "issues": [
+      {
+        "code": "IMAGE_READ_FAILED",
+        "field": "images",
+        "message": "附图读取失败，可见事实不足",
+        "missing": "附图内容",
+        "suggested_role": "supplier"
+      }
+    ],
+    "item_id": "219e35bb-0959-4255-aee1-ea1f861c7af7",
+    "latest_expert_check": null,
+    "latest_run_id": "2aa163f3-c390-4a69-9c4a-e6162e1df3ac",
+    "precheck_suggested_hs": {
+      "source_id": "2aa163f3-c390-4a69-9c4a-e6162e1df3ac",
+      "value": "8544422900"
+    },
+    "result_mode": "mock",
+    "revision": 1,
+    "source_location": {
+      "cells": "A8:H8",
+      "row_number": 8,
+      "sheet_name": "申报要素"
+    },
+    "submission_status": null,
+    "submitted_hs": {
+      "source_id": null,
+      "value": null
+    },
+    "task_id": "8c5aed88-fe80-4618-9997-82891376ad96",
+    "task_stage": "awaiting_confirmation",
+    "version_id": "d1051286-aecb-47e1-a614-1f53ed7aef65"
+  },
+  "contract_version": "1.0.0",
+  "notes": "read_failed 与 absent 分开，保留来源单元格与失败原因；related_cards 为确无图片的对照。",
+  "related_cards": [
+    {
+      "allowed_actions": [
+        "confirmation.write",
+        "read",
+        "submission.create"
+      ],
+      "business_confirmed_hs": {
+        "source_id": null,
+        "value": null
+      },
+      "comparison_status": "inconsistent",
+      "confidence": 0.62,
+      "evidence": [
+        {
+          "document": "MOCK-ONLY",
+          "effective_from": null,
+          "effective_to": null,
+          "evidence_id": "mock-obtained",
+          "excerpt": null,
+          "issued_at": null,
+          "locator": "合成样例，无真实条款",
+          "note": "mock 合成依据，仅用于演示",
+          "query": {
+            "mode": "mock"
+          },
+          "retrieved_at": "2026-11-14T00:00:00+08:00",
+          "scope": null,
+          "source_type": "synthetic",
+          "status": "obtained",
+          "title": "mock 合成依据（非真实法规）",
+          "url": null
+        }
+      ],
+      "evidence_status": "obtained",
+      "expert_final_hs": {
+        "source_id": null,
+        "value": null
+      },
+      "expert_suggested_hs": {
+        "source_id": null,
+        "value": null
+      },
+      "facts": {
+        "attributes": {
+          "品名": "不锈钢制焊接管（不一致样例）",
+          "规格型号": "SPEC-6"
+        },
+        "name": "不锈钢制焊接管（不一致样例）",
+        "supplier_elements_raw": "品名:不锈钢制焊接管（不一致样例）|规格型号:SPEC-6",
+        "supplier_hs_raw": "7306290000",
+        "supplier_tax_rate_raw": ""
+      },
+      "image_status": "absent",
+      "images": [],
+      "issues": [
+        {
+          "code": "HS_MISMATCH",
+          "field": "supplier_hs_raw",
+          "message": "建议编码与原码不一致",
+          "missing": null,
+          "suggested_role": null
+        }
+      ],
+      "item_id": "8d537008-3a2b-4173-9abe-2de00e75f93a",
+      "latest_expert_check": null,
+      "latest_run_id": "2aa163f3-c390-4a69-9c4a-e6162e1df3ac",
+      "precheck_suggested_hs": {
+        "source_id": "2aa163f3-c390-4a69-9c4a-e6162e1df3ac",
+        "value": "8544422900"
+      },
+      "result_mode": "mock",
+      "revision": 1,
+      "source_location": {
+        "cells": "A6:H6",
+        "row_number": 6,
+        "sheet_name": "申报要素"
+      },
+      "submission_status": null,
+      "submitted_hs": {
+        "source_id": null,
+        "value": null
+      },
+      "task_id": "8c5aed88-fe80-4618-9997-82891376ad96",
+      "task_stage": "awaiting_confirmation",
+      "version_id": "d1051286-aecb-47e1-a614-1f53ed7aef65"
+    }
+  ],
+  "scenario": "FIX-03",
+  "title": "图片失败"
+}

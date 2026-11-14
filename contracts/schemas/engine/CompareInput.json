@@ -1,0 +1,453 @@
+{
+  "$defs": {
+    "Candidate": {
+      "properties": {
+        "confidence": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Confidence"
+        },
+        "hs": {
+          "title": "Hs",
+          "type": "string"
+        },
+        "reason": {
+          "default": "",
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "hs"
+      ],
+      "title": "Candidate",
+      "type": "object"
+    },
+    "EvidenceEntry": {
+      "description": "一条可定位的依据。查询无结果时不生成虚构条款。",
+      "properties": {
+        "document": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Document"
+        },
+        "effective_from": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effective From"
+        },
+        "effective_to": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effective To"
+        },
+        "evidence_id": {
+          "title": "Evidence Id",
+          "type": "string"
+        },
+        "excerpt": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Excerpt"
+        },
+        "issued_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Issued At"
+        },
+        "locator": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "条款、页码或章节定位",
+          "title": "Locator"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        },
+        "query": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Query"
+        },
+        "retrieved_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Retrieved At"
+        },
+        "scope": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scope"
+        },
+        "source_type": {
+          "title": "Source Type",
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/EvidenceStatus"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Url"
+        }
+      },
+      "required": [
+        "evidence_id",
+        "source_type",
+        "title",
+        "status"
+      ],
+      "title": "EvidenceEntry",
+      "type": "object"
+    },
+    "EvidenceStatus": {
+      "description": "逐来源的证据取得状态；查询失败与确实未查得必须分开。",
+      "enum": [
+        "obtained",
+        "not_found",
+        "query_failed",
+        "version_unverified"
+      ],
+      "title": "EvidenceStatus",
+      "type": "string"
+    },
+    "ExecutionContext": {
+      "description": "共有执行上下文，标识一律由服务端注入。",
+      "properties": {
+        "engine_version": {
+          "default": "",
+          "title": "Engine Version",
+          "type": "string"
+        },
+        "input_hash": {
+          "default": "",
+          "title": "Input Hash",
+          "type": "string"
+        },
+        "input_revision": {
+          "title": "Input Revision",
+          "type": "integer"
+        },
+        "item_id": {
+          "title": "Item Id",
+          "type": "string"
+        },
+        "mock_scenario": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "仅 mock 引擎使用的固定场景选择键；真实引擎忽略，不参与业务判断",
+          "title": "Mock Scenario"
+        },
+        "prompt_version": {
+          "default": "",
+          "title": "Prompt Version",
+          "type": "string"
+        },
+        "result_mode": {
+          "$ref": "#/$defs/ResultMode",
+          "default": "mock"
+        },
+        "rules_version": {
+          "default": "",
+          "title": "Rules Version",
+          "type": "string"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "task_id": {
+          "title": "Task Id",
+          "type": "string"
+        },
+        "version_id": {
+          "title": "Version Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "version_id",
+        "item_id",
+        "run_id",
+        "input_revision"
+      ],
+      "title": "ExecutionContext",
+      "type": "object"
+    },
+    "IssueEntry": {
+      "description": "补料或异常问题，定位到具体商品与字段。",
+      "properties": {
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "field": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Field"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "missing": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "缺少什么事实或资料",
+          "title": "Missing"
+        },
+        "suggested_role": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "建议由哪个角色补充；最终责任人由人工决定",
+          "title": "Suggested Role"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "title": "IssueEntry",
+      "type": "object"
+    },
+    "RecommendOutput": {
+      "properties": {
+        "candidates": {
+          "items": {
+            "$ref": "#/$defs/Candidate"
+          },
+          "title": "Candidates",
+          "type": "array"
+        },
+        "confidence": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Confidence"
+        },
+        "confidence_note": {
+          "default": "",
+          "title": "Confidence Note",
+          "type": "string"
+        },
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/EvidenceEntry"
+          },
+          "title": "Evidence",
+          "type": "array"
+        },
+        "evidence_status": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EvidenceStatus"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "gaps": {
+          "items": {
+            "$ref": "#/$defs/IssueEntry"
+          },
+          "title": "Gaps",
+          "type": "array"
+        },
+        "suggested_hs": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "不确定时为 null，不填假码凑格式",
+          "title": "Suggested Hs"
+        }
+      },
+      "title": "RecommendOutput",
+      "type": "object"
+    },
+    "ResultMode": {
+      "description": "结果来源模式。mock 结果必须在页面上可识别，不冒充真实引擎结论。",
+      "enum": [
+        "mock",
+        "live"
+      ],
+      "title": "ResultMode",
+      "type": "string"
+    }
+  },
+  "description": "原码比较输入：独立推荐结果 + 供应商原码 + 关联与有效性信息。",
+  "properties": {
+    "association_note": {
+      "default": "",
+      "title": "Association Note",
+      "type": "string"
+    },
+    "association_ok": {
+      "default": true,
+      "title": "Association Ok",
+      "type": "boolean"
+    },
+    "context": {
+      "$ref": "#/$defs/ExecutionContext"
+    },
+    "recommendation": {
+      "$ref": "#/$defs/RecommendOutput"
+    },
+    "supplier_hs_format_valid": {
+      "default": true,
+      "title": "Supplier Hs Format Valid",
+      "type": "boolean"
+    },
+    "supplier_hs_raw": {
+      "description": "原样保留，空白即空白",
+      "title": "Supplier Hs Raw",
+      "type": "string"
+    },
+    "supplier_hs_validity_note": {
+      "default": "",
+      "title": "Supplier Hs Validity Note",
+      "type": "string"
+    }
+  },
+  "required": [
+    "context",
+    "recommendation",
+    "supplier_hs_raw"
+  ],
+  "title": "CompareInput",
+  "type": "object"
+}

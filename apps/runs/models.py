@@ -49,7 +49,7 @@ class Run(FixedInputModel):
     status = models.CharField("执行状态", max_length=16, choices=Status.choices, default=Status.QUEUED)
     is_current = models.BooleanField(
         "当前有效执行", default=False,
-        help_text="由 P06/P13 维护；旧执行保留为历史，不参与当前卡片结果。",
+        help_text="按文件版本与执行类型各保留一轮当前执行；同版本重跑转为历史，旧版本执行仍可回查。",
     )
     triggered_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
@@ -65,7 +65,7 @@ class Run(FixedInputModel):
         verbose_name_plural = "分析执行"
         ordering = ["-created_at"]
         indexes = [
-            models.Index(fields=["task", "kind", "is_current"], name="idx_run_task_kind_current"),
+            models.Index(fields=["version", "kind", "is_current"], name="idx_run_version_kind_current"),
         ]
 
     def clean(self):
@@ -94,9 +94,12 @@ class RunItem(FixedInputModel):
         FAILED = "failed", "执行失败"
 
     class ComparisonStatus(models.TextChoices):
-        RELATED_ANOMALY = "related_anomaly", "关联异常"
-        INVALID_ORIGINAL = "invalid_original", "原码异常"
-        INSUFFICIENT_EVIDENCE = "insufficient_evidence", "证据不足"
+        # 取值与优先级严格对齐 D4 第 2 节：关联异常 → 原码缺失/异常 → 待确认 → 一致/不一致。
+        # 原码未填（supplier_missing）与原码异常（supplier_invalid）必须分开，不能合并。
+        ASSOCIATION_ERROR = "association_error", "关联异常"
+        SUPPLIER_MISSING = "supplier_missing", "原码缺失"
+        SUPPLIER_INVALID = "supplier_invalid", "原码异常"
+        NEEDS_CONFIRMATION = "needs_confirmation", "待确认"
         CONSISTENT = "consistent", "一致"
         INCONSISTENT = "inconsistent", "不一致"
 

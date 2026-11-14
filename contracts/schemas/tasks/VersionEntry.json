@@ -1,0 +1,35 @@
+{
+  "properties": {
+    "is_current": {
+      "title": "Is Current",
+      "type": "boolean"
+    },
+    "number": {
+      "description": "V1 为 1；同任务内唯一",
+      "minimum": 1,
+      "title": "Number",
+      "type": "integer"
+    },
+    "original_filename": {
+      "title": "Original Filename",
+      "type": "string"
+    },
+    "uploaded_at": {
+      "title": "Uploaded At",
+      "type": "string"
+    },
+    "version_id": {
+      "title": "Version Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "version_id",
+    "number",
+    "original_filename",
+    "uploaded_at",
+    "is_current"
+  ],
+  "title": "VersionEntry",
+  "type": "object"
+}
