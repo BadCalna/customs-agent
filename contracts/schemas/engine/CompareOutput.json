@@ -1,0 +1,96 @@
+{
+  "$defs": {
+    "ComparisonStatus": {
+      "description": "D4 第 2 节六类比较结论，优先级按声明顺序递减。",
+      "enum": [
+        "association_error",
+        "supplier_missing",
+        "supplier_invalid",
+        "needs_confirmation",
+        "consistent",
+        "inconsistent"
+      ],
+      "title": "ComparisonStatus",
+      "type": "string"
+    },
+    "IssueEntry": {
+      "description": "补料或异常问题，定位到具体商品与字段。",
+      "properties": {
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "field": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Field"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "missing": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "缺少什么事实或资料",
+          "title": "Missing"
+        },
+        "suggested_role": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "建议由哪个角色补充；最终责任人由人工决定",
+          "title": "Suggested Role"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "title": "IssueEntry",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "comparison_status": {
+      "$ref": "#/$defs/ComparisonStatus"
+    },
+    "issues": {
+      "items": {
+        "$ref": "#/$defs/IssueEntry"
+      },
+      "title": "Issues",
+      "type": "array"
+    },
+    "reason": {
+      "default": "",
+      "title": "Reason",
+      "type": "string"
+    }
+  },
+  "required": [
+    "comparison_status"
+  ],
+  "title": "CompareOutput",
+  "type": "object"
+}

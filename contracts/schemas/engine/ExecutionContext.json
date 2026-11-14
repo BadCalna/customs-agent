@@ -1,0 +1,82 @@
+{
+  "$defs": {
+    "ResultMode": {
+      "description": "结果来源模式。mock 结果必须在页面上可识别，不冒充真实引擎结论。",
+      "enum": [
+        "mock",
+        "live"
+      ],
+      "title": "ResultMode",
+      "type": "string"
+    }
+  },
+  "description": "共有执行上下文，标识一律由服务端注入。",
+  "properties": {
+    "engine_version": {
+      "default": "",
+      "title": "Engine Version",
+      "type": "string"
+    },
+    "input_hash": {
+      "default": "",
+      "title": "Input Hash",
+      "type": "string"
+    },
+    "input_revision": {
+      "title": "Input Revision",
+      "type": "integer"
+    },
+    "item_id": {
+      "title": "Item Id",
+      "type": "string"
+    },
+    "mock_scenario": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "仅 mock 引擎使用的固定场景选择键；真实引擎忽略，不参与业务判断",
+      "title": "Mock Scenario"
+    },
+    "prompt_version": {
+      "default": "",
+      "title": "Prompt Version",
+      "type": "string"
+    },
+    "result_mode": {
+      "$ref": "#/$defs/ResultMode",
+      "default": "mock"
+    },
+    "rules_version": {
+      "default": "",
+      "title": "Rules Version",
+      "type": "string"
+    },
+    "run_id": {
+      "title": "Run Id",
+      "type": "string"
+    },
+    "task_id": {
+      "title": "Task Id",
+      "type": "string"
+    },
+    "version_id": {
+      "title": "Version Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "task_id",
+    "version_id",
+    "item_id",
+    "run_id",
+    "input_revision"
+  ],
+  "title": "ExecutionContext",
+  "type": "object"
+}

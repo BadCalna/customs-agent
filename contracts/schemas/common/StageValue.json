@@ -1,0 +1,32 @@
+{
+  "description": "某一编码阶段的值及其来源引用。未产生时两个字段都为 null。",
+  "properties": {
+    "source_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "产生该值的 run / submission / decision 标识",
+      "title": "Source Id"
+    },
+    "value": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Value"
+    }
+  },
+  "title": "StageValue",
+  "type": "object"
+}

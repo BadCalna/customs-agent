@@ -1,0 +1,196 @@
+{
+  "card": {
+    "allowed_actions": [
+      "confirmation.write",
+      "read",
+      "submission.create"
+    ],
+    "business_confirmed_hs": {
+      "source_id": "2922c60f-04f8-4734-be06-7b68e59dd93f",
+      "value": "8544422900"
+    },
+    "comparison_status": "consistent",
+    "confidence": 0.62,
+    "evidence": [
+      {
+        "document": "MOCK-ONLY",
+        "effective_from": null,
+        "effective_to": null,
+        "evidence_id": "mock-obtained",
+        "excerpt": null,
+        "issued_at": null,
+        "locator": "合成样例，无真实条款",
+        "note": "mock 合成依据，仅用于演示",
+        "query": {
+          "mode": "mock"
+        },
+        "retrieved_at": "2026-11-14T00:00:00+08:00",
+        "scope": null,
+        "source_type": "synthetic",
+        "status": "obtained",
+        "title": "mock 合成依据（非真实法规）",
+        "url": null
+      }
+    ],
+    "evidence_status": "obtained",
+    "expert_final_hs": {
+      "source_id": "03fc2839-5f40-4d96-88ae-ecd82130622d",
+      "value": "8536901900"
+    },
+    "expert_suggested_hs": {
+      "source_id": "c5412410-961f-4d35-abca-3673f85cd206",
+      "value": null
+    },
+    "facts": {
+      "attributes": {
+        "品名": "不锈钢制无缝管（改码样例）",
+        "规格型号": "SPEC-3"
+      },
+      "name": "不锈钢制无缝管（改码样例）",
+      "supplier_elements_raw": "品名:不锈钢制无缝管（改码样例）|规格型号:SPEC-3",
+      "supplier_hs_raw": "8544422900",
+      "supplier_tax_rate_raw": ""
+    },
+    "image_status": "available",
+    "images": [
+      {
+        "dispimg_id": "DISPIMG_3",
+        "download_url": null,
+        "error_message": "",
+        "image_id": "76809b4d-8b53-4d8e-9490-cca2ca560ef3",
+        "source_cell": "H3",
+        "source_sheet": "申报要素",
+        "status": "available"
+      }
+    ],
+    "issues": [],
+    "item_id": "5ab44d7a-e050-4416-8c28-66ad29c94780",
+    "latest_expert_check": {
+      "findings": [
+        {
+          "aspect": "elements",
+          "evidence_ids": [
+            "mock-obtained"
+          ],
+          "reason": "mock：申报要素与提交码不一致，建议另行核对",
+          "verdict": "conflict"
+        },
+        {
+          "aspect": "images",
+          "evidence_ids": [],
+          "reason": "mock：图片事实未核，不视为无风险",
+          "verdict": "unknown"
+        },
+        {
+          "aspect": "tax",
+          "evidence_ids": [],
+          "reason": "mock：退税率未接真实来源，保持待核",
+          "verdict": "unknown"
+        },
+        {
+          "aspect": "regulatory",
+          "evidence_ids": [],
+          "reason": "mock：监管条件未接真实来源，保持待核",
+          "verdict": "unknown"
+        }
+      ],
+      "run_id": "c5412410-961f-4d35-abca-3673f85cd206",
+      "submission_id": "d57727bf-76ba-4fda-aec7-98748921ea83",
+      "target_hs": "8544422900"
+    },
+    "latest_run_id": "6e0250f3-5f03-4b1a-88c7-f7eff2917a5c",
+    "precheck_suggested_hs": {
+      "source_id": "6e0250f3-5f03-4b1a-88c7-f7eff2917a5c",
+      "value": "8544422900"
+    },
+    "result_mode": "mock",
+    "revision": 1,
+    "source_location": {
+      "cells": "A3:H3",
+      "row_number": 3,
+      "sheet_name": "申报要素"
+    },
+    "submission_status": "approved",
+    "submitted_hs": {
+      "source_id": "d57727bf-76ba-4fda-aec7-98748921ea83",
+      "value": "8544422900"
+    },
+    "task_id": "b935ddbf-8d10-43e7-8398-0fcaa9dc7544",
+    "task_stage": "approved",
+    "version_id": "4b5befef-af8c-4c96-938e-fd8b04975d18"
+  },
+  "contract_version": "1.0.0",
+  "notes": "submitted_hs、expert_final_hs、改码原因分别展示；latest_expert_check.target_hs 仍是原提交码。",
+  "run": {
+    "created_at": "2026-11-14T14:19:49.867662+00:00",
+    "engine_version": "mock-1.0.0",
+    "evidence": [
+      {
+        "document": "MOCK-ONLY",
+        "effective_from": null,
+        "effective_to": null,
+        "evidence_id": "mock-obtained",
+        "excerpt": null,
+        "issued_at": null,
+        "locator": "合成样例，无真实条款",
+        "note": "mock 专家核查合成依据",
+        "query": {
+          "mode": "mock"
+        },
+        "retrieved_at": "2026-11-14T00:00:00+08:00",
+        "scope": null,
+        "source_type": "synthetic",
+        "status": "obtained",
+        "title": "mock 合成依据（非真实法规）",
+        "url": null
+      }
+    ],
+    "finished_at": "2026-11-14T14:19:49.869077+00:00",
+    "is_current": true,
+    "items": [
+      {
+        "attempts": 1,
+        "comparison_status": null,
+        "confidence": null,
+        "error_message": "",
+        "evidence_status": "obtained",
+        "issues": [
+          {
+            "code": "EXPERT_HS_CONFLICT",
+            "field": "submitted_hs",
+            "message": "提交码与要素核对冲突",
+            "missing": null,
+            "suggested_role": null
+          }
+        ],
+        "item_id": "5ab44d7a-e050-4416-8c28-66ad29c94780",
+        "source_location": {
+          "cells": "A3:H3",
+          "row_number": 3,
+          "sheet_name": "申报要素"
+        },
+        "status": "succeeded",
+        "suggested_hs": "8536901900"
+      }
+    ],
+    "kind": "expert_check",
+    "progress": {
+      "failed": 0,
+      "queued": 0,
+      "running": 0,
+      "succeeded": 1,
+      "total": 1
+    },
+    "prompt_version": "mock-none",
+    "result_mode": "mock",
+    "rules_version": "d4-0.1",
+    "run_id": "c5412410-961f-4d35-abca-3673f85cd206",
+    "started_at": "2026-11-14T14:19:49.867613+00:00",
+    "status": "succeeded",
+    "submission_id": "d57727bf-76ba-4fda-aec7-98748921ea83",
+    "task_id": "b935ddbf-8d10-43e7-8398-0fcaa9dc7544",
+    "version_id": "4b5befef-af8c-4c96-938e-fd8b04975d18"
+  },
+  "scenario": "FIX-10",
+  "title": "专家改码"
+}

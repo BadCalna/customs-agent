@@ -1,0 +1,92 @@
+{
+  "card": {
+    "allowed_actions": [
+      "confirmation.write",
+      "read",
+      "submission.create"
+    ],
+    "business_confirmed_hs": {
+      "source_id": null,
+      "value": null
+    },
+    "comparison_status": "needs_confirmation",
+    "confidence": null,
+    "evidence": [
+      {
+        "document": "MOCK-ONLY",
+        "effective_from": null,
+        "effective_to": null,
+        "evidence_id": "mock-query_failed",
+        "excerpt": null,
+        "issued_at": null,
+        "locator": "合成样例，无真实条款",
+        "note": "mock 模拟的来源查询失败",
+        "query": {
+          "mode": "mock"
+        },
+        "retrieved_at": "2026-11-14T00:00:00+08:00",
+        "scope": null,
+        "source_type": "synthetic",
+        "status": "query_failed",
+        "title": "mock 合成依据（非真实法规）",
+        "url": null
+      }
+    ],
+    "evidence_status": "query_failed",
+    "expert_final_hs": {
+      "source_id": null,
+      "value": null
+    },
+    "expert_suggested_hs": {
+      "source_id": null,
+      "value": null
+    },
+    "facts": {
+      "attributes": {
+        "品名": "铝制型材（查询失败）",
+        "规格型号": "SPEC-12"
+      },
+      "name": "铝制型材（查询失败）",
+      "supplier_elements_raw": "品名:铝制型材（查询失败）|规格型号:SPEC-12",
+      "supplier_hs_raw": "8544422900",
+      "supplier_tax_rate_raw": ""
+    },
+    "image_status": "absent",
+    "images": [],
+    "issues": [
+      {
+        "code": "SOURCE_QUERY_FAILED",
+        "field": null,
+        "message": "税则来源查询失败，依据待核",
+        "missing": null,
+        "suggested_role": null
+      }
+    ],
+    "item_id": "9c7c5d4d-3d1f-4a96-9b4b-6e0153cf1b5a",
+    "latest_expert_check": null,
+    "latest_run_id": "2aa163f3-c390-4a69-9c4a-e6162e1df3ac",
+    "precheck_suggested_hs": {
+      "source_id": "2aa163f3-c390-4a69-9c4a-e6162e1df3ac",
+      "value": "8544422900"
+    },
+    "result_mode": "mock",
+    "revision": 1,
+    "source_location": {
+      "cells": "A12:H12",
+      "row_number": 12,
+      "sheet_name": "申报要素"
+    },
+    "submission_status": null,
+    "submitted_hs": {
+      "source_id": null,
+      "value": null
+    },
+    "task_id": "8c5aed88-fe80-4618-9997-82891376ad96",
+    "task_stage": "awaiting_confirmation",
+    "version_id": "d1051286-aecb-47e1-a614-1f53ed7aef65"
+  },
+  "contract_version": "1.0.0",
+  "notes": "evidence_status=query_failed，置信度为 null，不生成已核实结论。",
+  "scenario": "FIX-06",
+  "title": "查询失败"
+}

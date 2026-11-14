@@ -1,0 +1,540 @@
+{
+  "$defs": {
+    "ComparisonStatus": {
+      "description": "D4 第 2 节六类比较结论，优先级按声明顺序递减。",
+      "enum": [
+        "association_error",
+        "supplier_missing",
+        "supplier_invalid",
+        "needs_confirmation",
+        "consistent",
+        "inconsistent"
+      ],
+      "title": "ComparisonStatus",
+      "type": "string"
+    },
+    "EvidenceEntry": {
+      "description": "一条可定位的依据。查询无结果时不生成虚构条款。",
+      "properties": {
+        "document": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Document"
+        },
+        "effective_from": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effective From"
+        },
+        "effective_to": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effective To"
+        },
+        "evidence_id": {
+          "title": "Evidence Id",
+          "type": "string"
+        },
+        "excerpt": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Excerpt"
+        },
+        "issued_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Issued At"
+        },
+        "locator": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "条款、页码或章节定位",
+          "title": "Locator"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        },
+        "query": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Query"
+        },
+        "retrieved_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Retrieved At"
+        },
+        "scope": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scope"
+        },
+        "source_type": {
+          "title": "Source Type",
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/EvidenceStatus"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Url"
+        }
+      },
+      "required": [
+        "evidence_id",
+        "source_type",
+        "title",
+        "status"
+      ],
+      "title": "EvidenceEntry",
+      "type": "object"
+    },
+    "EvidenceStatus": {
+      "description": "逐来源的证据取得状态；查询失败与确实未查得必须分开。",
+      "enum": [
+        "obtained",
+        "not_found",
+        "query_failed",
+        "version_unverified"
+      ],
+      "title": "EvidenceStatus",
+      "type": "string"
+    },
+    "IssueEntry": {
+      "description": "补料或异常问题，定位到具体商品与字段。",
+      "properties": {
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "field": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Field"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "missing": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "缺少什么事实或资料",
+          "title": "Missing"
+        },
+        "suggested_role": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "建议由哪个角色补充；最终责任人由人工决定",
+          "title": "Suggested Role"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "title": "IssueEntry",
+      "type": "object"
+    },
+    "ResultMode": {
+      "description": "结果来源模式。mock 结果必须在页面上可识别，不冒充真实引擎结论。",
+      "enum": [
+        "mock",
+        "live"
+      ],
+      "title": "ResultMode",
+      "type": "string"
+    },
+    "RunItemEntry": {
+      "properties": {
+        "attempts": {
+          "default": 1,
+          "description": "已尝试次数，重试另计",
+          "minimum": 1,
+          "title": "Attempts",
+          "type": "integer"
+        },
+        "comparison_status": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ComparisonStatus"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "confidence": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Confidence"
+        },
+        "error_message": {
+          "default": "",
+          "description": "技术失败原因；缺事实不算技术失败",
+          "title": "Error Message",
+          "type": "string"
+        },
+        "evidence_status": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EvidenceStatus"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "issues": {
+          "items": {
+            "$ref": "#/$defs/IssueEntry"
+          },
+          "title": "Issues",
+          "type": "array"
+        },
+        "item_id": {
+          "title": "Item Id",
+          "type": "string"
+        },
+        "source_location": {
+          "$ref": "#/$defs/SourceLocation"
+        },
+        "status": {
+          "$ref": "#/$defs/RunStatus"
+        },
+        "suggested_hs": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "未生成建议为 null，不填假码",
+          "title": "Suggested Hs"
+        }
+      },
+      "required": [
+        "item_id",
+        "source_location",
+        "status"
+      ],
+      "title": "RunItemEntry",
+      "type": "object"
+    },
+    "RunKind": {
+      "enum": [
+        "precheck",
+        "expert_check"
+      ],
+      "title": "RunKind",
+      "type": "string"
+    },
+    "RunProgress": {
+      "description": "执行内各商品的当前状态计数；等待补料不计入 failed。",
+      "properties": {
+        "failed": {
+          "minimum": 0,
+          "title": "Failed",
+          "type": "integer"
+        },
+        "queued": {
+          "minimum": 0,
+          "title": "Queued",
+          "type": "integer"
+        },
+        "running": {
+          "minimum": 0,
+          "title": "Running",
+          "type": "integer"
+        },
+        "succeeded": {
+          "minimum": 0,
+          "title": "Succeeded",
+          "type": "integer"
+        },
+        "total": {
+          "minimum": 0,
+          "title": "Total",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "total",
+        "queued",
+        "running",
+        "succeeded",
+        "failed"
+      ],
+      "title": "RunProgress",
+      "type": "object"
+    },
+    "RunStatus": {
+      "description": "技术执行状态。部分行失败由 ``progress.failed`` 表达，不改写本状态。",
+      "enum": [
+        "queued",
+        "running",
+        "succeeded",
+        "failed"
+      ],
+      "title": "RunStatus",
+      "type": "string"
+    },
+    "SourceLocation": {
+      "description": "商品行在原 Excel 中的位置；行号为 1 起始。",
+      "properties": {
+        "cells": {
+          "default": "",
+          "title": "Cells",
+          "type": "string"
+        },
+        "row_number": {
+          "minimum": 1,
+          "title": "Row Number",
+          "type": "integer"
+        },
+        "sheet_name": {
+          "title": "Sheet Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "sheet_name",
+        "row_number"
+      ],
+      "title": "SourceLocation",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "created_at": {
+      "title": "Created At",
+      "type": "string"
+    },
+    "engine_version": {
+      "default": "",
+      "title": "Engine Version",
+      "type": "string"
+    },
+    "evidence": {
+      "items": {
+        "$ref": "#/$defs/EvidenceEntry"
+      },
+      "title": "Evidence",
+      "type": "array"
+    },
+    "finished_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Finished At"
+    },
+    "is_current": {
+      "description": "旧执行保留为历史，不参与当前卡片",
+      "title": "Is Current",
+      "type": "boolean"
+    },
+    "items": {
+      "items": {
+        "$ref": "#/$defs/RunItemEntry"
+      },
+      "title": "Items",
+      "type": "array"
+    },
+    "kind": {
+      "$ref": "#/$defs/RunKind"
+    },
+    "progress": {
+      "$ref": "#/$defs/RunProgress"
+    },
+    "prompt_version": {
+      "default": "",
+      "title": "Prompt Version",
+      "type": "string"
+    },
+    "result_mode": {
+      "$ref": "#/$defs/ResultMode"
+    },
+    "rules_version": {
+      "default": "",
+      "title": "Rules Version",
+      "type": "string"
+    },
+    "run_id": {
+      "title": "Run Id",
+      "type": "string"
+    },
+    "started_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Started At"
+    },
+    "status": {
+      "$ref": "#/$defs/RunStatus"
+    },
+    "submission_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Submission Id"
+    },
+    "task_id": {
+      "title": "Task Id",
+      "type": "string"
+    },
+    "version_id": {
+      "title": "Version Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "run_id",
+    "task_id",
+    "version_id",
+    "kind",
+    "status",
+    "is_current",
+    "result_mode",
+    "progress",
+    "created_at"
+  ],
+  "title": "RunDetail",
+  "type": "object"
+}

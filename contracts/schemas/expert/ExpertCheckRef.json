@@ -1,0 +1,74 @@
+{
+  "$defs": {
+    "ExpertFinding": {
+      "description": "专家核查的一个分项意见，针对的是业务员提交的那个 HS。",
+      "properties": {
+        "aspect": {
+          "description": "elements / images / tax / regulatory",
+          "title": "Aspect",
+          "type": "string"
+        },
+        "evidence_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence Ids",
+          "type": "array"
+        },
+        "reason": {
+          "default": "",
+          "title": "Reason",
+          "type": "string"
+        },
+        "verdict": {
+          "$ref": "#/$defs/ExpertVerdict"
+        }
+      },
+      "required": [
+        "aspect",
+        "verdict"
+      ],
+      "title": "ExpertFinding",
+      "type": "object"
+    },
+    "ExpertVerdict": {
+      "description": "专家分项核查结论；unknown 不等于无风险。",
+      "enum": [
+        "matched",
+        "conflict",
+        "unknown"
+      ],
+      "title": "ExpertVerdict",
+      "type": "string"
+    }
+  },
+  "description": "卡片上标注最近一次专家核查针对的是哪个提交码。",
+  "properties": {
+    "findings": {
+      "items": {
+        "$ref": "#/$defs/ExpertFinding"
+      },
+      "title": "Findings",
+      "type": "array"
+    },
+    "run_id": {
+      "title": "Run Id",
+      "type": "string"
+    },
+    "submission_id": {
+      "title": "Submission Id",
+      "type": "string"
+    },
+    "target_hs": {
+      "title": "Target Hs",
+      "type": "string"
+    }
+  },
+  "required": [
+    "run_id",
+    "submission_id",
+    "target_hs"
+  ],
+  "title": "ExpertCheckRef",
+  "type": "object"
+}

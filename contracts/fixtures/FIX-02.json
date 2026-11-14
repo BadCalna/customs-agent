@@ -1,0 +1,92 @@
+{
+  "card": {
+    "allowed_actions": [
+      "confirmation.write",
+      "read",
+      "submission.create"
+    ],
+    "business_confirmed_hs": {
+      "source_id": null,
+      "value": null
+    },
+    "comparison_status": "needs_confirmation",
+    "confidence": null,
+    "evidence": [
+      {
+        "document": "MOCK-ONLY",
+        "effective_from": null,
+        "effective_to": null,
+        "evidence_id": "mock-not_found",
+        "excerpt": null,
+        "issued_at": null,
+        "locator": "合成样例，无真实条款",
+        "note": "缺事实，未进行有效检索",
+        "query": {
+          "mode": "mock"
+        },
+        "retrieved_at": "2026-11-14T00:00:00+08:00",
+        "scope": null,
+        "source_type": "synthetic",
+        "status": "not_found",
+        "title": "mock 合成依据（非真实法规）",
+        "url": null
+      }
+    ],
+    "evidence_status": "not_found",
+    "expert_final_hs": {
+      "source_id": null,
+      "value": null
+    },
+    "expert_suggested_hs": {
+      "source_id": null,
+      "value": null
+    },
+    "facts": {
+      "attributes": {
+        "品名": "镍合金板（缺用途）",
+        "规格型号": "SPEC-7"
+      },
+      "name": "镍合金板（缺用途）",
+      "supplier_elements_raw": "品名:镍合金板（缺用途）|规格型号:SPEC-7",
+      "supplier_hs_raw": "8544422900",
+      "supplier_tax_rate_raw": ""
+    },
+    "image_status": "absent",
+    "images": [],
+    "issues": [
+      {
+        "code": "MISSING_USAGE",
+        "field": "attributes.usage",
+        "message": "请补充具体用途",
+        "missing": "具体用途",
+        "suggested_role": "supplier"
+      }
+    ],
+    "item_id": "0b85d8fd-d804-4d9b-8751-4d7ad0f00253",
+    "latest_expert_check": null,
+    "latest_run_id": "2aa163f3-c390-4a69-9c4a-e6162e1df3ac",
+    "precheck_suggested_hs": {
+      "source_id": "2aa163f3-c390-4a69-9c4a-e6162e1df3ac",
+      "value": null
+    },
+    "result_mode": "mock",
+    "revision": 1,
+    "source_location": {
+      "cells": "A7:H7",
+      "row_number": 7,
+      "sheet_name": "申报要素"
+    },
+    "submission_status": null,
+    "submitted_hs": {
+      "source_id": null,
+      "value": null
+    },
+    "task_id": "8c5aed88-fe80-4618-9997-82891376ad96",
+    "task_stage": "awaiting_confirmation",
+    "version_id": "d1051286-aecb-47e1-a614-1f53ed7aef65"
+  },
+  "contract_version": "1.0.0",
+  "notes": "执行成功但业务待确认；suggested_hs 为 null，issues 指出缺什么、由谁补充。",
+  "scenario": "FIX-02",
+  "title": "缺关键事实"
+}

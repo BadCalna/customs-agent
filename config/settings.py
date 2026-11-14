@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     "apps.runs",
     "apps.notifications",
     "ninja",
+    "apps.api",
 ]
 AUTH_USER_MODEL = "accounts.User"
 MIDDLEWARE = [

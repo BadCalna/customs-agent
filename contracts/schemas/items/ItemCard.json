@@ -1,0 +1,677 @@
+{
+  "$defs": {
+    "Action": {
+      "description": "``allowed_actions`` 的取值，与服务层权限常量一一对应。",
+      "enum": [
+        "read",
+        "version.create",
+        "confirmation.write",
+        "submission.create",
+        "decision.resolve"
+      ],
+      "title": "Action",
+      "type": "string"
+    },
+    "ComparisonStatus": {
+      "description": "D4 第 2 节六类比较结论，优先级按声明顺序递减。",
+      "enum": [
+        "association_error",
+        "supplier_missing",
+        "supplier_invalid",
+        "needs_confirmation",
+        "consistent",
+        "inconsistent"
+      ],
+      "title": "ComparisonStatus",
+      "type": "string"
+    },
+    "EvidenceEntry": {
+      "description": "一条可定位的依据。查询无结果时不生成虚构条款。",
+      "properties": {
+        "document": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Document"
+        },
+        "effective_from": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effective From"
+        },
+        "effective_to": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effective To"
+        },
+        "evidence_id": {
+          "title": "Evidence Id",
+          "type": "string"
+        },
+        "excerpt": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Excerpt"
+        },
+        "issued_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Issued At"
+        },
+        "locator": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "条款、页码或章节定位",
+          "title": "Locator"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        },
+        "query": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Query"
+        },
+        "retrieved_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Retrieved At"
+        },
+        "scope": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scope"
+        },
+        "source_type": {
+          "title": "Source Type",
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/EvidenceStatus"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Url"
+        }
+      },
+      "required": [
+        "evidence_id",
+        "source_type",
+        "title",
+        "status"
+      ],
+      "title": "EvidenceEntry",
+      "type": "object"
+    },
+    "EvidenceStatus": {
+      "description": "逐来源的证据取得状态；查询失败与确实未查得必须分开。",
+      "enum": [
+        "obtained",
+        "not_found",
+        "query_failed",
+        "version_unverified"
+      ],
+      "title": "EvidenceStatus",
+      "type": "string"
+    },
+    "ExpertCheckRef": {
+      "description": "卡片上标注最近一次专家核查针对的是哪个提交码。",
+      "properties": {
+        "findings": {
+          "items": {
+            "$ref": "#/$defs/ExpertFinding"
+          },
+          "title": "Findings",
+          "type": "array"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "submission_id": {
+          "title": "Submission Id",
+          "type": "string"
+        },
+        "target_hs": {
+          "title": "Target Hs",
+          "type": "string"
+        }
+      },
+      "required": [
+        "run_id",
+        "submission_id",
+        "target_hs"
+      ],
+      "title": "ExpertCheckRef",
+      "type": "object"
+    },
+    "ExpertFinding": {
+      "description": "专家核查的一个分项意见，针对的是业务员提交的那个 HS。",
+      "properties": {
+        "aspect": {
+          "description": "elements / images / tax / regulatory",
+          "title": "Aspect",
+          "type": "string"
+        },
+        "evidence_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence Ids",
+          "type": "array"
+        },
+        "reason": {
+          "default": "",
+          "title": "Reason",
+          "type": "string"
+        },
+        "verdict": {
+          "$ref": "#/$defs/ExpertVerdict"
+        }
+      },
+      "required": [
+        "aspect",
+        "verdict"
+      ],
+      "title": "ExpertFinding",
+      "type": "object"
+    },
+    "ExpertVerdict": {
+      "description": "专家分项核查结论；unknown 不等于无风险。",
+      "enum": [
+        "matched",
+        "conflict",
+        "unknown"
+      ],
+      "title": "ExpertVerdict",
+      "type": "string"
+    },
+    "ImageEntry": {
+      "description": "商品附图；读取失败与确无图片分开，并保留来源单元格。",
+      "properties": {
+        "dispimg_id": {
+          "default": "",
+          "title": "Dispimg Id",
+          "type": "string"
+        },
+        "download_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "受控下载路由，不暴露服务器绝对路径",
+          "title": "Download Url"
+        },
+        "error_message": {
+          "default": "",
+          "title": "Error Message",
+          "type": "string"
+        },
+        "image_id": {
+          "title": "Image Id",
+          "type": "string"
+        },
+        "source_cell": {
+          "title": "Source Cell",
+          "type": "string"
+        },
+        "source_sheet": {
+          "title": "Source Sheet",
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/ImageStatus"
+        }
+      },
+      "required": [
+        "image_id",
+        "status",
+        "source_sheet",
+        "source_cell"
+      ],
+      "title": "ImageEntry",
+      "type": "object"
+    },
+    "ImageStatus": {
+      "enum": [
+        "available",
+        "absent",
+        "read_failed"
+      ],
+      "title": "ImageStatus",
+      "type": "string"
+    },
+    "IssueEntry": {
+      "description": "补料或异常问题，定位到具体商品与字段。",
+      "properties": {
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "field": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Field"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "missing": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "缺少什么事实或资料",
+          "title": "Missing"
+        },
+        "suggested_role": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "建议由哪个角色补充；最终责任人由人工决定",
+          "title": "Suggested Role"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "title": "IssueEntry",
+      "type": "object"
+    },
+    "ItemFacts": {
+      "description": "原文与结构化提取分开保存，任何阶段结果都不回写这里。",
+      "properties": {
+        "attributes": {
+          "additionalProperties": true,
+          "title": "Attributes",
+          "type": "object"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "supplier_elements_raw": {
+          "title": "Supplier Elements Raw",
+          "type": "string"
+        },
+        "supplier_hs_raw": {
+          "title": "Supplier Hs Raw",
+          "type": "string"
+        },
+        "supplier_tax_rate_raw": {
+          "title": "Supplier Tax Rate Raw",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "supplier_hs_raw",
+        "supplier_elements_raw",
+        "supplier_tax_rate_raw"
+      ],
+      "title": "ItemFacts",
+      "type": "object"
+    },
+    "ResultMode": {
+      "description": "结果来源模式。mock 结果必须在页面上可识别，不冒充真实引擎结论。",
+      "enum": [
+        "mock",
+        "live"
+      ],
+      "title": "ResultMode",
+      "type": "string"
+    },
+    "SourceLocation": {
+      "description": "商品行在原 Excel 中的位置；行号为 1 起始。",
+      "properties": {
+        "cells": {
+          "default": "",
+          "title": "Cells",
+          "type": "string"
+        },
+        "row_number": {
+          "minimum": 1,
+          "title": "Row Number",
+          "type": "integer"
+        },
+        "sheet_name": {
+          "title": "Sheet Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "sheet_name",
+        "row_number"
+      ],
+      "title": "SourceLocation",
+      "type": "object"
+    },
+    "StageValue": {
+      "description": "某一编码阶段的值及其来源引用。未产生时两个字段都为 null。",
+      "properties": {
+        "source_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "产生该值的 run / submission / decision 标识",
+          "title": "Source Id"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Value"
+        }
+      },
+      "title": "StageValue",
+      "type": "object"
+    },
+    "SubmissionStatus": {
+      "enum": [
+        "pending",
+        "approved",
+        "returned",
+        "superseded"
+      ],
+      "title": "SubmissionStatus",
+      "type": "string"
+    },
+    "TaskStage": {
+      "enum": [
+        "uploaded",
+        "prechecking",
+        "awaiting_confirmation",
+        "submitted",
+        "approved",
+        "returned"
+      ],
+      "title": "TaskStage",
+      "type": "string"
+    }
+  },
+  "description": "商品卡片完整字段组（D3 第 3 节）。",
+  "properties": {
+    "allowed_actions": {
+      "items": {
+        "$ref": "#/$defs/Action"
+      },
+      "title": "Allowed Actions",
+      "type": "array"
+    },
+    "business_confirmed_hs": {
+      "$ref": "#/$defs/StageValue"
+    },
+    "comparison_status": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ComparisonStatus"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "confidence": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Confidence"
+    },
+    "evidence": {
+      "items": {
+        "$ref": "#/$defs/EvidenceEntry"
+      },
+      "title": "Evidence",
+      "type": "array"
+    },
+    "evidence_status": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/EvidenceStatus"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "expert_final_hs": {
+      "$ref": "#/$defs/StageValue"
+    },
+    "expert_suggested_hs": {
+      "$ref": "#/$defs/StageValue"
+    },
+    "facts": {
+      "$ref": "#/$defs/ItemFacts"
+    },
+    "image_status": {
+      "$ref": "#/$defs/ImageStatus"
+    },
+    "images": {
+      "items": {
+        "$ref": "#/$defs/ImageEntry"
+      },
+      "title": "Images",
+      "type": "array"
+    },
+    "issues": {
+      "items": {
+        "$ref": "#/$defs/IssueEntry"
+      },
+      "title": "Issues",
+      "type": "array"
+    },
+    "item_id": {
+      "title": "Item Id",
+      "type": "string"
+    },
+    "latest_expert_check": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ExpertCheckRef"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "latest_run_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Latest Run Id"
+    },
+    "precheck_suggested_hs": {
+      "$ref": "#/$defs/StageValue"
+    },
+    "result_mode": {
+      "$ref": "#/$defs/ResultMode"
+    },
+    "revision": {
+      "title": "Revision",
+      "type": "integer"
+    },
+    "source_location": {
+      "$ref": "#/$defs/SourceLocation"
+    },
+    "submission_status": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/SubmissionStatus"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "submitted_hs": {
+      "$ref": "#/$defs/StageValue"
+    },
+    "task_id": {
+      "title": "Task Id",
+      "type": "string"
+    },
+    "task_stage": {
+      "$ref": "#/$defs/TaskStage"
+    },
+    "version_id": {
+      "title": "Version Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "task_id",
+    "version_id",
+    "item_id",
+    "revision",
+    "source_location",
+    "facts",
+    "image_status",
+    "precheck_suggested_hs",
+    "business_confirmed_hs",
+    "submitted_hs",
+    "expert_suggested_hs",
+    "expert_final_hs",
+    "result_mode",
+    "task_stage",
+    "allowed_actions"
+  ],
+  "title": "ItemCard",
+  "type": "object"
+}

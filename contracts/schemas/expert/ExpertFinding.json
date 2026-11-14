@@ -1,0 +1,43 @@
+{
+  "$defs": {
+    "ExpertVerdict": {
+      "description": "专家分项核查结论；unknown 不等于无风险。",
+      "enum": [
+        "matched",
+        "conflict",
+        "unknown"
+      ],
+      "title": "ExpertVerdict",
+      "type": "string"
+    }
+  },
+  "description": "专家核查的一个分项意见，针对的是业务员提交的那个 HS。",
+  "properties": {
+    "aspect": {
+      "description": "elements / images / tax / regulatory",
+      "title": "Aspect",
+      "type": "string"
+    },
+    "evidence_ids": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Evidence Ids",
+      "type": "array"
+    },
+    "reason": {
+      "default": "",
+      "title": "Reason",
+      "type": "string"
+    },
+    "verdict": {
+      "$ref": "#/$defs/ExpertVerdict"
+    }
+  },
+  "required": [
+    "aspect",
+    "verdict"
+  ],
+  "title": "ExpertFinding",
+  "type": "object"
+}

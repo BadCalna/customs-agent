@@ -1,0 +1,180 @@
+{
+  "card": {
+    "allowed_actions": [
+      "confirmation.write",
+      "read",
+      "submission.create"
+    ],
+    "business_confirmed_hs": {
+      "source_id": null,
+      "value": null
+    },
+    "comparison_status": "supplier_missing",
+    "confidence": 0.62,
+    "evidence": [
+      {
+        "document": "MOCK-ONLY",
+        "effective_from": null,
+        "effective_to": null,
+        "evidence_id": "mock-obtained",
+        "excerpt": null,
+        "issued_at": null,
+        "locator": "合成样例，无真实条款",
+        "note": "mock 合成依据，仅用于演示",
+        "query": {
+          "mode": "mock"
+        },
+        "retrieved_at": "2026-11-14T00:00:00+08:00",
+        "scope": null,
+        "source_type": "synthetic",
+        "status": "obtained",
+        "title": "mock 合成依据（非真实法规）",
+        "url": null
+      }
+    ],
+    "evidence_status": "obtained",
+    "expert_final_hs": {
+      "source_id": null,
+      "value": null
+    },
+    "expert_suggested_hs": {
+      "source_id": null,
+      "value": null
+    },
+    "facts": {
+      "attributes": {
+        "品名": "钢制紧固件（原码未填）",
+        "规格型号": "SPEC-9"
+      },
+      "name": "钢制紧固件（原码未填）",
+      "supplier_elements_raw": "品名:钢制紧固件（原码未填）|规格型号:SPEC-9",
+      "supplier_hs_raw": "",
+      "supplier_tax_rate_raw": ""
+    },
+    "image_status": "absent",
+    "images": [],
+    "issues": [
+      {
+        "code": "SUPPLIER_HS_MISSING",
+        "field": "supplier_hs_raw",
+        "message": "供应商原 HS 为空",
+        "missing": null,
+        "suggested_role": null
+      }
+    ],
+    "item_id": "b65a7529-417e-4f86-a3d7-d7c859bd2ca4",
+    "latest_expert_check": null,
+    "latest_run_id": "2aa163f3-c390-4a69-9c4a-e6162e1df3ac",
+    "precheck_suggested_hs": {
+      "source_id": "2aa163f3-c390-4a69-9c4a-e6162e1df3ac",
+      "value": "8544422900"
+    },
+    "result_mode": "mock",
+    "revision": 1,
+    "source_location": {
+      "cells": "A9:H9",
+      "row_number": 9,
+      "sheet_name": "申报要素"
+    },
+    "submission_status": null,
+    "submitted_hs": {
+      "source_id": null,
+      "value": null
+    },
+    "task_id": "8c5aed88-fe80-4618-9997-82891376ad96",
+    "task_stage": "awaiting_confirmation",
+    "version_id": "d1051286-aecb-47e1-a614-1f53ed7aef65"
+  },
+  "contract_version": "1.0.0",
+  "notes": "空白与异常原文都保留，不用建议值回填；supplier_missing 与 supplier_invalid 是两类结论。",
+  "related_cards": [
+    {
+      "allowed_actions": [
+        "confirmation.write",
+        "read",
+        "submission.create"
+      ],
+      "business_confirmed_hs": {
+        "source_id": null,
+        "value": null
+      },
+      "comparison_status": "supplier_invalid",
+      "confidence": 0.62,
+      "evidence": [
+        {
+          "document": "MOCK-ONLY",
+          "effective_from": null,
+          "effective_to": null,
+          "evidence_id": "mock-obtained",
+          "excerpt": null,
+          "issued_at": null,
+          "locator": "合成样例，无真实条款",
+          "note": "mock 合成依据，仅用于演示",
+          "query": {
+            "mode": "mock"
+          },
+          "retrieved_at": "2026-11-14T00:00:00+08:00",
+          "scope": null,
+          "source_type": "synthetic",
+          "status": "obtained",
+          "title": "mock 合成依据（非真实法规）",
+          "url": null
+        }
+      ],
+      "evidence_status": "obtained",
+      "expert_final_hs": {
+        "source_id": null,
+        "value": null
+      },
+      "expert_suggested_hs": {
+        "source_id": null,
+        "value": null
+      },
+      "facts": {
+        "attributes": {
+          "品名": "钢制法兰（原码异常）",
+          "规格型号": "SPEC-10"
+        },
+        "name": "钢制法兰（原码异常）",
+        "supplier_elements_raw": "品名:钢制法兰（原码异常）|规格型号:SPEC-10",
+        "supplier_hs_raw": "ABC",
+        "supplier_tax_rate_raw": ""
+      },
+      "image_status": "absent",
+      "images": [],
+      "issues": [
+        {
+          "code": "SUPPLIER_HS_INVALID",
+          "field": "supplier_hs_raw",
+          "message": "原 HS 格式异常",
+          "missing": null,
+          "suggested_role": null
+        }
+      ],
+      "item_id": "fa53bafa-681e-45ae-87fa-7c8f1266bebc",
+      "latest_expert_check": null,
+      "latest_run_id": "2aa163f3-c390-4a69-9c4a-e6162e1df3ac",
+      "precheck_suggested_hs": {
+        "source_id": "2aa163f3-c390-4a69-9c4a-e6162e1df3ac",
+        "value": "8544422900"
+      },
+      "result_mode": "mock",
+      "revision": 1,
+      "source_location": {
+        "cells": "A10:H10",
+        "row_number": 10,
+        "sheet_name": "申报要素"
+      },
+      "submission_status": null,
+      "submitted_hs": {
+        "source_id": null,
+        "value": null
+      },
+      "task_id": "8c5aed88-fe80-4618-9997-82891376ad96",
+      "task_stage": "awaiting_confirmation",
+      "version_id": "d1051286-aecb-47e1-a614-1f53ed7aef65"
+    }
+  ],
+  "scenario": "FIX-04",
+  "title": "原码异常与未填"
+}

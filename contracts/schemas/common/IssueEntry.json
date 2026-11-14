@@ -1,0 +1,57 @@
+{
+  "description": "补料或异常问题，定位到具体商品与字段。",
+  "properties": {
+    "code": {
+      "title": "Code",
+      "type": "string"
+    },
+    "field": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Field"
+    },
+    "message": {
+      "title": "Message",
+      "type": "string"
+    },
+    "missing": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "缺少什么事实或资料",
+      "title": "Missing"
+    },
+    "suggested_role": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "建议由哪个角色补充；最终责任人由人工决定",
+      "title": "Suggested Role"
+    }
+  },
+  "required": [
+    "code",
+    "message"
+  ],
+  "title": "IssueEntry",
+  "type": "object"
+}

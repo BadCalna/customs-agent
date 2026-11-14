@@ -1,0 +1,39 @@
+{
+  "description": "执行内各商品的当前状态计数；等待补料不计入 failed。",
+  "properties": {
+    "failed": {
+      "minimum": 0,
+      "title": "Failed",
+      "type": "integer"
+    },
+    "queued": {
+      "minimum": 0,
+      "title": "Queued",
+      "type": "integer"
+    },
+    "running": {
+      "minimum": 0,
+      "title": "Running",
+      "type": "integer"
+    },
+    "succeeded": {
+      "minimum": 0,
+      "title": "Succeeded",
+      "type": "integer"
+    },
+    "total": {
+      "minimum": 0,
+      "title": "Total",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "total",
+    "queued",
+    "running",
+    "succeeded",
+    "failed"
+  ],
+  "title": "RunProgress",
+  "type": "object"
+}

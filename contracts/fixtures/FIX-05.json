@@ -1,0 +1,324 @@
+{
+  "card": {
+    "allowed_actions": [
+      "confirmation.write",
+      "read",
+      "submission.create"
+    ],
+    "business_confirmed_hs": {
+      "source_id": null,
+      "value": null
+    },
+    "comparison_status": null,
+    "confidence": null,
+    "evidence": [],
+    "evidence_status": null,
+    "expert_final_hs": {
+      "source_id": null,
+      "value": null
+    },
+    "expert_suggested_hs": {
+      "source_id": null,
+      "value": null
+    },
+    "facts": {
+      "attributes": {
+        "品名": "铜制管件（技术失败行）",
+        "规格型号": "SPEC-11"
+      },
+      "name": "铜制管件（技术失败行）",
+      "supplier_elements_raw": "品名:铜制管件（技术失败行）|规格型号:SPEC-11",
+      "supplier_hs_raw": "8544422900",
+      "supplier_tax_rate_raw": ""
+    },
+    "image_status": "absent",
+    "images": [],
+    "issues": [],
+    "item_id": "0c0c1fb0-df9a-40c8-b157-65c15258e536",
+    "latest_expert_check": null,
+    "latest_run_id": "2aa163f3-c390-4a69-9c4a-e6162e1df3ac",
+    "precheck_suggested_hs": {
+      "source_id": "2aa163f3-c390-4a69-9c4a-e6162e1df3ac",
+      "value": null
+    },
+    "result_mode": "mock",
+    "revision": 1,
+    "source_location": {
+      "cells": "A11:H11",
+      "row_number": 11,
+      "sheet_name": "申报要素"
+    },
+    "submission_status": null,
+    "submitted_hs": {
+      "source_id": null,
+      "value": null
+    },
+    "task_id": "8c5aed88-fe80-4618-9997-82891376ad96",
+    "task_stage": "awaiting_confirmation",
+    "version_id": "d1051286-aecb-47e1-a614-1f53ed7aef65"
+  },
+  "contract_version": "1.0.0",
+  "notes": "其他行成功、失败行带技术错误原因；等待补料不计入 progress.failed。重试端点当前为 501。",
+  "run": {
+    "created_at": "2026-11-14T14:19:49.860405+00:00",
+    "engine_version": "mock-1.0.0",
+    "evidence": [
+      {
+        "document": "MOCK-ONLY",
+        "effective_from": null,
+        "effective_to": null,
+        "evidence_id": "mock-not_found",
+        "excerpt": null,
+        "issued_at": null,
+        "locator": "合成样例，无真实条款",
+        "note": "缺事实，未进行有效检索",
+        "query": {
+          "mode": "mock"
+        },
+        "retrieved_at": "2026-11-14T00:00:00+08:00",
+        "scope": null,
+        "source_type": "synthetic",
+        "status": "not_found",
+        "title": "mock 合成依据（非真实法规）",
+        "url": null
+      },
+      {
+        "document": "MOCK-ONLY",
+        "effective_from": null,
+        "effective_to": null,
+        "evidence_id": "mock-obtained",
+        "excerpt": null,
+        "issued_at": null,
+        "locator": "合成样例，无真实条款",
+        "note": "mock 合成依据，仅用于演示",
+        "query": {
+          "mode": "mock"
+        },
+        "retrieved_at": "2026-11-14T00:00:00+08:00",
+        "scope": null,
+        "source_type": "synthetic",
+        "status": "obtained",
+        "title": "mock 合成依据（非真实法规）",
+        "url": null
+      },
+      {
+        "document": "MOCK-ONLY",
+        "effective_from": null,
+        "effective_to": null,
+        "evidence_id": "mock-query_failed",
+        "excerpt": null,
+        "issued_at": null,
+        "locator": "合成样例，无真实条款",
+        "note": "mock 模拟的来源查询失败",
+        "query": {
+          "mode": "mock"
+        },
+        "retrieved_at": "2026-11-14T00:00:00+08:00",
+        "scope": null,
+        "source_type": "synthetic",
+        "status": "query_failed",
+        "title": "mock 合成依据（非真实法规）",
+        "url": null
+      }
+    ],
+    "finished_at": "2026-11-14T14:19:49.864596+00:00",
+    "is_current": true,
+    "items": [
+      {
+        "attempts": 1,
+        "comparison_status": "needs_confirmation",
+        "confidence": null,
+        "error_message": "",
+        "evidence_status": "not_found",
+        "issues": [
+          {
+            "code": "MISSING_USAGE",
+            "field": "attributes.usage",
+            "message": "请补充具体用途",
+            "missing": "具体用途",
+            "suggested_role": "supplier"
+          }
+        ],
+        "item_id": "0b85d8fd-d804-4d9b-8751-4d7ad0f00253",
+        "source_location": {
+          "cells": "A7:H7",
+          "row_number": 7,
+          "sheet_name": "申报要素"
+        },
+        "status": "succeeded",
+        "suggested_hs": null
+      },
+      {
+        "attempts": 1,
+        "comparison_status": null,
+        "confidence": null,
+        "error_message": "mock 模拟的技术失败：上游模型超时",
+        "evidence_status": null,
+        "issues": [],
+        "item_id": "0c0c1fb0-df9a-40c8-b157-65c15258e536",
+        "source_location": {
+          "cells": "A11:H11",
+          "row_number": 11,
+          "sheet_name": "申报要素"
+        },
+        "status": "failed",
+        "suggested_hs": null
+      },
+      {
+        "attempts": 1,
+        "comparison_status": "needs_confirmation",
+        "confidence": 0.62,
+        "error_message": "",
+        "evidence_status": "obtained",
+        "issues": [
+          {
+            "code": "IMAGE_READ_FAILED",
+            "field": "images",
+            "message": "附图读取失败，可见事实不足",
+            "missing": "附图内容",
+            "suggested_role": "supplier"
+          }
+        ],
+        "item_id": "219e35bb-0959-4255-aee1-ea1f861c7af7",
+        "source_location": {
+          "cells": "A8:H8",
+          "row_number": 8,
+          "sheet_name": "申报要素"
+        },
+        "status": "succeeded",
+        "suggested_hs": "8544422900"
+      },
+      {
+        "attempts": 1,
+        "comparison_status": "consistent",
+        "confidence": 0.62,
+        "error_message": "",
+        "evidence_status": "obtained",
+        "issues": [],
+        "item_id": "5a8855a1-76c9-43a4-8f18-216e84df2d5c",
+        "source_location": {
+          "cells": "A5:H5",
+          "row_number": 5,
+          "sheet_name": "申报要素"
+        },
+        "status": "succeeded",
+        "suggested_hs": "8544422900"
+      },
+      {
+        "attempts": 1,
+        "comparison_status": "inconsistent",
+        "confidence": 0.62,
+        "error_message": "",
+        "evidence_status": "obtained",
+        "issues": [
+          {
+            "code": "HS_MISMATCH",
+            "field": "supplier_hs_raw",
+            "message": "建议编码与原码不一致",
+            "missing": null,
+            "suggested_role": null
+          }
+        ],
+        "item_id": "8d537008-3a2b-4173-9abe-2de00e75f93a",
+        "source_location": {
+          "cells": "A6:H6",
+          "row_number": 6,
+          "sheet_name": "申报要素"
+        },
+        "status": "succeeded",
+        "suggested_hs": "8544422900"
+      },
+      {
+        "attempts": 1,
+        "comparison_status": "needs_confirmation",
+        "confidence": null,
+        "error_message": "",
+        "evidence_status": "query_failed",
+        "issues": [
+          {
+            "code": "SOURCE_QUERY_FAILED",
+            "field": null,
+            "message": "税则来源查询失败，依据待核",
+            "missing": null,
+            "suggested_role": null
+          }
+        ],
+        "item_id": "9c7c5d4d-3d1f-4a96-9b4b-6e0153cf1b5a",
+        "source_location": {
+          "cells": "A12:H12",
+          "row_number": 12,
+          "sheet_name": "申报要素"
+        },
+        "status": "succeeded",
+        "suggested_hs": "8544422900"
+      },
+      {
+        "attempts": 1,
+        "comparison_status": "supplier_missing",
+        "confidence": 0.62,
+        "error_message": "",
+        "evidence_status": "obtained",
+        "issues": [
+          {
+            "code": "SUPPLIER_HS_MISSING",
+            "field": "supplier_hs_raw",
+            "message": "供应商原 HS 为空",
+            "missing": null,
+            "suggested_role": null
+          }
+        ],
+        "item_id": "b65a7529-417e-4f86-a3d7-d7c859bd2ca4",
+        "source_location": {
+          "cells": "A9:H9",
+          "row_number": 9,
+          "sheet_name": "申报要素"
+        },
+        "status": "succeeded",
+        "suggested_hs": "8544422900"
+      },
+      {
+        "attempts": 1,
+        "comparison_status": "supplier_invalid",
+        "confidence": 0.62,
+        "error_message": "",
+        "evidence_status": "obtained",
+        "issues": [
+          {
+            "code": "SUPPLIER_HS_INVALID",
+            "field": "supplier_hs_raw",
+            "message": "原 HS 格式异常",
+            "missing": null,
+            "suggested_role": null
+          }
+        ],
+        "item_id": "fa53bafa-681e-45ae-87fa-7c8f1266bebc",
+        "source_location": {
+          "cells": "A10:H10",
+          "row_number": 10,
+          "sheet_name": "申报要素"
+        },
+        "status": "succeeded",
+        "suggested_hs": "8544422900"
+      }
+    ],
+    "kind": "precheck",
+    "progress": {
+      "failed": 1,
+      "queued": 0,
+      "running": 0,
+      "succeeded": 7,
+      "total": 8
+    },
+    "prompt_version": "mock-none",
+    "result_mode": "mock",
+    "rules_version": "d4-0.1",
+    "run_id": "2aa163f3-c390-4a69-9c4a-e6162e1df3ac",
+    "started_at": "2026-11-14T14:19:49.860364+00:00",
+    "status": "succeeded",
+    "submission_id": null,
+    "task_id": "8c5aed88-fe80-4618-9997-82891376ad96",
+    "version_id": "d1051286-aecb-47e1-a614-1f53ed7aef65"
+  },
+  "scenario": "FIX-05",
+  "title": "部分运行失败"
+}
