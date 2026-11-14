@@ -5,7 +5,7 @@ MANAGE := $(PYTHON) manage.py
 BIND ?= 127.0.0.1:8000
 export TASK
 
-.PHONY: setup migrate dev check test
+.PHONY: setup migrate seed-demo dev check test
 setup:
 	$(UV) sync --locked
 	$(PYTHON) -m config.bootstrap
@@ -14,11 +14,14 @@ setup:
 migrate:
 	$(MANAGE) migrate --noinput
 
+seed-demo:
+	$(MANAGE) seed_demo
+
 dev:
 	$(MANAGE) runserver $(BIND)
 
 check:
-	$(PYTHON) -m compileall -q manage.py config
+	$(PYTHON) -m compileall -q manage.py config apps tests
 	$(MANAGE) check
 	$(MANAGE) makemigrations --check --dry-run
 

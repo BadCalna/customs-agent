@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>P01 身份与权限 · 手测页</title>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0 auto; max-width: 860px; padding: 32px 20px 60px;
+    font: 15px/1.6 -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+    color: #1f2328; background: #f6f7f9;
+  }
+  h1 { font-size: 22px; margin: 0 0 6px; }
+  h2 { font-size: 16px; margin: 0 0 12px; color: #57606a; }
+  .hint { color: #57606a; font-size: 13px; margin: 0 0 20px; }
+  .card { background: #fff; border: 1px solid #d8dee4; border-radius: 10px; padding: 18px 20px; margin-bottom: 18px; }
+  .row { display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-end; }
+  label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: #57606a; }
+  input {
+    font: inherit; padding: 7px 10px; border: 1px solid #d8dee4; border-radius: 7px;
+    min-width: 210px; background: #fff; color: inherit;
+  }
+  .actions { display: flex; gap: 10px; flex-wrap: wrap; }
+  button {
+    font: inherit; padding: 8px 14px; border-radius: 8px; border: 1px solid #d0d7de;
+    background: #fff; color: #1f2328; cursor: pointer;
+  }
+  button:hover { background: #f3f4f6; }
+  button.primary { background: #1f883d; border-color: #1f883d; color: #fff; }
+  button.primary:hover { background: #1a7f37; }
+  button:disabled { opacity: .55; cursor: wait; }
+  .identity { margin-top: 14px; font-size: 14px; color: #57606a; }
+  .identity strong { color: #1f2328; }
+  ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+  li.entry { border: 1px solid #eaeef2; border-radius: 8px; padding: 10px 12px; display: flex; gap: 12px; align-items: baseline; }
+  .badge { flex: none; font-weight: 600; font-size: 12px; padding: 2px 8px; border-radius: 999px; }
+  .badge.ok { background: #dafbe1; color: #116329; }
+  .badge.warn { background: #fff8c5; color: #7d4e00; }
+  .badge.err { background: #ffebe9; color: #a40e26; }
+  .entry .desc { flex: 1; }
+  .entry .method { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; color: #57606a; }
+  .entry .detail { font-size: 13px; color: #57606a; }
+  .entry time { font-size: 12px; color: #8c959f; }
+  .expect { font-size: 13px; color: #57606a; border-top: 1px dashed #d8dee4; margin-top: 14px; padding-top: 12px; }
+</style>
+</head>
+<body>
+  <h1>P01 身份与权限 · 手测页</h1>
+  <p class="hint">
+    只调用 P01 已发布的三端点；写请求会自动读取 <code>csrftoken</code> cookie 放进 <code>X-CSRFToken</code> 头。
+    接口文档在 <a href="/api/v1/docs">/api/v1/docs</a>，本页用于实际操作。
+  </p>
+
+  <section class="card">
+    <h2>操作</h2>
+    <div class="row">
+      <label>用户名 <input id="username" value="operator_a" autocomplete="username"></label>
+      <label>密码 <input id="password" type="password" placeholder="见 D6 或 make seed-demo 输出" autocomplete="current-password"></label>
+    </div>
+    <div class="actions" style="margin-top:14px">
+      <button id="btn-me">查当前身份</button>
+      <button id="btn-login" class="primary">登录</button>
+      <button id="btn-logout">退出</button>
+    </div>
+    <div class="identity">当前身份：<strong id="identity">探测中…</strong></div>
+    <p class="expect">预期顺序：匿名查身份 401 → 登录 200 → 查身份 200（显示账号与角色）→ 退出 200 → 再查身份 401。</p>
+  </section>
+
+  <section class="card">
+    <h2>响应记录</h2>
+    <ol id="log"></ol>
+  </section>
+
+<script>
+  const me = document.getElementById("log");
+  const identity = document.getElementById("identity");
+  const buttons = ["btn-me", "btn-login", "btn-logout"].map((id) => document.getElementById(id));
+
+  function readCookie(name) {
+    return document.cookie.split("; ").reduce((found, part) => {
+      const [key, ...rest] = part.split("=");
+      return key === name ? decodeURIComponent(rest.join("=")) : found;
+    }, "");
+  }
+
+  function badgeClass(status) {
+    if (status >= 200 && status < 300) return "ok";
+    if (status === 401 || status === 403 || status === 404) return "warn";
+    return "err";
+  }
+
+  function summarize(body) {
+    if (body && body.username) {
+      const name = body.display_name && body.display_name !== body.username
+        ? `${body.display_name}（${body.username}）`
+        : body.username;
+      return `账号 ${name} · 角色 ${body.role_label || body.role || "—"}`;
+    }
+    if (body && body.status === "ok") return "已退出会话";
+    if (body && body.error) return `错误码 ${body.error.code}：${body.error.message}`;
+    return "无响应体";
+  }
+
+  function render(action, status, body) {
+    const item = document.createElement("li");
+    item.className = "entry";
+    item.innerHTML = `
+      <span class="badge ${badgeClass(status)}">${status}</span>
+      <span class="desc">
+        <span class="method">${action}</span>
+        <span class="detail">${summarize(body)}</span>
+      </span>
+      <time>${new Date().toLocaleTimeString("zh-CN", { hour12: false })}</time>`;
+    me.prepend(item);
+    if (action.endsWith("/api/v1/me")) {
+      identity.textContent = status === 200
+        ? `${body.display_name || body.username}（${body.username}，${body.role_label}）`
+        : "未登录（401）";
+    }
+  }
+
+  async function call(method, path, payload) {
+    buttons.forEach((button) => { button.disabled = true; });
+    const headers = {};
+    if (payload) headers["Content-Type"] = "application/json";
+    if (method !== "GET") {
+      // 每次写请求都重新读取：登录成功会轮换令牌。
+      headers["X-CSRFToken"] = readCookie("csrftoken");
+    }
+    try {
+      const response = await fetch(path, {
+        method,
+        headers,
+        credentials: "same-origin",
+        body: payload ? JSON.stringify(payload) : undefined,
+      });
+      let body = {};
+      try { body = await response.json(); } catch (error) { body = {}; }
+      render(`${method} ${path}`, response.status, body);
+      return { status: response.status, body };
+    } catch (error) {
+      render(`${method} ${path}`, 0, { error: { code: "network_error", message: String(error) } });
+    } finally {
+      buttons.forEach((button) => { button.disabled = false; });
+    }
+  }
+
+  document.getElementById("btn-me").addEventListener("click", () => call("GET", "/api/v1/me"));
+  document.getElementById("btn-login").addEventListener("click", () => {
+    call("POST", "/api/v1/auth/login", {
+      username: document.getElementById("username").value.trim(),
+      password: document.getElementById("password").value,
+    });
+  });
+  document.getElementById("btn-logout").addEventListener("click", () => call("POST", "/api/v1/auth/logout"));
+
+  // 进入页面即探测：确认匿名 401，同时种下初始 csrftoken，供登录使用。
+  call("GET", "/api/v1/me");
+</script>
+</body>
+</html>
