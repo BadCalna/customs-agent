@@ -92,7 +92,7 @@
         "更新：D2 模型与约束、D3 权限矩阵、D6 测试账号方法；回交：交接/P01.md。"
       ],
       "verification_command": "make test TASK=P01",
-      "status": "待开始"
+      "status": "技术自验通过，Jay 手工测试待进行"
     },
     {
       "id": "P02",
