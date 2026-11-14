@@ -26,6 +26,105 @@
         "title": "ComparisonStatus",
         "type": "string"
       },
+      "ConfirmationIn": {
+        "description": "确认一次 HS；``expected_revision`` 是商品的当前修订号，不是任务修订号。",
+        "properties": {
+          "confirmed_hs": {
+            "description": "10 位数字编码；不合法返回 422",
+            "title": "Confirmed Hs",
+            "type": "string"
+          },
+          "expected_revision": {
+            "minimum": 1,
+            "title": "Expected Revision",
+            "type": "integer"
+          },
+          "reason": {
+            "default": "",
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "confirmed_hs",
+          "expected_revision"
+        ],
+        "title": "ConfirmationIn",
+        "type": "object"
+      },
+      "ConfirmationOut": {
+        "properties": {
+          "confirmation_id": {
+            "title": "Confirmation Id",
+            "type": "string"
+          },
+          "confirmed_hs": {
+            "title": "Confirmed Hs",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "title": "Created By",
+            "type": "string"
+          },
+          "idempotent_replay": {
+            "default": false,
+            "title": "Idempotent Replay",
+            "type": "boolean"
+          },
+          "item_id": {
+            "title": "Item Id",
+            "type": "string"
+          },
+          "previous_hs": {
+            "title": "Previous Hs",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "revision": {
+            "description": "确认后商品的新修订号",
+            "title": "Revision",
+            "type": "integer"
+          },
+          "task_id": {
+            "title": "Task Id",
+            "type": "string"
+          },
+          "task_revision": {
+            "title": "Task Revision",
+            "type": "integer"
+          },
+          "task_stage": {
+            "$ref": "#/components/schemas/TaskStage"
+          },
+          "version_id": {
+            "title": "Version Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "confirmation_id",
+          "task_id",
+          "version_id",
+          "item_id",
+          "revision",
+          "task_revision",
+          "previous_hs",
+          "confirmed_hs",
+          "reason",
+          "created_by",
+          "created_at",
+          "task_stage"
+        ],
+        "title": "ConfirmationOut",
+        "type": "object"
+      },
       "EvidenceEntry": {
         "description": "一条可定位的依据。查询无结果时不生成虚构条款。",
         "properties": {
@@ -1093,6 +1192,161 @@
         "title": "StageValue",
         "type": "object"
       },
+      "SubmissionIn": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SubmissionLineIn"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "revision": {
+            "description": "提交时的任务修订号 Task.revision",
+            "minimum": 1,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "version_id": {
+            "title": "Version Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version_id",
+          "revision",
+          "items"
+        ],
+        "title": "SubmissionIn",
+        "type": "object"
+      },
+      "SubmissionLineIn": {
+        "description": "逐行显式引用确认记录：专家审核的就是这一条确认的 HS。",
+        "properties": {
+          "confirmation_id": {
+            "title": "Confirmation Id",
+            "type": "string"
+          },
+          "item_id": {
+            "title": "Item Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "item_id",
+          "confirmation_id"
+        ],
+        "title": "SubmissionLineIn",
+        "type": "object"
+      },
+      "SubmissionLineOut": {
+        "properties": {
+          "confirmation_id": {
+            "title": "Confirmation Id",
+            "type": "string"
+          },
+          "item_id": {
+            "title": "Item Id",
+            "type": "string"
+          },
+          "item_revision": {
+            "title": "Item Revision",
+            "type": "integer"
+          },
+          "submitted_hs": {
+            "title": "Submitted Hs",
+            "type": "string"
+          }
+        },
+        "required": [
+          "item_id",
+          "confirmation_id",
+          "submitted_hs",
+          "item_revision"
+        ],
+        "title": "SubmissionLineOut",
+        "type": "object"
+      },
+      "SubmissionOut": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "expert_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expert Run Id"
+          },
+          "expert_run_status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "idempotent_replay": {
+            "default": false,
+            "title": "Idempotent Replay",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SubmissionLineOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "status": {
+            "$ref": "#/components/schemas/SubmissionStatus"
+          },
+          "submission_id": {
+            "title": "Submission Id",
+            "type": "string"
+          },
+          "task_id": {
+            "title": "Task Id",
+            "type": "string"
+          },
+          "task_revision": {
+            "title": "Task Revision",
+            "type": "integer"
+          },
+          "task_stage": {
+            "$ref": "#/components/schemas/TaskStage"
+          },
+          "version_id": {
+            "title": "Version Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "submission_id",
+          "task_id",
+          "version_id",
+          "revision",
+          "status",
+          "items",
+          "task_stage",
+          "task_revision",
+          "created_at"
+        ],
+        "title": "SubmissionOut",
+        "type": "object"
+      },
       "SubmissionStatus": {
         "enum": [
           "pending",
@@ -1823,7 +2077,7 @@
     },
     "/api/v1/tasks/{task_id}/submissions": {
       "post": {
-        "operationId": "apps_api_not_implemented_pending_POST__tasks_task_id_submissions",
+        "operationId": "apps_reviews_api_submissions_submit_task",
         "parameters": [
           {
             "in": "path",
@@ -1835,14 +2089,31 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubmissionIn"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubmissionOut"
+                }
+              }
+            },
             "description": "OK"
           }
         },
-        "summary": "Pending Post  Tasks Task Id Submissions",
+        "summary": "Submit Task",
         "tags": [
-          "未实现端点"
+          "业务员提交"
         ]
       }
     },
@@ -2003,7 +2274,7 @@
     },
     "/api/v1/versions/{version_id}/items/{item_id}/confirmation": {
       "patch": {
-        "operationId": "apps_api_not_implemented_pending_PATCH__versions_version_id_items_item_id_confirmation",
+        "operationId": "apps_reviews_api_confirmations_confirm_item",
         "parameters": [
           {
             "in": "path",
@@ -2024,14 +2295,31 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmationIn"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfirmationOut"
+                }
+              }
+            },
             "description": "OK"
           }
         },
-        "summary": "Pending Patch  Versions Version Id Items Item Id Confirmation",
+        "summary": "Confirm Item",
         "tags": [
-          "未实现端点"
+          "业务员确认"
         ]
       }
     },

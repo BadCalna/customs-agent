@@ -20,8 +20,6 @@ PENDING_ENDPOINTS = [
     ("POST", "/tasks/{task_id}/versions", "P06"),
     ("POST", "/versions/{version_id}/prechecks", "P13"),
     ("POST", "/runs/{run_id}/retries", "P13"),
-    ("PATCH", "/versions/{version_id}/items/{item_id}/confirmation", "P09"),
-    ("POST", "/tasks/{task_id}/submissions", "P09"),
     ("POST", "/tasks/{task_id}/returns", "P10"),
     ("POST", "/submissions/{submission_id}/decisions", "P10"),
     ("GET", "/tasks/{task_id}/history", "P10"),

@@ -1,0 +1,19 @@
+{
+  "description": "逐行显式引用确认记录：专家审核的就是这一条确认的 HS。",
+  "properties": {
+    "confirmation_id": {
+      "title": "Confirmation Id",
+      "type": "string"
+    },
+    "item_id": {
+      "title": "Item Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "item_id",
+    "confirmation_id"
+  ],
+  "title": "SubmissionLineIn",
+  "type": "object"
+}

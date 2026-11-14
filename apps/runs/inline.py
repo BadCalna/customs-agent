@@ -175,15 +175,26 @@ def execute_precheck(version, scenarios: dict[str, str] | None = None, triggered
 
 
 @transaction.atomic
-def execute_expert_check(submission, scenarios: dict[str, str] | None = None, triggered_by=None) -> Run:
-    """对提交快照执行 mock 专家核查；核查对象固定为快照中的提交码。"""
+def execute_expert_check(submission, scenarios: dict[str, str] | None = None, triggered_by=None, run=None) -> Run:
+    """对提交快照执行 mock 专家核查；核查对象固定为快照中的提交码。
+
+    ``run`` 由 P09 在提交事务内预先登记（queued），此处复用而不是新建，
+    保证"提交快照 + 待运行记录"是同一个事务的产物。
+    """
 
     scenarios = scenarios or {}
     engine = get_engine()
-    run = _start_run(
-        submission.task, submission.version, Run.Kind.EXPERT_CHECK,
-        submission=submission, triggered_by=triggered_by,
-    )
+    if run is None:
+        run = _start_run(
+            submission.task, submission.version, Run.Kind.EXPERT_CHECK,
+            submission=submission, triggered_by=triggered_by,
+        )
+    else:
+        Run.objects.filter(version=run.version, kind=run.kind, is_current=True).exclude(pk=run.pk).update(is_current=False)
+        run.status = Run.Status.RUNNING
+        run.is_current = True
+        run.started_at = timezone.now()
+        run.save(update_fields=["status", "is_current", "started_at"])
     for line in submission.items.select_related("item"):
         item = line.item
         scenario = _scenario_for(scenarios, item)

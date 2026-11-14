@@ -1,0 +1,28 @@
+{
+  "properties": {
+    "confirmation_id": {
+      "title": "Confirmation Id",
+      "type": "string"
+    },
+    "item_id": {
+      "title": "Item Id",
+      "type": "string"
+    },
+    "item_revision": {
+      "title": "Item Revision",
+      "type": "integer"
+    },
+    "submitted_hs": {
+      "title": "Submitted Hs",
+      "type": "string"
+    }
+  },
+  "required": [
+    "item_id",
+    "confirmation_id",
+    "submitted_hs",
+    "item_revision"
+  ],
+  "title": "SubmissionLineOut",
+  "type": "object"
+}

@@ -1,0 +1,145 @@
+{
+  "$defs": {
+    "RunStatus": {
+      "description": "技术执行状态。部分行失败由 ``progress.failed`` 表达，不改写本状态。",
+      "enum": [
+        "queued",
+        "running",
+        "succeeded",
+        "failed"
+      ],
+      "title": "RunStatus",
+      "type": "string"
+    },
+    "SubmissionLineOut": {
+      "properties": {
+        "confirmation_id": {
+          "title": "Confirmation Id",
+          "type": "string"
+        },
+        "item_id": {
+          "title": "Item Id",
+          "type": "string"
+        },
+        "item_revision": {
+          "title": "Item Revision",
+          "type": "integer"
+        },
+        "submitted_hs": {
+          "title": "Submitted Hs",
+          "type": "string"
+        }
+      },
+      "required": [
+        "item_id",
+        "confirmation_id",
+        "submitted_hs",
+        "item_revision"
+      ],
+      "title": "SubmissionLineOut",
+      "type": "object"
+    },
+    "SubmissionStatus": {
+      "enum": [
+        "pending",
+        "approved",
+        "returned",
+        "superseded"
+      ],
+      "title": "SubmissionStatus",
+      "type": "string"
+    },
+    "TaskStage": {
+      "enum": [
+        "uploaded",
+        "prechecking",
+        "awaiting_confirmation",
+        "submitted",
+        "approved",
+        "returned"
+      ],
+      "title": "TaskStage",
+      "type": "string"
+    }
+  },
+  "properties": {
+    "created_at": {
+      "title": "Created At",
+      "type": "string"
+    },
+    "expert_run_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Expert Run Id"
+    },
+    "expert_run_status": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RunStatus"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "idempotent_replay": {
+      "default": false,
+      "title": "Idempotent Replay",
+      "type": "boolean"
+    },
+    "items": {
+      "items": {
+        "$ref": "#/$defs/SubmissionLineOut"
+      },
+      "title": "Items",
+      "type": "array"
+    },
+    "revision": {
+      "title": "Revision",
+      "type": "integer"
+    },
+    "status": {
+      "$ref": "#/$defs/SubmissionStatus"
+    },
+    "submission_id": {
+      "title": "Submission Id",
+      "type": "string"
+    },
+    "task_id": {
+      "title": "Task Id",
+      "type": "string"
+    },
+    "task_revision": {
+      "title": "Task Revision",
+      "type": "integer"
+    },
+    "task_stage": {
+      "$ref": "#/$defs/TaskStage"
+    },
+    "version_id": {
+      "title": "Version Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "submission_id",
+    "task_id",
+    "version_id",
+    "revision",
+    "status",
+    "items",
+    "task_stage",
+    "task_revision",
+    "created_at"
+  ],
+  "title": "SubmissionOut",
+  "type": "object"
+}
