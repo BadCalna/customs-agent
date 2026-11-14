@@ -1,0 +1,142 @@
+{
+  "schema_version": "p15.history.1",
+  "dataset": {
+    "dataset_id": "synthetic-p15-v1",
+    "synthetic": true,
+    "description": "P15 合成历史记录样本，不是真实历史申报库。品名、HS、单据号均虚构，仅用于验证检索接口、差异标注与四态行为；不得作为归类依据，也不得据此声称检索效果已验证。",
+    "generated_at": "2026-11-14T00:00:00+08:00"
+  },
+  "records": [
+    {
+      "record_id": "SYN-H-0001",
+      "historical_hs": "7307210000",
+      "historical_name": "不锈钢法兰盘",
+      "elements": {
+        "材质": "不锈钢",
+        "用途": "管道连接",
+        "工艺": "锻造"
+      },
+      "material": "不锈钢",
+      "spec": "DN50",
+      "attributes": {
+        "规格型号": "DN50 PN16"
+      },
+      "recorded_at": "2023-05-18",
+      "outcome": "approved",
+      "hs_version": null,
+      "applicable_scope": "石油化工管道连接件",
+      "valid_until": null,
+      "source": {
+        "document": "SYN-DECL-2023-0518-0042",
+        "locator": "第 3 项",
+        "url": null,
+        "system": "synthetic-sample"
+      },
+      "notes": "合成样本：有命中场景；历史记录未声明有效期。"
+    },
+    {
+      "record_id": "SYN-H-0002",
+      "historical_hs": "7307990000",
+      "historical_name": "不锈钢法兰盘",
+      "elements": {
+        "材质": "碳钢",
+        "用途": "管道连接",
+        "工艺": "锻造"
+      },
+      "material": "碳钢",
+      "spec": "DN80",
+      "attributes": {
+        "规格型号": "DN80 PN16"
+      },
+      "recorded_at": "2022-09-06",
+      "outcome": "approved",
+      "hs_version": null,
+      "applicable_scope": null,
+      "valid_until": null,
+      "source": {
+        "document": "SYN-DECL-2022-0906-0117",
+        "locator": "第 1 项",
+        "url": null,
+        "system": "synthetic-sample"
+      },
+      "notes": "合成样本：品名相同但材质、规格不同（相似但关键属性不同）。"
+    },
+    {
+      "record_id": "SYN-H-0003",
+      "historical_hs": "7307290000",
+      "historical_name": "不锈钢法兰",
+      "elements": {
+        "材质": "不锈钢",
+        "用途": "管道连接",
+        "工艺": "铸造"
+      },
+      "material": "不锈钢",
+      "spec": "DN50",
+      "attributes": {
+        "规格型号": "DN50 PN10"
+      },
+      "recorded_at": "2019-03-12T10:20:00+08:00",
+      "outcome": "approved",
+      "hs_version": "2017",
+      "applicable_scope": null,
+      "valid_until": "2021-12-31",
+      "source": {
+        "document": "SYN-DECL-2019-0312-0009",
+        "locator": "第 2 项",
+        "url": null,
+        "system": "synthetic-sample"
+      },
+      "notes": "合成样本：旧时间版本，声明有效期已过，HS 版本为 2017，只能作为线索。"
+    },
+    {
+      "record_id": "SYN-H-0004",
+      "historical_hs": "7219120000",
+      "historical_name": "热轧不锈钢卷",
+      "elements": {
+        "材质": "不锈钢",
+        "用途": "冷轧原料",
+        "加工": "热轧"
+      },
+      "material": "不锈钢",
+      "spec": "3.0mm×1250mm",
+      "attributes": {},
+      "recorded_at": "2024-02-20",
+      "outcome": "approved",
+      "hs_version": null,
+      "applicable_scope": "一般贸易",
+      "valid_until": null,
+      "source": {
+        "document": "SYN-DECL-2024-0220-0088",
+        "locator": "第 5 项",
+        "url": "https://synthetic.invalid/declaration/SYN-DECL-2024-0220-0088",
+        "system": "synthetic-sample"
+      },
+      "notes": "合成样本：不同商品，用于验证不相关查询不会硬凑候选。URL 为不可解析的 .invalid 占位。"
+    },
+    {
+      "record_id": "SYN-H-0005",
+      "historical_hs": "7307220000",
+      "historical_name": "不锈钢对焊弯头",
+      "elements": {
+        "材质": "不锈钢",
+        "用途": "管道连接",
+        "工艺": "冷加工"
+      },
+      "material": "不锈钢",
+      "spec": "DN100",
+      "attributes": {},
+      "recorded_at": "2021-07-01T08:30:00+08:00",
+      "outcome": "approved",
+      "hs_version": null,
+      "applicable_scope": null,
+      "valid_until": null,
+      "source": {
+        "document": "SYN-DECL-2021-0701-0031",
+        "locator": "第 4 项",
+        "url": null,
+        "system": "synthetic-sample"
+      },
+      "notes": "合成样本：品名部分重合但规格不同，用于检查阈值与指标解释。"
+    }
+  ]
+}
