@@ -1,0 +1,28 @@
+{
+  "properties": {
+    "change_reason": {
+      "title": "Change Reason",
+      "type": "string"
+    },
+    "final_hs": {
+      "title": "Final Hs",
+      "type": "string"
+    },
+    "item_id": {
+      "title": "Item Id",
+      "type": "string"
+    },
+    "previous_hs": {
+      "title": "Previous Hs",
+      "type": "string"
+    }
+  },
+  "required": [
+    "item_id",
+    "previous_hs",
+    "final_hs",
+    "change_reason"
+  ],
+  "title": "DecisionLineOut",
+  "type": "object"
+}

@@ -1,0 +1,51 @@
+{
+  "$defs": {
+    "ReturnIssueIn": {
+      "properties": {
+        "item_id": {
+          "default": "",
+          "title": "Item Id",
+          "type": "string"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "title": "ReturnIssueIn",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "issues": {
+      "items": {
+        "$ref": "#/$defs/ReturnIssueIn"
+      },
+      "title": "Issues",
+      "type": "array"
+    },
+    "reason": {
+      "default": "",
+      "title": "Reason",
+      "type": "string"
+    },
+    "revision": {
+      "minimum": 1,
+      "title": "Revision",
+      "type": "integer"
+    },
+    "version_id": {
+      "title": "Version Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "version_id",
+    "revision"
+  ],
+  "title": "TaskReturnIn",
+  "type": "object"
+}

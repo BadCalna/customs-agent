@@ -1,0 +1,82 @@
+{
+  "$defs": {
+    "DecisionLineIn": {
+      "properties": {
+        "change_reason": {
+          "default": "",
+          "title": "Change Reason",
+          "type": "string"
+        },
+        "final_hs": {
+          "title": "Final Hs",
+          "type": "string"
+        },
+        "item_id": {
+          "title": "Item Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "item_id",
+        "final_hs"
+      ],
+      "title": "DecisionLineIn",
+      "type": "object"
+    },
+    "ReturnIssueIn": {
+      "properties": {
+        "item_id": {
+          "default": "",
+          "title": "Item Id",
+          "type": "string"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "title": "ReturnIssueIn",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "action": {
+      "description": "approve 整批通过 / return 退回",
+      "title": "Action",
+      "type": "string"
+    },
+    "issues": {
+      "items": {
+        "$ref": "#/$defs/ReturnIssueIn"
+      },
+      "title": "Issues",
+      "type": "array"
+    },
+    "items": {
+      "items": {
+        "$ref": "#/$defs/DecisionLineIn"
+      },
+      "title": "Items",
+      "type": "array"
+    },
+    "reason": {
+      "default": "",
+      "title": "Reason",
+      "type": "string"
+    },
+    "return_to": {
+      "default": "",
+      "description": "退回时使用：supplier 或 operator",
+      "title": "Return To",
+      "type": "string"
+    }
+  },
+  "required": [
+    "action"
+  ],
+  "title": "DecisionIn",
+  "type": "object"
+}
