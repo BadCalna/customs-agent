@@ -5,7 +5,7 @@ MANAGE := $(PYTHON) manage.py
 BIND ?= 127.0.0.1:8000
 export TASK
 
-.PHONY: setup migrate seed-demo seed-contracts contracts demo-components dev check test test-contracts
+.PHONY: setup migrate seed-demo seed-contracts contracts demo-components workbench dev check test test-contracts
 setup:
 	$(UV) sync --locked
 	$(PYTHON) -m config.bootstrap
@@ -38,6 +38,12 @@ test-contracts:
 	$(MANAGE) test tests/p02
 
 dev:
+	$(MANAGE) runserver $(BIND)
+
+workbench:
+	@echo "正式工作台（定稿 UI）：http://$(BIND)/workbench/"
+	@echo "  默认 LIVE 读 /api/v1；未登录或无数据时自动回退 FIXTURE（契约样例）。"
+	@echo "  可用 ?mode=fixture / ?mode=demo 强制模式；写动作待后端 P 任务，前端本地演示。"
 	$(MANAGE) runserver $(BIND)
 
 check:

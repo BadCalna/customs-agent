@@ -1,10 +1,11 @@
 from django.contrib import admin
 from django.urls import path
+from django.views.generic import RedirectView
 from ninja import NinjaAPI, Schema
 
 from apps.accounts.api import install_error_handlers
 from apps.accounts.api import router as accounts_router
-from apps.api.demo import demo_asset, demo_fixture, demo_index
+from apps.api.demo import demo_asset, demo_fixture, demo_index, workbench_index
 from apps.api.not_implemented import router as pending_router
 from apps.reviews.api.read import router as reviews_read_router
 from apps.runs.api import router as runs_router
@@ -30,6 +31,7 @@ api_v1.add_router("", runs_router)
 api_v1.add_router("", pending_router)
 
 urlpatterns = [
+    path("", RedirectView.as_view(url="/workbench/", permanent=False), name="root"),
     path("admin/", admin.site.urls),
     path("api/v1/", api_v1.urls),
     path("api/", api.urls),
@@ -37,4 +39,6 @@ urlpatterns = [
     path("demo/", demo_index, name="demo-index"),
     path("demo/assets/<path:path>", demo_asset, name="demo-asset"),
     path("demo/fixtures/<path:path>", demo_fixture, name="demo-fixture"),
+    # 正式工作台前端（定稿 UI）：读 /api/v1 或契约样例，写动作待后端 P 任务。
+    path("workbench/", workbench_index, name="workbench-index"),
 ]

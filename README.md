@@ -12,6 +12,14 @@
 
 真实业务模板放在 `docs/参考模板/`（Git 忽略，仅本地参考），供阶段0 逐格核对；样表副本 `data/private/demo_source.xlsx` 同样仅存本地。
 
+## 工作台前端（定稿 UI）
+
+定稿的三角色工作台已接入项目，入口 `/workbench/`（根路径 `/` 自动跳转），或 `make workbench` 启动。
+
+- 数据三模：默认 **LIVE** 读 `/api/v1`（Django Ninja）；未登录/无数据自动回退 **FIXTURE**（`contracts/fixtures/DEMO-SET.json`）；`?mode=demo` 用内置演示数据。顶栏芯片标明当前数据源。
+- 读路径已按契约映射（任务/版本/商品/依据/附图/六类比较结论）；写动作后端仍为 501，前端做乐观本地演示并如实标注，待后端 P 任务落地后接通。
+- 设计源文件保留在 `docs/原型/关务审核工作台-v2.html`；项目运行版为 `web/workbench.html`。
+
 ## 计划探索的方向
 
 - 关务知识与政策查询，提供可追溯的来源。
