@@ -43,6 +43,19 @@ def field_matches(value: str, alias: str) -> bool:
     )
 
 
+def floating_product_row(obj: dict, sheet: str, image_column: str | None, header_row: int) -> int | None:
+    """Only an exact product-image cell anchor can supply a candidate row."""
+    if obj["sheet"] != sheet or not obj["images"] or not image_column:
+        return None
+    first, last = obj["markers"].get("from", {}), obj["markers"].get("to", {})
+    row = first.get("row")
+    if (isinstance(row, int) and header_row <= row < 1048576
+            and row == last.get("row")
+            and first.get("col") == last.get("col") == col_number(image_column) - 1):
+        return row + 1
+    return None
+
+
 def detect_layout(workbook, role: str) -> dict:
     label = "装箱明细" if role == "packing" else "申报要素"
     sheets = [s for s in workbook.sheets if label in s["name"]]
@@ -51,8 +64,10 @@ def detect_layout(workbook, role: str) -> dict:
     sheet = sheets[0]
     aliases_by_field = ALIASES | (RESULT_ALIASES if role == "declaration" else {})
     rows = defaultdict(dict)
+    cells_by_row = defaultdict(list)
     for ref, cell in sheet["cells"].items():
         column, row = cell_position(ref)
+        cells_by_row[row].append(cell)
         if row <= 25:
             for field, aliases in aliases_by_field.items():
                 if any(field_matches(cell["value"], alias) for alias in aliases):
@@ -88,16 +103,21 @@ def detect_layout(workbook, role: str) -> dict:
                 return sheet["cells"].get(anchor, {}).get("value", ""), anchor
         return cell.get("value", ""), ref
 
-    max_row = max((cell_position(r)[1] for r in sheet["cells"]), default=row)
+    floating_by_row = defaultdict(list)
+    if role == "declaration":
+        for obj in workbook.floating_records():
+            image_row = floating_product_row(obj, sheet["name"], fields.get("image"), row)
+            if image_row is not None:
+                floating_by_row[image_row].append(obj)
+    candidate_rows = sorted(number for number in cells_by_row.keys() | floating_by_row.keys() if number > row)
     records = []
     non_item_rows = []
-    for number in range(row + 1, max_row + 1):
+    for number in candidate_rows:
         facts = {field: value_at(column, number) for field, column in fields.items()}
         contract = facts.get("contract", ("", ""))[0].strip()
         name = facts.get("primary_name" if role == "packing" else "name", ("", ""))[0].strip()
         item = facts.get("item", ("", ""))[0].strip()
-        raw_values = [cell for ref, cell in sheet["cells"].items()
-                      if cell_position(ref)[1] == number and (cell["value"] or cell["formula"])]
+        raw_values = [cell for cell in cells_by_row[number] if cell["value"] or cell["formula"]]
         evidence_fields = ("hs", "elements", "image", "specification", "manufacturer_model",
                            "material", "quantity", "unit", "refund_rate", *RESULT_ALIASES)
         strong_fields = ("hs", "elements", "image", "specification", "manufacturer_model", "material")
@@ -108,13 +128,25 @@ def detect_layout(workbook, role: str) -> dict:
                 return bool(sheet["cells"].get(ref, {}).get("formula"))
             return bool(value.strip() or sheet["cells"].get(ref, {}).get("formula"))
 
-        evidence = any(has_fact(field) for field in evidence_fields)
+        evidence = bool(floating_by_row[number]) or any(has_fact(field) for field in evidence_fields)
+
+        def preceding_total(cell):
+            match = re.fullmatch(
+                r'(?:SUM|COUNT|COUNTA|AVERAGE|MIN|MAX)\s*\(\s*\$?([A-Z]{1,3})\$?([0-9]+)'
+                r'\s*:\s*\$?\1\$?([0-9]+)\s*\)', cell['formula'] or '', re.I)
+            return bool(match and row < int(match[2]) <= int(match[3]) < number)
+
+        if (not contract and not item and not name and not floating_by_row[number]
+                and not any(has_fact(field) for field in strong_fields)
+                and len(raw_values) > 1 and all(preceding_total(cell) for cell in raw_values)):
+            non_item_rows.append({'row': number, 'reason': 'summary_formula_only; retained, not treated as an item'})
+            continue
         elements_ref = facts.get("elements", ("", ""))[1]
         aggregate_elements = re.match(r"(?:SUM|SUBTOTAL|AGGREGATE|COUNT|COUNTA|AVERAGE|MIN|MAX)\s*\(",
                                       sheet["cells"].get(elements_ref, {}).get("formula") or "", re.I)
         if not contract and not item and re.fullmatch(r"(?:合计|总计|小计)[:：]?", name) and not any(
             has_fact(field) for field in strong_fields if field != "elements"
-        ) and (not has_fact("elements") or aggregate_elements):
+        ) and (not has_fact("elements") or aggregate_elements) and not floating_by_row[number]:
             non_item_rows.append({"row": number, "reason": "summary_row; retained, not treated as an item"})
             continue
         if not item and not name and not evidence:
@@ -128,6 +160,9 @@ def detect_layout(workbook, role: str) -> dict:
             "row": number, "contract": contract, "item_raw": item,
             "status": "requires_review" if missing else "identified",
             "issues": missing,
+            "floating_image_sources": [{"part": obj["part"], "index": obj["index"],
+                                         "cell": f'{fields["image"]}{number}'}
+                                        for obj in floating_by_row[number]],
             "facts": {field: {"value": value, "cell": ref} for field, (value, ref) in facts.items()},
         })
     return {"sheet": sheet["name"], "part": sheet["part"], "header_row": row,
@@ -244,18 +279,16 @@ def map_images(workbook, declaration):
     for obj in workbook.floating_records():
         if obj["sheet"] != declaration["sheet"] or not obj["images"]:
             continue
-        first, last = obj["markers"].get("from"), obj["markers"].get("to")
-        # A photograph somewhere near a table is not sufficient. Only an exact
-        # single-cell anchor inside its identified image column is associated.
-        if first and last and first["row"] == last["row"] and first["col"] == last["col"] and (
-            first["col"] + 1 == image_column_number and first["row"] + 1 in rows
-        ):
-            rows[first["row"] + 1]["floating_images"].append(obj)
+        image_row = floating_product_row(obj, declaration["sheet"], image_column, declaration["header_row"])
+        if image_row in rows:
+            rows[image_row]["floating_images"].append(obj)
         else:
             unassigned.append({"kind": "floating_image", "record": obj,
                                "reason": "requires manual anchor/ownership confirmation"})
+    product_issues = {record["row"]: record["issues"] for record in declaration["records"]}
     for record in rows.values():
-        needs_review = (any(i["status"] != "resource_found" or i.get("decode_status") != "passed"
+        needs_review = (bool(product_issues[record["row"]]) or
+                        any(i["status"] != "resource_found" or i.get("decode_status") != "passed"
                             for i in record["cell_images"]) or
                         any(i["status"] != "resource_found" or i.get("decode_status") != "passed"
                             for obj in record["floating_images"] for i in obj["images"]))

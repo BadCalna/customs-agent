@@ -8,7 +8,7 @@ import tempfile
 from zipfile import ZipFile
 
 from .insert import (ROW, PREFIX, attribute, canonical, check_supported,
-                     set_attribute, sheet_prefix)
+                     ensure_result_rows, extended_dimension, set_attribute, sheet_prefix)
 from .mapping import RESULT_ALIASES, field_matches
 from .workbook import FidelityError, NS, Workbook, cell_position, col_label, xml
 
@@ -54,9 +54,10 @@ def append_precheck_column(source: str | Path, destination: str | Path, layout: 
                         raise FidelityError('New conclusion cells intersect existing validation/format rules')
     raw = original.parts[target['part']].decode('utf-8')
     prefix = sheet_prefix(raw)
-    new_dimension = f'A1:{label}{max(cell_position(ref)[1] for ref in target["cells"])}'
     if dimension is None:
         raise FidelityError('Missing dimension requires additional append handling')
+    new_dimension = extended_dimension(dimension.get('ref'), column, max(rows))
+    raw = ensure_result_rows(raw, rows)
     raw = re.sub(rf'<{PREFIX}dimension\b[^>]*/>',
                  lambda match: set_attribute(match[0], 'ref', new_dimension), raw, count=1)
     old_columns = target['root'].findall('s:cols/s:col', NS)
@@ -134,7 +135,12 @@ def append_precheck_column(source: str | Path, destination: str | Path, layout: 
                 if child.get('r') in added_refs:
                     row.remove(child)
             if int(row.get('r')) in selected_rows:
-                previous = expected_rows[row.get('r')]
+                previous = expected_rows.get(row.get('r'))
+                if previous is None:
+                    if len(row) or row.attrib != {'r': row.get('r')}:
+                        failures.append('invalid_added_result_row')
+                    actual.find('s:sheetData', NS).remove(row)
+                    continue
                 if previous.get('spans'):
                     if row.get('spans') != f'{previous.get("spans").split(":")[0]}:{column}':
                         failures.append('invalid_row_span')

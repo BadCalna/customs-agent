@@ -217,3 +217,102 @@ class ReviewFixTests(unittest.TestCase):
         raw = Workbook(destination).parts['xl/worksheets/sheet2.xml'].decode()
         self.assertIn('min="10" max="16384" width="20"', raw)
         self.assertEqual(Workbook(destination).sheet('申报要素')['cells']['I1']['value'], '预审结论')
+
+    def put_floating_picture_on_row_eight(self):
+        self.edit('xl/drawings/drawing1.xml', lambda text:
+                  text.replace('<xdr:col>5</xdr:col>', '<xdr:col>4</xdr:col>')
+                      .replace('<xdr:row>1</xdr:row>', '<xdr:row>7</xdr:row>')
+                      .replace('<xdr:row>2</xdr:row>', '<xdr:row>7</xdr:row>'))
+
+    def assert_floating_only_row_is_pending(self):
+        mapping = map_workbook(Workbook(self.source))
+        self.assertIn(8, mapping['declaration']['data_rows'])
+        record = next(r for r in mapping['declaration']['records'] if r['row'] == 8)
+        self.assertEqual(record['status'], 'requires_review')
+        self.assertEqual(set(record['issues']), {'missing_contract', 'missing_item', 'missing_name'})
+        link = next(link for link in mapping['associations'] if link['declaration_row'] == 8)
+        self.assertEqual(link['status'], 'requires_review')
+        picture_row = next(r for r in mapping['image_mapping']['rows'] if r['row'] == 8)
+        self.assertEqual(len(picture_row['floating_images']), 1)
+        self.assertEqual(picture_row['status'], 'requires_review')
+        self.assertFalse(mapping['image_mapping']['unassigned'])
+
+    def test_floating_only_row_beyond_last_cell_is_retained(self):
+        self.put_floating_picture_on_row_eight()
+        self.assertFalse(any(ref.endswith('8') for ref in Workbook(self.source).sheet('申报要素')['cells']))
+        self.assert_floating_only_row_is_pending()
+
+    def test_floating_only_row_with_blank_styled_cell_is_retained(self):
+        self.put_floating_picture_on_row_eight()
+        self.edit('xl/worksheets/sheet2.xml', lambda text:
+                  text.replace('</sheetData>', '<row r="8" ht="30" customHeight="1"><c r="E8" s="0"/></row></sheetData>'))
+        self.assert_floating_only_row_is_pending()
+
+    def test_outside_or_ambiguous_floating_pictures_remain_unassigned(self):
+        for kind in ('wrong_column', 'spans_rows', 'header_row'):
+            with self.subTest(kind=kind):
+                make_fixture(self.source)
+                self.put_floating_picture_on_row_eight()
+                if kind == 'wrong_column':
+                    self.edit('xl/drawings/drawing1.xml', lambda text:
+                              text.replace('<xdr:col>4</xdr:col>', '<xdr:col>6</xdr:col>'))
+                elif kind == 'spans_rows':
+                    self.edit('xl/drawings/drawing1.xml', lambda text:
+                              text.replace('<xdr:row>7</xdr:row>', '<xdr:row>6</xdr:row>', 1))
+                else:
+                    self.edit('xl/drawings/drawing1.xml', lambda text:
+                              text.replace('<xdr:row>7</xdr:row>', '<xdr:row>0</xdr:row>'))
+                mapping = map_workbook(Workbook(self.source))
+                self.assertEqual(mapping['declaration']['data_rows'], [2, 3, 4])
+                self.assertEqual(len(mapping['image_mapping']['unassigned']), 1)
+
+    def test_floating_only_rows_survive_result_exports(self):
+        for row_xml in ('', '<row r="8" ht="30" customHeight="1"/>'):
+            with self.subTest(row_xml=row_xml):
+                make_fixture(self.source)
+                self.put_floating_picture_on_row_eight()
+                if row_xml:
+                    self.edit('xl/worksheets/sheet2.xml', lambda text:
+                              text.replace('</sheetData>', row_xml + '</sheetData>'))
+                source = Workbook(self.source)
+                insertion = self.root / ('insert-empty-row-' + str(bool(row_xml)) + '.xlsx')
+                self.assertEqual(insert_columns(self.source, insertion, self.layout())['status'], 'passed')
+                inserted = Workbook(insertion)
+                self.assertIn(8, detect_layout(inserted, 'declaration')['data_rows'])
+                self.assertEqual(inserted.sheet('申报要素')['cells']['F8']['value'], '')
+                self.assertIn('ref="A1:J8"', inserted.parts['xl/worksheets/sheet2.xml'].decode())
+                appended_path = self.root / ('append-empty-row-' + str(bool(row_xml)) + '.xlsx')
+                self.assertEqual(append_precheck_column(self.source, appended_path, self.layout())['status'], 'passed')
+                appended = Workbook(appended_path)
+                self.assertEqual(appended.sheet('申报要素')['cells']['I8']['value'], '')
+                self.assertIn('ref="A1:I8"', appended.parts['xl/worksheets/sheet2.xml'].decode())
+                self.assertEqual(source.floating_records(), appended.floating_records())
+                self.assertEqual(Workbook(self.source).source_hash, source.source_hash)
+
+    def test_unlabelled_totals_are_separate_from_incomplete_products(self):
+        for role, part in (('packing', 'xl/worksheets/sheet1.xml'),
+                           ('declaration', 'xl/worksheets/sheet2.xml')):
+            for kind in ('totals', 'single_quantity', 'extra_text', 'floating_picture'):
+                if kind == 'floating_picture' and role == 'packing':
+                    continue
+                with self.subTest(role=role, kind=kind):
+                    make_fixture(self.source)
+                    values = formula('I8', 'SUM(I2:I4)', '6')
+                    if kind != 'single_quantity':
+                        values += formula('J8', 'SUM(J2:J4)', '9')
+                    if kind == 'extra_text':
+                        values += cell('K8', '待核备注')
+                    self.edit(part, lambda text:
+                              text.replace('</row>', cell('I1', '数量') + '</row>', 1)
+                                  .replace('</sheetData>', f'<row r="8">{values}</row></sheetData>'))
+                    if kind == 'floating_picture':
+                        self.put_floating_picture_on_row_eight()
+                    layout = detect_layout(Workbook(self.source), role)
+                    if kind == 'totals':
+                        self.assertNotIn(8, layout['data_rows'])
+                        self.assertTrue(any(row['row'] == 8 and row['reason'].startswith('summary_formula_only')
+                                            for row in layout['non_item_rows']))
+                    else:
+                        self.assertIn(8, layout['data_rows'])
+                        self.assertEqual(next(record for record in layout['records']
+                                              if record['row'] == 8)['status'], 'requires_review')

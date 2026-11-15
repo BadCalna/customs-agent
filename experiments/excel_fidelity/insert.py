@@ -24,6 +24,7 @@ PREFIX = r"(?:[A-Za-z_][\w.-]*:)?"
 CELL = re.compile(rf"<{PREFIX}c\b[^>]*?(?:/>|>.*?</{PREFIX}c>)", re.S)
 FORMULA = re.compile(rf"<{PREFIX}f\b[^>]*?(?:/>|>.*?</{PREFIX}f>)", re.S)
 ROW = re.compile(rf"(<{PREFIX}row\b[^>]*>)(.*?)(</{PREFIX}row>)", re.S)
+ROW_ELEMENT = re.compile(rf"<{PREFIX}row\b[^>]*?(?:/>|>.*?</{PREFIX}row>)", re.S)
 
 
 def attribute(tag: str, name: str) -> str | None:
@@ -44,6 +45,48 @@ def sheet_prefix(raw: str) -> str:
     if not match:
         raise FidelityError("Worksheet root not found")
     return match["prefix"] or ""
+
+
+def ensure_result_rows(raw: str, numbers: list[int]) -> str:
+    """Materialize result cells' rows, including rows that only have a drawing."""
+    wanted = set(numbers)
+    if any(not 1 <= number <= 1048576 for number in wanted):
+        raise FidelityError("Result row outside XLSX limit")
+    prefix = sheet_prefix(raw)
+
+    def change(match):
+        body = match[2]
+        entries = list(ROW_ELEMENT.finditer(body))
+        present = [int(attribute(entry[0].split('>', 1)[0] + '>', 'r')) for entry in entries]
+        if len(present) != len(set(present)) or present != sorted(present):
+            raise FidelityError('Duplicate or unordered worksheet rows')
+        missing = iter(sorted(wanted - set(present)))
+        pending = next(missing, None)
+        result, cursor = [], 0
+        for entry, number in zip(entries, present):
+            result.append(body[cursor:entry.start()])
+            while pending is not None and pending < number:
+                result.append(f'<{prefix}row r="{pending}"></{prefix}row>')
+                pending = next(missing, None)
+            text = entry[0]
+            if number in wanted and text.endswith('/>'):
+                row_prefix = re.match(r'<([\w.-]+:)?row\b', text)[1] or ''
+                text = text[:-2] + f'></{row_prefix}row>'
+            result.append(text)
+            cursor = entry.end()
+        while pending is not None:
+            result.append(f'<{prefix}row r="{pending}"></{prefix}row>')
+            pending = next(missing, None)
+        result.append(body[cursor:])
+        return match[1] + ''.join(result) + match[3]
+
+    return re.sub(rf'(<{PREFIX}sheetData\b[^>]*>)(.*?)(</{PREFIX}sheetData>)', change, raw, count=1, flags=re.S)
+
+
+def extended_dimension(ref: str, last_column: int, last_row: int) -> str:
+    first, last = ref.split(':') if ':' in ref else (ref, ref)
+    column, row = cell_position(last)
+    return f'{first}:{col_label(max(column, last_column))}{max(row, last_row)}'
 
 
 def check_supported(workbook: Workbook, target: dict, start: int, rows: list[int]):
@@ -154,6 +197,8 @@ def rewrite_columns(raw: str, start: int, prefix: str) -> str:
 
 def rewrite_target(raw: str, target: dict, start: int, header_row: int, data_rows: list[int]) -> str:
     prefix = sheet_prefix(raw)
+    selected_rows = set(data_rows) | {header_row}
+    raw = ensure_result_rows(raw, list(selected_rows))
     raw = rewrite_formulas(raw, target, target["name"], start, prefix)
 
     def shift_cell(match):
@@ -173,6 +218,8 @@ def rewrite_target(raw: str, target: dict, start: int, header_row: int, data_row
             value = attribute(text, attr)
             if value is not None:
                 text = set_attribute(text, attr, " ".join(shift_range(v, start) for v in value.split()))
+        if local == 'dimension' and attribute(text, 'ref'):
+            text = set_attribute(text, 'ref', extended_dimension(attribute(text, 'ref'), start + 1, max(selected_rows)))
         if local == "row" and attribute(text, "spans"):
             first, last = map(int, attribute(text, "spans").split(":"))
             text = set_attribute(text, "spans", f"{first + (2 if first >= start else 0)}:{last + (2 if last >= start else 0)}")
@@ -186,7 +233,6 @@ def rewrite_target(raw: str, target: dict, start: int, header_row: int, data_row
     raw = re.sub(rf"<{PREFIX}(?:dimension|mergeCell|autoFilter|sortState|sortCondition|selection|pane|sheetView|row|f|dataValidation|conditionalFormatting|hyperlink)\b[^>]*>", shift_tag, raw)
     raw = rewrite_metadata_formulas(raw, target["name"], target["name"], start)
     raw = rewrite_columns(raw, start, prefix)
-    selected_rows = set(data_rows) | {header_row}
 
     def add_cells(match):
         row = int(attribute(match[1], "r"))
@@ -280,7 +326,7 @@ def audit(original: Workbook, output: Workbook, target: str, start: int, added_r
                    if old_sheet["name"] == target else set())
         if extras != allowed:
             failures.append(f"unexpected_cells:{old_sheet['name']}")
-        failures.extend(audit_sheet_metadata(old_sheet, new_sheet, target, start))
+        failures.extend(audit_sheet_metadata(old_sheet, new_sheet, target, start, added_rows))
     if set(original.parts) != set(output.parts):
         failures.append("package_part_set_changed")
     changed = [p for p in original.parts if original.parts[p] != output.parts.get(p)]
@@ -353,11 +399,19 @@ def canonical(element):
             tuple(canonical(child) for child in element))
 
 
-def audit_sheet_metadata(before, after, target, start):
+def audit_sheet_metadata(before, after, target, start, added_rows=()):
     failures = []
     expected = copy.deepcopy(before["root"])
     actual = copy.deepcopy(after["root"])
     shifted = before["name"] == target
+    if shifted:
+        data = expected.find('s:sheetData', NS)
+        if data is not None:
+            from xml.etree.ElementTree import Element
+            present = {int(row.get('r')) for row in data}
+            for number in sorted(set(added_rows) - present):
+                position = next((index for index, row in enumerate(data) if int(row.get('r')) > number), len(data))
+                data.insert(position, Element('{' + NS['s'] + '}row', {'r': str(number)}))
     for root in (expected, actual):
         data = root.find("s:sheetData", NS)
         if data is not None:
@@ -371,6 +425,8 @@ def audit_sheet_metadata(before, after, target, start):
             for key in ("ref", "sqref", "activeCell", "topLeftCell"):
                 if key in node.attrib:
                     node.set(key, " ".join(shift_range(v, start) for v in node.get(key).split()))
+            if local == 'dimension' and node.get('ref') and added_rows:
+                node.set('ref', extended_dimension(node.get('ref'), start + 1, max(added_rows)))
             if local == "row" and node.get("spans"):
                 first, last = map(int, node.get("spans").split(":"))
                 node.set("spans", f"{first + (2 if first >= start else 0)}:{last + (2 if last >= start else 0)}")
