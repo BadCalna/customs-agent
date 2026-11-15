@@ -232,7 +232,7 @@ class ReviewActionsSourceTest(SimpleTestCase):
             "不会用预审建议、供应商原码、专家建议、旧提交或空值补位",
             "business_confirmed_hs",
             "confirmation_id",
-            "expected_revision",
+            "revision",
         ):
             with self.subTest(marker=marker):
                 self.assertIn(marker, self.source)
@@ -240,11 +240,10 @@ class ReviewActionsSourceTest(SimpleTestCase):
     def test_expert_approve_requires_reason_only_when_recode(self):
         for marker in (
             "改码必须填写原因",
-            "previous_hs",
             "final_hs",
             "change_reason",
             "等于提交值",
-            "未改的行会以 previous_hs = final_hs = 提交值 一并发送",
+            "未改的行终值等于提交值；前后值与改码原因由服务端留痕",
         ):
             with self.subTest(marker=marker):
                 self.assertIn(marker, self.source)
@@ -359,7 +358,6 @@ class VersionHistorySourceTest(SimpleTestCase):
 
     def test_fix10_recode_and_old_expert_check_are_visible(self):
         for marker in (
-            "previous_hs",
             "final_hs",
             "change_reason",
             "target_hs",
@@ -505,3 +503,25 @@ class P11HandoffTest(SimpleTestCase):
         for marker in ("操作映射", "501", "未执行", "已知限制", "make test TASK=P11"):
             with self.subTest(marker=marker):
                 self.assertIn(marker, doc)
+
+
+class PayloadContractAlignmentTest(SimpleTestCase):
+    """P11 生成的请求体必须与 P09/P10 后端字段名一致（Jay 评审）。"""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.source = read(REVIEW_ACTIONS)
+
+    def test_submit_uses_revision_and_only_confirmation_refs(self):
+        self.assertIn("revision,", self.source)
+        self.assertIn("confirmation_id: row.confirmationId", self.source)
+        self.assertNotIn("submitted_hs: row.submittedHs", self.source)
+        self.assertNotIn("item_revision: row.itemRevision", self.source)
+
+    def test_decide_does_not_send_revision_or_previous_hs(self):
+        self.assertNotIn("previous_hs: entry.submitted", self.source)
+
+    def test_return_puts_issues_not_items(self):
+        self.assertIn("issues: issueRows.map((entry) => ({ item_id: entry.row.item_id, message: entry.issue }))", self.source)
+        self.assertNotIn("items: issueRows.map", self.source)

@@ -9,13 +9,14 @@
  *
  *   confirm({confirmed_hs, reason, expected_revision})
  *     → PATCH /api/v1/versions/{version_id}/items/{item_id}/confirmation（P09）
- *   submit({version_id, expected_revision, items[]})
+ *   submit({version_id, revision, items: [{item_id, confirmation_id}]})
  *     → POST  /api/v1/tasks/{task_id}/submissions（P09）
- *   decide({action, expected_revision, return_to?, reason, items[]})
+ *   decide({action, reason, return_to?, items[] | issues: [{item_id, message}]})
  *     → POST  /api/v1/submissions/{submission_id}/decisions（P10）
  *
  * 请求体字段与 D3 第 2 节的输入列一致；路径参数由调用方在挂载 api adapter 时
- * 从上下文取得。当前后端这三个端点均返回 501，组件必须如实显示「未实现（501）」。
+ * 从上下文取得。后端 confirm/submit/decide 已由 P09/P10 实现，未接线或 501 时
+ * 组件仍要如实显示「未实现（501）」，不伪造成功。
  *
  * 失败处理约定（D3 第 6 节、FIX-08）：
  * - 任何失败都不清空草稿，按钮从 pending 恢复；
@@ -538,7 +539,7 @@ export function createReviewActions(options = {}) {
       ${permissionNotice("submission.create", "整批提交")}
       <p class="ra-summary" id="${uid}-submit-summary" role="status" aria-live="polite">
         将提交 <b>${rows.length - missing.length}</b> 行；缺少确认 <b>${missing.length}</b> 行。
-        提交携带任务修订 <span class="mono">${esc(revision ?? "—")}</span> 作为 expected_revision。
+        提交携带任务修订 <span class="mono">${esc(revision ?? "—")}</span>（字段名 revision）。
       </p>
       <div class="ra-table-wrap">
         <table class="ra-table">
@@ -557,7 +558,7 @@ export function createReviewActions(options = {}) {
             <p>组件不会用预审建议、供应商原码、专家建议、旧提交或空值补位；请先逐行确认。</p>
           </div>`
         : `<p class="ra-hint">快照只取 <span class="mono">business_confirmed_hs</span> 的值与确认记录引用；预审建议、供应商原码和专家建议都不会进入提交。</p>`}
-      ${!revisionOk ? `<p class="ra-error" role="alert">缺少可用的任务修订号，不能安全生成 expected_revision。</p>` : ""}
+      ${!revisionOk ? `<p class="ra-error" role="alert">缺少可用的任务修订号，不能安全生成 revision。</p>` : ""}
       <div class="ra-actions">
         <button type="button" class="btn btn-primary ra-btn" data-ra-act="submit"
           ${blocked ? "disabled" : ""} aria-busy="${pending}" aria-describedby="${uid}-submit-summary">
@@ -618,7 +619,7 @@ export function createReviewActions(options = {}) {
           <button type="button" class="btn btn-primary ra-btn" data-ra-act="decide" ${disabled ? "disabled" : ""} aria-busy="${pending}">
             ${pending ? "处理中…" : mode === "approve" ? "提交通过决定" : "提交退回决定"}
           </button>
-          <span class="ra-hint mono">expected_revision=${esc(currentSubmission.revision ?? "—")}（提交修订）</span>
+          <span class="ra-hint mono">revision=${esc(currentSubmission.revision ?? "—")}（提交修订，仅展示）</span>
         </div>
       </section>`;
   }
@@ -668,7 +669,7 @@ export function createReviewActions(options = {}) {
 
     return `<div class="ra-subhead">
         <h4>逐行终值</h4>
-        <span class="ra-hint">未改的行会以 previous_hs = final_hs = 提交值 一并发送，不用 AI 建议补位。</span>
+        <span class="ra-hint">未改的行终值等于提交值；前后值与改码原因由服务端留痕，组件不用 AI 建议补位。</span>
       </div>
       <ul class="ra-items">${rows.join("")}</ul>
       <div class="ra-field">
@@ -863,7 +864,7 @@ export function createReviewActions(options = {}) {
     const problems = [];
 
     if (!rows.length) problems.push("当前版本没有商品行，不能整批提交。");
-    if (!Number.isInteger(revision)) problems.push("缺少任务修订号，不能安全提交 expected_revision。");
+    if (!Number.isInteger(revision)) problems.push("缺少任务修订号，不能安全提交 revision。");
     if (!version().version_id && !task().current_version_id) problems.push("缺少版本标识，不能整批提交。");
     if (allowed("submission.create") === false) {
       problems.push("当前 allowed_actions 不含 submission.create；按钮禁用只是提示，服务端仍会校验。");
@@ -890,12 +891,10 @@ export function createReviewActions(options = {}) {
 
     const payload = {
       version_id: version().version_id || task().current_version_id,
-      expected_revision: revision,
+      revision,
       items: rows.map((row) => ({
         item_id: row.itemId,
-        submitted_hs: row.submittedHs,
         confirmation_id: row.confirmationId,
-        item_revision: row.itemRevision,
       })),
     };
     try {
@@ -916,14 +915,13 @@ export function createReviewActions(options = {}) {
     if (state.pending) return;
     const snapshot = submission();
     const snapRows = snapshot && Array.isArray(snapshot.items) ? snapshot.items : [];
-    const revision = Number(snapshot && snapshot.revision);
     const mode = state.decisionDraft.mode;
     const problems = [];
     const fieldErrors = {};
 
     if (!snapshot || !snapshot.submission_id) problems.push("当前没有待审提交快照，不能提交专家决定。");
     if (!snapRows.length) problems.push("提交快照没有逐行明细，不能整批决定。");
-    if (!Number.isInteger(revision)) problems.push("缺少提交修订号，不能安全提交 expected_revision。");
+    
     if (allowed("decision.resolve") === false) {
       problems.push("当前 allowed_actions 不含 decision.resolve；按钮禁用只是提示，服务端仍会校验。");
     }
@@ -951,11 +949,9 @@ export function createReviewActions(options = {}) {
 
       payload = {
         action: "approve",
-        expected_revision: revision,
         reason: text(state.decisionDraft.reason),
         items: rows.map((entry) => ({
           item_id: entry.row.item_id,
-          previous_hs: entry.submitted,
           final_hs: entry.final,
           change_reason: entry.changed ? entry.reason : "",
         })),
@@ -973,10 +969,9 @@ export function createReviewActions(options = {}) {
 
       payload = {
         action: "return",
-        expected_revision: revision,
         return_to: target,
         reason,
-        items: issueRows.map((entry) => ({ item_id: entry.row.item_id, issue: entry.issue })),
+        issues: issueRows.map((entry) => ({ item_id: entry.row.item_id, message: entry.issue })),
       };
     }
 
