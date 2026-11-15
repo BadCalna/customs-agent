@@ -1,0 +1,42 @@
+{
+  "description": "数据集说明。``synthetic`` 是给下游的诚实标记，不允许默认当成真实数据。",
+  "properties": {
+    "dataset_id": {
+      "default": "",
+      "title": "Dataset Id",
+      "type": "string"
+    },
+    "description": {
+      "default": "",
+      "title": "Description",
+      "type": "string"
+    },
+    "generated_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Generated At"
+    },
+    "synthetic": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "true=合成样本；false=调用方明确声明为真实数据；null=未声明来源",
+      "title": "Synthetic"
+    }
+  },
+  "title": "HistoryDatasetInfo",
+  "type": "object"
+}

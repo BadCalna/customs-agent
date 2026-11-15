@@ -85,7 +85,7 @@
     "task_stage": "awaiting_confirmation",
     "version_id": "d1051286-aecb-47e1-a614-1f53ed7aef65"
   },
-  "contract_version": "1.0.0",
+  "contract_version": "1.1.0",
   "notes": "空白与异常原文都保留，不用建议值回填；supplier_missing 与 supplier_invalid 是两类结论。",
   "related_cards": [
     {

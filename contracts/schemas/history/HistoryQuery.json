@@ -1,0 +1,36 @@
+{
+  "description": "检索输入：品名 + 申报要素键值 + 规格/材质。\n\n刻意不复用 ``RecommendInput``：本适配器不接收执行上下文，也不接收供应商原码，\n避免历史检索被误当成一次推荐执行。",
+  "properties": {
+    "attributes": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "title": "Attributes",
+      "type": "object"
+    },
+    "elements": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "title": "Elements",
+      "type": "object"
+    },
+    "material": {
+      "default": "",
+      "title": "Material",
+      "type": "string"
+    },
+    "name": {
+      "default": "",
+      "title": "Name",
+      "type": "string"
+    },
+    "spec": {
+      "default": "",
+      "title": "Spec",
+      "type": "string"
+    }
+  },
+  "title": "HistoryQuery",
+  "type": "object"
+}

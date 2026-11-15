@@ -87,7 +87,7 @@
     "task_stage": "awaiting_confirmation",
     "version_id": "d1051286-aecb-47e1-a614-1f53ed7aef65"
   },
-  "contract_version": "1.0.0",
+  "contract_version": "1.1.0",
   "notes": "原值、建议、来源状态可见；result_mode=mock，不自动审批。related_cards 为建议与原码不一致的对照。",
   "related_cards": [
     {

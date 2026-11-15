@@ -1,0 +1,42 @@
+{
+  "description": "历史记录的来源引用，必须能定位到具体单据与项号。",
+  "properties": {
+    "document": {
+      "description": "单据/文件标识，原样保留",
+      "minLength": 1,
+      "title": "Document",
+      "type": "string"
+    },
+    "locator": {
+      "description": "单据内的项号、行号或页签定位",
+      "minLength": 1,
+      "title": "Locator",
+      "type": "string"
+    },
+    "system": {
+      "default": "",
+      "description": "来源系统标识，便于区分真实库与合成样本",
+      "title": "System",
+      "type": "string"
+    },
+    "url": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "可打开的来源地址；无则为空",
+      "title": "Url"
+    }
+  },
+  "required": [
+    "document",
+    "locator"
+  ],
+  "title": "HistorySourceRef",
+  "type": "object"
+}
