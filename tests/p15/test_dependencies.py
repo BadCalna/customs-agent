@@ -82,7 +82,7 @@ class NoExtraDependencyTest(SimpleTestCase):
         """
         project = tomllib.loads((BASE_DIR / "pyproject.toml").read_text(encoding="utf-8"))["project"]
         names = {
-            re.split(r"[<>=!~ ]", dependency, maxsplit=1)[0].lower()
+            re.split(r"[\[<>=!~ ]", dependency, maxsplit=1)[0].lower()
             for dependency in project["dependencies"]
         }
         baseline = {"django", "django-ninja", "python-dotenv"}
