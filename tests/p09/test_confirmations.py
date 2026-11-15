@@ -146,3 +146,14 @@ class ConfirmationApiTests(TestCase):
             data=json.dumps(self.payload()), content_type="application/json",
         )
         self.assertEqual(response.status_code, 404)
+
+    def test_confirm_on_old_version_is_rejected(self):
+        from tests.p01.factories import make_version
+
+        make_version(self.task, self.supplier, number=2, filename="V2.xlsx")
+        response = self.patch()
+        self.assertEqual(response.status_code, 409)
+        body = response.json()
+        self.assertEqual(body["error"]["code"], "stale_version")
+        self.assertIn("current_version_id", body["error"]["details"])
+        self.assertEqual(Confirmation.objects.count(), 0)

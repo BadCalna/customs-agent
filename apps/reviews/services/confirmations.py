@@ -52,6 +52,13 @@ def write_confirmation(user, version_id: str, item_id: str, payload) -> tuple[Co
     item = Item.objects.select_for_update().select_related("version__task").get(pk=item.pk)
     task = Task.objects.select_for_update().get(pk=task.pk)
 
+    latest_version = task.versions.order_by("-number").first()
+    if latest_version is not None and latest_version.pk != item.version_id:
+        raise ApiError(
+            409, "stale_version",
+            "该商品属于旧文件版本，请切换到最新版本后再修改确认值；旧版本只读回查",
+            {"current_version_id": str(latest_version.pk), "item_version_id": str(item.version_id)},
+        )
     if task.stage == Task.Stage.APPROVED:
         raise ApiError(409, "task_closed", "任务已通过，不能再修改确认值；如需变更请走补料重传")
     if payload.expected_revision != item.revision:
