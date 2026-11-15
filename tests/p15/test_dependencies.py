@@ -78,7 +78,7 @@ class NoExtraDependencyTest(SimpleTestCase):
     def test_project_dependencies_are_unchanged(self):
         project = tomllib.loads((BASE_DIR / "pyproject.toml").read_text(encoding="utf-8"))["project"]
         names = {
-            re.split(r"[<>=!~ ]", dependency, maxsplit=1)[0].lower()
+            re.split(r"[\[<>=!~ ]", dependency, maxsplit=1)[0].lower()
             for dependency in project["dependencies"]
         }
         self.assertEqual(names, {"django", "django-ninja", "python-dotenv"})
