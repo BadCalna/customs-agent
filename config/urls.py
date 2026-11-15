@@ -7,6 +7,8 @@ from apps.accounts.api import router as accounts_router
 from apps.api.demo import demo_asset, demo_fixture, demo_index
 from apps.api.not_implemented import router as pending_router
 from apps.reviews.api.confirmations import router as confirmations_router
+from apps.reviews.api.decisions import router as decisions_router
+from apps.reviews.api.history import router as history_router
 from apps.reviews.api.read import router as reviews_read_router
 from apps.reviews.api.submissions import router as submissions_router
 from apps.runs.api import router as runs_router
@@ -30,6 +32,8 @@ api_v1.add_router("", accounts_router)
 api_v1.add_router("", reviews_read_router)
 api_v1.add_router("", confirmations_router)
 api_v1.add_router("", submissions_router)
+api_v1.add_router("", decisions_router)
+api_v1.add_router("", history_router)
 api_v1.add_router("", runs_router)
 api_v1.add_router("", pending_router)
 

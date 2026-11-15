@@ -1,0 +1,23 @@
+{
+  "properties": {
+    "change_reason": {
+      "default": "",
+      "title": "Change Reason",
+      "type": "string"
+    },
+    "final_hs": {
+      "title": "Final Hs",
+      "type": "string"
+    },
+    "item_id": {
+      "title": "Item Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "item_id",
+    "final_hs"
+  ],
+  "title": "DecisionLineIn",
+  "type": "object"
+}

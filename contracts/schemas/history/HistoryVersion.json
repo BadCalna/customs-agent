@@ -1,0 +1,332 @@
+{
+  "$defs": {
+    "HistoryConfirmation": {
+      "properties": {
+        "confirmation_id": {
+          "title": "Confirmation Id",
+          "type": "string"
+        },
+        "confirmed_hs": {
+          "title": "Confirmed Hs",
+          "type": "string"
+        },
+        "created_at": {
+          "title": "Created At",
+          "type": "string"
+        },
+        "created_by": {
+          "title": "Created By",
+          "type": "string"
+        },
+        "item_id": {
+          "title": "Item Id",
+          "type": "string"
+        },
+        "previous_hs": {
+          "title": "Previous Hs",
+          "type": "string"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        },
+        "revision": {
+          "title": "Revision",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "confirmation_id",
+        "item_id",
+        "revision",
+        "previous_hs",
+        "confirmed_hs",
+        "reason",
+        "created_by",
+        "created_at"
+      ],
+      "title": "HistoryConfirmation",
+      "type": "object"
+    },
+    "HistoryItemRef": {
+      "properties": {
+        "item_id": {
+          "title": "Item Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "revision": {
+          "title": "Revision",
+          "type": "integer"
+        },
+        "source_location": {
+          "$ref": "#/$defs/SourceLocation"
+        },
+        "supplier_hs_raw": {
+          "title": "Supplier Hs Raw",
+          "type": "string"
+        }
+      },
+      "required": [
+        "item_id",
+        "name",
+        "supplier_hs_raw",
+        "revision",
+        "source_location"
+      ],
+      "title": "HistoryItemRef",
+      "type": "object"
+    },
+    "HistoryRun": {
+      "properties": {
+        "created_at": {
+          "title": "Created At",
+          "type": "string"
+        },
+        "finished_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Finished At"
+        },
+        "is_current": {
+          "title": "Is Current",
+          "type": "boolean"
+        },
+        "kind": {
+          "$ref": "#/$defs/RunKind"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/RunStatus"
+        },
+        "submission_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Submission Id"
+        }
+      },
+      "required": [
+        "run_id",
+        "kind",
+        "status",
+        "is_current",
+        "created_at"
+      ],
+      "title": "HistoryRun",
+      "type": "object"
+    },
+    "HistorySubmission": {
+      "properties": {
+        "created_at": {
+          "title": "Created At",
+          "type": "string"
+        },
+        "created_by": {
+          "title": "Created By",
+          "type": "string"
+        },
+        "decisions": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Decisions",
+          "type": "array"
+        },
+        "items": {
+          "items": {
+            "$ref": "#/$defs/SubmissionLineOut"
+          },
+          "title": "Items",
+          "type": "array"
+        },
+        "revision": {
+          "title": "Revision",
+          "type": "integer"
+        },
+        "status": {
+          "$ref": "#/$defs/SubmissionStatus"
+        },
+        "submission_id": {
+          "title": "Submission Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "submission_id",
+        "revision",
+        "status",
+        "created_by",
+        "created_at",
+        "items"
+      ],
+      "title": "HistorySubmission",
+      "type": "object"
+    },
+    "RunKind": {
+      "enum": [
+        "precheck",
+        "expert_check"
+      ],
+      "title": "RunKind",
+      "type": "string"
+    },
+    "RunStatus": {
+      "description": "技术执行状态。部分行失败由 ``progress.failed`` 表达，不改写本状态。",
+      "enum": [
+        "queued",
+        "running",
+        "succeeded",
+        "failed"
+      ],
+      "title": "RunStatus",
+      "type": "string"
+    },
+    "SourceLocation": {
+      "description": "商品行在原 Excel 中的位置；行号为 1 起始。",
+      "properties": {
+        "cells": {
+          "default": "",
+          "title": "Cells",
+          "type": "string"
+        },
+        "row_number": {
+          "minimum": 1,
+          "title": "Row Number",
+          "type": "integer"
+        },
+        "sheet_name": {
+          "title": "Sheet Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "sheet_name",
+        "row_number"
+      ],
+      "title": "SourceLocation",
+      "type": "object"
+    },
+    "SubmissionLineOut": {
+      "properties": {
+        "confirmation_id": {
+          "title": "Confirmation Id",
+          "type": "string"
+        },
+        "item_id": {
+          "title": "Item Id",
+          "type": "string"
+        },
+        "item_revision": {
+          "title": "Item Revision",
+          "type": "integer"
+        },
+        "submitted_hs": {
+          "title": "Submitted Hs",
+          "type": "string"
+        }
+      },
+      "required": [
+        "item_id",
+        "confirmation_id",
+        "submitted_hs",
+        "item_revision"
+      ],
+      "title": "SubmissionLineOut",
+      "type": "object"
+    },
+    "SubmissionStatus": {
+      "enum": [
+        "pending",
+        "approved",
+        "returned",
+        "superseded"
+      ],
+      "title": "SubmissionStatus",
+      "type": "string"
+    }
+  },
+  "properties": {
+    "confirmations": {
+      "items": {
+        "$ref": "#/$defs/HistoryConfirmation"
+      },
+      "title": "Confirmations",
+      "type": "array"
+    },
+    "is_current": {
+      "title": "Is Current",
+      "type": "boolean"
+    },
+    "items": {
+      "items": {
+        "$ref": "#/$defs/HistoryItemRef"
+      },
+      "title": "Items",
+      "type": "array"
+    },
+    "number": {
+      "title": "Number",
+      "type": "integer"
+    },
+    "original_filename": {
+      "title": "Original Filename",
+      "type": "string"
+    },
+    "runs": {
+      "items": {
+        "$ref": "#/$defs/HistoryRun"
+      },
+      "title": "Runs",
+      "type": "array"
+    },
+    "submissions": {
+      "items": {
+        "$ref": "#/$defs/HistorySubmission"
+      },
+      "title": "Submissions",
+      "type": "array"
+    },
+    "uploaded_at": {
+      "title": "Uploaded At",
+      "type": "string"
+    },
+    "version_id": {
+      "title": "Version Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "version_id",
+    "number",
+    "original_filename",
+    "uploaded_at",
+    "is_current",
+    "items",
+    "confirmations",
+    "runs",
+    "submissions"
+  ],
+  "title": "HistoryVersion",
+  "type": "object"
+}

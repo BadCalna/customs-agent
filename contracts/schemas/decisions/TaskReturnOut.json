@@ -1,0 +1,54 @@
+{
+  "$defs": {
+    "TaskStage": {
+      "enum": [
+        "uploaded",
+        "prechecking",
+        "awaiting_confirmation",
+        "submitted",
+        "approved",
+        "returned"
+      ],
+      "title": "TaskStage",
+      "type": "string"
+    }
+  },
+  "properties": {
+    "idempotent_replay": {
+      "default": false,
+      "title": "Idempotent Replay",
+      "type": "boolean"
+    },
+    "issue_ids": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Issue Ids",
+      "type": "array"
+    },
+    "stage": {
+      "$ref": "#/$defs/TaskStage"
+    },
+    "task_id": {
+      "title": "Task Id",
+      "type": "string"
+    },
+    "task_revision": {
+      "title": "Task Revision",
+      "type": "integer"
+    },
+    "version_id": {
+      "title": "Version Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "task_id",
+    "version_id",
+    "stage",
+    "task_revision",
+    "issue_ids"
+  ],
+  "title": "TaskReturnOut",
+  "type": "object"
+}

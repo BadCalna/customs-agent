@@ -187,3 +187,157 @@ class SubmissionOut(Schema):
     task_revision: int
     created_at: str
     idempotent_replay: bool = False
+
+
+# --- P10 专家处置、业务员退回与只读历史 ---
+
+class DecisionLineIn(Schema):
+    item_id: str
+    final_hs: str
+    change_reason: str = ""
+
+
+class ReturnIssueIn(Schema):
+    item_id: str = ""
+    message: str
+
+
+class DecisionIn(Schema):
+    action: str = Field(description="approve 整批通过 / return 退回")
+    reason: str = ""
+    return_to: str = Field(default="", description="退回时使用：supplier 或 operator")
+    items: list[DecisionLineIn] = Field(default_factory=list)
+    issues: list[ReturnIssueIn] = Field(default_factory=list)
+
+
+class DecisionLineOut(Schema):
+    item_id: str
+    previous_hs: str
+    final_hs: str
+    change_reason: str
+
+
+class DecisionOut(Schema):
+    decision_id: str
+    submission_id: str
+    task_id: str
+    version_id: str
+    action: str
+    return_to: str | None = None
+    reason: str
+    items: list[DecisionLineOut]
+    submission_status: SubmissionStatus
+    task_stage: TaskStage
+    task_revision: int
+    created_at: str
+    idempotent_replay: bool = False
+
+
+class TaskReturnIn(Schema):
+    version_id: str
+    revision: int = Field(ge=1)
+    reason: str = ""
+    issues: list[ReturnIssueIn] = Field(default_factory=list)
+
+
+class TaskReturnOut(Schema):
+    task_id: str
+    version_id: str
+    stage: TaskStage
+    task_revision: int
+    issue_ids: list[str]
+    idempotent_replay: bool = False
+
+
+class HistoryItemRef(Schema):
+    item_id: str
+    name: str
+    supplier_hs_raw: str
+    revision: int
+    source_location: SourceLocation
+
+
+class HistoryConfirmation(Schema):
+    confirmation_id: str
+    item_id: str
+    revision: int
+    previous_hs: str
+    confirmed_hs: str
+    reason: str
+    created_by: str
+    created_at: str
+
+
+class HistoryRun(Schema):
+    run_id: str
+    kind: RunKind
+    status: RunStatus
+    is_current: bool
+    submission_id: str | None = None
+    created_at: str
+    finished_at: str | None = None
+
+
+class HistorySubmission(Schema):
+    submission_id: str
+    revision: int
+    status: SubmissionStatus
+    created_by: str
+    created_at: str
+    items: list[SubmissionLineOut]
+    decisions: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class HistoryVersion(Schema):
+    version_id: str
+    number: int
+    original_filename: str
+    uploaded_at: str
+    is_current: bool
+    items: list[HistoryItemRef]
+    confirmations: list[HistoryConfirmation]
+    runs: list[HistoryRun]
+    submissions: list[HistorySubmission]
+
+
+class CrossVersionCandidate(Schema):
+    """跨版本对照只是候选展示，不建立稳定的商品身份。"""
+
+    item_id: str
+    candidate_item_id: str
+    candidate_version_id: str
+    basis: str
+    note: str
+
+
+class HistoryIssue(Schema):
+    issue_id: str
+    item_id: str | None = None
+    kind: str
+    message: str
+    status: str
+    created_at: str
+
+
+class HistoryAuditEvent(Schema):
+    audit_id: str
+    action: str
+    stage: str
+    version_id: str | None = None
+    item_id: str | None = None
+    actor: str
+    previous_value: str
+    new_value: str
+    reason: str
+    details: dict[str, Any] = Field(default_factory=dict)
+    created_at: str
+
+
+class TaskHistoryOut(Schema):
+    task_id: str
+    stage: TaskStage
+    revision: int
+    versions: list[HistoryVersion]
+    cross_version_candidates: list[CrossVersionCandidate]
+    issues: list[HistoryIssue]
+    audit_events: list[HistoryAuditEvent]

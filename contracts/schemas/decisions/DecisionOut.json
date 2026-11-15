@@ -1,0 +1,133 @@
+{
+  "$defs": {
+    "DecisionLineOut": {
+      "properties": {
+        "change_reason": {
+          "title": "Change Reason",
+          "type": "string"
+        },
+        "final_hs": {
+          "title": "Final Hs",
+          "type": "string"
+        },
+        "item_id": {
+          "title": "Item Id",
+          "type": "string"
+        },
+        "previous_hs": {
+          "title": "Previous Hs",
+          "type": "string"
+        }
+      },
+      "required": [
+        "item_id",
+        "previous_hs",
+        "final_hs",
+        "change_reason"
+      ],
+      "title": "DecisionLineOut",
+      "type": "object"
+    },
+    "SubmissionStatus": {
+      "enum": [
+        "pending",
+        "approved",
+        "returned",
+        "superseded"
+      ],
+      "title": "SubmissionStatus",
+      "type": "string"
+    },
+    "TaskStage": {
+      "enum": [
+        "uploaded",
+        "prechecking",
+        "awaiting_confirmation",
+        "submitted",
+        "approved",
+        "returned"
+      ],
+      "title": "TaskStage",
+      "type": "string"
+    }
+  },
+  "properties": {
+    "action": {
+      "title": "Action",
+      "type": "string"
+    },
+    "created_at": {
+      "title": "Created At",
+      "type": "string"
+    },
+    "decision_id": {
+      "title": "Decision Id",
+      "type": "string"
+    },
+    "idempotent_replay": {
+      "default": false,
+      "title": "Idempotent Replay",
+      "type": "boolean"
+    },
+    "items": {
+      "items": {
+        "$ref": "#/$defs/DecisionLineOut"
+      },
+      "title": "Items",
+      "type": "array"
+    },
+    "reason": {
+      "title": "Reason",
+      "type": "string"
+    },
+    "return_to": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Return To"
+    },
+    "submission_id": {
+      "title": "Submission Id",
+      "type": "string"
+    },
+    "submission_status": {
+      "$ref": "#/$defs/SubmissionStatus"
+    },
+    "task_id": {
+      "title": "Task Id",
+      "type": "string"
+    },
+    "task_revision": {
+      "title": "Task Revision",
+      "type": "integer"
+    },
+    "task_stage": {
+      "$ref": "#/$defs/TaskStage"
+    },
+    "version_id": {
+      "title": "Version Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "decision_id",
+    "submission_id",
+    "task_id",
+    "version_id",
+    "action",
+    "reason",
+    "items",
+    "submission_status",
+    "task_stage",
+    "task_revision",
+    "created_at"
+  ],
+  "title": "DecisionOut",
+  "type": "object"
+}

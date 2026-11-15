@@ -125,6 +125,210 @@
         "title": "ConfirmationOut",
         "type": "object"
       },
+      "CrossVersionCandidate": {
+        "description": "跨版本对照只是候选展示，不建立稳定的商品身份。",
+        "properties": {
+          "basis": {
+            "title": "Basis",
+            "type": "string"
+          },
+          "candidate_item_id": {
+            "title": "Candidate Item Id",
+            "type": "string"
+          },
+          "candidate_version_id": {
+            "title": "Candidate Version Id",
+            "type": "string"
+          },
+          "item_id": {
+            "title": "Item Id",
+            "type": "string"
+          },
+          "note": {
+            "title": "Note",
+            "type": "string"
+          }
+        },
+        "required": [
+          "item_id",
+          "candidate_item_id",
+          "candidate_version_id",
+          "basis",
+          "note"
+        ],
+        "title": "CrossVersionCandidate",
+        "type": "object"
+      },
+      "DecisionIn": {
+        "properties": {
+          "action": {
+            "description": "approve 整批通过 / return 退回",
+            "title": "Action",
+            "type": "string"
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/ReturnIssueIn"
+            },
+            "title": "Issues",
+            "type": "array"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DecisionLineIn"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "reason": {
+            "default": "",
+            "title": "Reason",
+            "type": "string"
+          },
+          "return_to": {
+            "default": "",
+            "description": "退回时使用：supplier 或 operator",
+            "title": "Return To",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "title": "DecisionIn",
+        "type": "object"
+      },
+      "DecisionLineIn": {
+        "properties": {
+          "change_reason": {
+            "default": "",
+            "title": "Change Reason",
+            "type": "string"
+          },
+          "final_hs": {
+            "title": "Final Hs",
+            "type": "string"
+          },
+          "item_id": {
+            "title": "Item Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "item_id",
+          "final_hs"
+        ],
+        "title": "DecisionLineIn",
+        "type": "object"
+      },
+      "DecisionLineOut": {
+        "properties": {
+          "change_reason": {
+            "title": "Change Reason",
+            "type": "string"
+          },
+          "final_hs": {
+            "title": "Final Hs",
+            "type": "string"
+          },
+          "item_id": {
+            "title": "Item Id",
+            "type": "string"
+          },
+          "previous_hs": {
+            "title": "Previous Hs",
+            "type": "string"
+          }
+        },
+        "required": [
+          "item_id",
+          "previous_hs",
+          "final_hs",
+          "change_reason"
+        ],
+        "title": "DecisionLineOut",
+        "type": "object"
+      },
+      "DecisionOut": {
+        "properties": {
+          "action": {
+            "title": "Action",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "decision_id": {
+            "title": "Decision Id",
+            "type": "string"
+          },
+          "idempotent_replay": {
+            "default": false,
+            "title": "Idempotent Replay",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DecisionLineOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "return_to": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Return To"
+          },
+          "submission_id": {
+            "title": "Submission Id",
+            "type": "string"
+          },
+          "submission_status": {
+            "$ref": "#/components/schemas/SubmissionStatus"
+          },
+          "task_id": {
+            "title": "Task Id",
+            "type": "string"
+          },
+          "task_revision": {
+            "title": "Task Revision",
+            "type": "integer"
+          },
+          "task_stage": {
+            "$ref": "#/components/schemas/TaskStage"
+          },
+          "version_id": {
+            "title": "Version Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "decision_id",
+          "submission_id",
+          "task_id",
+          "version_id",
+          "action",
+          "reason",
+          "items",
+          "submission_status",
+          "task_stage",
+          "task_revision",
+          "created_at"
+        ],
+        "title": "DecisionOut",
+        "type": "object"
+      },
       "EvidenceEntry": {
         "description": "一条可定位的依据。查询无结果时不生成虚构条款。",
         "properties": {
@@ -358,6 +562,371 @@
         ],
         "title": "ExpertVerdict",
         "type": "string"
+      },
+      "HistoryAuditEvent": {
+        "properties": {
+          "action": {
+            "title": "Action",
+            "type": "string"
+          },
+          "actor": {
+            "title": "Actor",
+            "type": "string"
+          },
+          "audit_id": {
+            "title": "Audit Id",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "details": {
+            "additionalProperties": true,
+            "title": "Details",
+            "type": "object"
+          },
+          "item_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Item Id"
+          },
+          "new_value": {
+            "title": "New Value",
+            "type": "string"
+          },
+          "previous_value": {
+            "title": "Previous Value",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "stage": {
+            "title": "Stage",
+            "type": "string"
+          },
+          "version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version Id"
+          }
+        },
+        "required": [
+          "audit_id",
+          "action",
+          "stage",
+          "actor",
+          "previous_value",
+          "new_value",
+          "reason",
+          "created_at"
+        ],
+        "title": "HistoryAuditEvent",
+        "type": "object"
+      },
+      "HistoryConfirmation": {
+        "properties": {
+          "confirmation_id": {
+            "title": "Confirmation Id",
+            "type": "string"
+          },
+          "confirmed_hs": {
+            "title": "Confirmed Hs",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "title": "Created By",
+            "type": "string"
+          },
+          "item_id": {
+            "title": "Item Id",
+            "type": "string"
+          },
+          "previous_hs": {
+            "title": "Previous Hs",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "confirmation_id",
+          "item_id",
+          "revision",
+          "previous_hs",
+          "confirmed_hs",
+          "reason",
+          "created_by",
+          "created_at"
+        ],
+        "title": "HistoryConfirmation",
+        "type": "object"
+      },
+      "HistoryIssue": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "issue_id": {
+            "title": "Issue Id",
+            "type": "string"
+          },
+          "item_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Item Id"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "issue_id",
+          "kind",
+          "message",
+          "status",
+          "created_at"
+        ],
+        "title": "HistoryIssue",
+        "type": "object"
+      },
+      "HistoryItemRef": {
+        "properties": {
+          "item_id": {
+            "title": "Item Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "source_location": {
+            "$ref": "#/components/schemas/SourceLocation"
+          },
+          "supplier_hs_raw": {
+            "title": "Supplier Hs Raw",
+            "type": "string"
+          }
+        },
+        "required": [
+          "item_id",
+          "name",
+          "supplier_hs_raw",
+          "revision",
+          "source_location"
+        ],
+        "title": "HistoryItemRef",
+        "type": "object"
+      },
+      "HistoryRun": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "is_current": {
+            "title": "Is Current",
+            "type": "boolean"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/RunKind"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/RunStatus"
+          },
+          "submission_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Submission Id"
+          }
+        },
+        "required": [
+          "run_id",
+          "kind",
+          "status",
+          "is_current",
+          "created_at"
+        ],
+        "title": "HistoryRun",
+        "type": "object"
+      },
+      "HistorySubmission": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "title": "Created By",
+            "type": "string"
+          },
+          "decisions": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Decisions",
+            "type": "array"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SubmissionLineOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "status": {
+            "$ref": "#/components/schemas/SubmissionStatus"
+          },
+          "submission_id": {
+            "title": "Submission Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "submission_id",
+          "revision",
+          "status",
+          "created_by",
+          "created_at",
+          "items"
+        ],
+        "title": "HistorySubmission",
+        "type": "object"
+      },
+      "HistoryVersion": {
+        "properties": {
+          "confirmations": {
+            "items": {
+              "$ref": "#/components/schemas/HistoryConfirmation"
+            },
+            "title": "Confirmations",
+            "type": "array"
+          },
+          "is_current": {
+            "title": "Is Current",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/HistoryItemRef"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "number": {
+            "title": "Number",
+            "type": "integer"
+          },
+          "original_filename": {
+            "title": "Original Filename",
+            "type": "string"
+          },
+          "runs": {
+            "items": {
+              "$ref": "#/components/schemas/HistoryRun"
+            },
+            "title": "Runs",
+            "type": "array"
+          },
+          "submissions": {
+            "items": {
+              "$ref": "#/components/schemas/HistorySubmission"
+            },
+            "title": "Submissions",
+            "type": "array"
+          },
+          "uploaded_at": {
+            "title": "Uploaded At",
+            "type": "string"
+          },
+          "version_id": {
+            "title": "Version Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version_id",
+          "number",
+          "original_filename",
+          "uploaded_at",
+          "is_current",
+          "items",
+          "confirmations",
+          "runs",
+          "submissions"
+        ],
+        "title": "HistoryVersion",
+        "type": "object"
       },
       "ImageEntry": {
         "description": "商品附图；读取失败与确无图片分开，并保留来源单元格。",
@@ -849,6 +1418,24 @@
         ],
         "title": "ResultMode",
         "type": "string"
+      },
+      "ReturnIssueIn": {
+        "properties": {
+          "item_id": {
+            "default": "",
+            "title": "Item Id",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ],
+        "title": "ReturnIssueIn",
+        "type": "object"
       },
       "RunDetail": {
         "properties": {
@@ -1493,6 +2080,60 @@
         "title": "TaskDetail",
         "type": "object"
       },
+      "TaskHistoryOut": {
+        "properties": {
+          "audit_events": {
+            "items": {
+              "$ref": "#/components/schemas/HistoryAuditEvent"
+            },
+            "title": "Audit Events",
+            "type": "array"
+          },
+          "cross_version_candidates": {
+            "items": {
+              "$ref": "#/components/schemas/CrossVersionCandidate"
+            },
+            "title": "Cross Version Candidates",
+            "type": "array"
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/HistoryIssue"
+            },
+            "title": "Issues",
+            "type": "array"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "stage": {
+            "$ref": "#/components/schemas/TaskStage"
+          },
+          "task_id": {
+            "title": "Task Id",
+            "type": "string"
+          },
+          "versions": {
+            "items": {
+              "$ref": "#/components/schemas/HistoryVersion"
+            },
+            "title": "Versions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "task_id",
+          "stage",
+          "revision",
+          "versions",
+          "cross_version_candidates",
+          "issues",
+          "audit_events"
+        ],
+        "title": "TaskHistoryOut",
+        "type": "object"
+      },
       "TaskListEntry": {
         "properties": {
           "allowed_actions": {
@@ -1627,6 +2268,77 @@
           "items"
         ],
         "title": "TaskPage",
+        "type": "object"
+      },
+      "TaskReturnIn": {
+        "properties": {
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/ReturnIssueIn"
+            },
+            "title": "Issues",
+            "type": "array"
+          },
+          "reason": {
+            "default": "",
+            "title": "Reason",
+            "type": "string"
+          },
+          "revision": {
+            "minimum": 1,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "version_id": {
+            "title": "Version Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version_id",
+          "revision"
+        ],
+        "title": "TaskReturnIn",
+        "type": "object"
+      },
+      "TaskReturnOut": {
+        "properties": {
+          "idempotent_replay": {
+            "default": false,
+            "title": "Idempotent Replay",
+            "type": "boolean"
+          },
+          "issue_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Issue Ids",
+            "type": "array"
+          },
+          "stage": {
+            "$ref": "#/components/schemas/TaskStage"
+          },
+          "task_id": {
+            "title": "Task Id",
+            "type": "string"
+          },
+          "task_revision": {
+            "title": "Task Revision",
+            "type": "integer"
+          },
+          "version_id": {
+            "title": "Version Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id",
+          "version_id",
+          "stage",
+          "task_revision",
+          "issue_ids"
+        ],
+        "title": "TaskReturnOut",
         "type": "object"
       },
       "TaskStage": {
@@ -1886,7 +2598,7 @@
     },
     "/api/v1/submissions/{submission_id}/decisions": {
       "post": {
-        "operationId": "apps_api_not_implemented_pending_POST__submissions_submission_id_decisions",
+        "operationId": "apps_reviews_api_decisions_decide_submission",
         "parameters": [
           {
             "in": "path",
@@ -1898,14 +2610,31 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DecisionIn"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionOut"
+                }
+              }
+            },
             "description": "OK"
           }
         },
-        "summary": "Pending Post  Submissions Submission Id Decisions",
+        "summary": "Decide Submission",
         "tags": [
-          "未实现端点"
+          "专家处置与退回"
         ]
       }
     },
@@ -2027,7 +2756,7 @@
     },
     "/api/v1/tasks/{task_id}/history": {
       "get": {
-        "operationId": "apps_api_not_implemented_pending_GET__tasks_task_id_history",
+        "operationId": "apps_reviews_api_history_get_task_history",
         "parameters": [
           {
             "in": "path",
@@ -2041,18 +2770,25 @@
         ],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskHistoryOut"
+                }
+              }
+            },
             "description": "OK"
           }
         },
-        "summary": "Pending Get  Tasks Task Id History",
+        "summary": "Get Task History",
         "tags": [
-          "未实现端点"
+          "版本历史"
         ]
       }
     },
     "/api/v1/tasks/{task_id}/returns": {
       "post": {
-        "operationId": "apps_api_not_implemented_pending_POST__tasks_task_id_returns",
+        "operationId": "apps_reviews_api_decisions_return_task_version",
         "parameters": [
           {
             "in": "path",
@@ -2064,14 +2800,31 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskReturnIn"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskReturnOut"
+                }
+              }
+            },
             "description": "OK"
           }
         },
-        "summary": "Pending Post  Tasks Task Id Returns",
+        "summary": "Return Task Version",
         "tags": [
-          "未实现端点"
+          "专家处置与退回"
         ]
       }
     },
