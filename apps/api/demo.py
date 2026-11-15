@@ -56,6 +56,11 @@ def demo_index(request):
     return _served_file(WEB_ROOT, "index.html")
 
 
+def workbench_index(request):
+    """正式工作台前端（定稿 UI），数据经 /api/v1 或契约样例加载。"""
+    return _served_file(WEB_ROOT, "workbench.html")
+
+
 def demo_asset(request, path: str):
     """演示壳的 js / css / svg。"""
     return _served_file(WEB_ROOT, path)

@@ -4,7 +4,7 @@ from ninja import NinjaAPI, Schema
 
 from apps.accounts.api import install_error_handlers
 from apps.accounts.api import router as accounts_router
-from apps.api.demo import demo_asset, demo_fixture, demo_index
+from apps.api.demo import demo_asset, demo_fixture, demo_index, workbench_index
 from apps.api.not_implemented import router as pending_router
 from apps.reviews.api.confirmations import router as confirmations_router
 from apps.reviews.api.decisions import router as decisions_router
@@ -45,4 +45,7 @@ urlpatterns = [
     path("demo/", demo_index, name="demo-index"),
     path("demo/assets/<path:path>", demo_asset, name="demo-asset"),
     path("demo/fixtures/<path:path>", demo_fixture, name="demo-fixture"),
+    # 独立演示入口（定稿 UI）：默认 FIXTURE 样例数据，不改动现有首页；
+    # 真实读/审批接口接通后再设为首页。写动作待后端 P 任务。
+    path("workbench/", workbench_index, name="workbench-index"),
 ]
