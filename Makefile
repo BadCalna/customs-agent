@@ -5,7 +5,8 @@ MANAGE := $(PYTHON) manage.py
 BIND ?= 127.0.0.1:8000
 export TASK
 
-.PHONY: setup migrate seed-demo seed-contracts contracts demo-components workbench dev check test test-contracts
+.PHONY: setup migrate seed-demo seed-contracts contracts demo-components workbench dev check test test-contracts \
+        pg-init pg-start pg-stop pg-status db-backup db-copy check-postgres
 setup:
 	$(UV) sync --locked
 	$(PYTHON) -m config.bootstrap
@@ -57,3 +58,32 @@ test:
 	dir="tests/$$(echo "$$TASK" | tr 'A-Z' 'a-z')"; \
 	if [ ! -d "$$dir" ]; then echo "No test entry for $$TASK" >&2; exit 2; fi; \
 	$(MANAGE) test "$$dir"
+
+# ---------------------------------------------------------------------------
+# P12：PostgreSQL（本机集群由 scripts/database/ 管理，默认仍用 SQLite）
+# ---------------------------------------------------------------------------
+pg-init:
+	scripts/database/pg_ctl.sh init
+
+pg-start:
+	scripts/database/pg_ctl.sh start
+
+pg-stop:
+	scripts/database/pg_ctl.sh stop
+
+pg-status:
+	scripts/database/pg_ctl.sh status
+
+db-backup:
+	scripts/database/backup.sh
+
+db-copy:
+	scripts/database/copy_sqlite_to_pg.sh
+
+# 只有“后端确实是 PostgreSQL 且连接可用”才算过；端口连通不算（D6 第 3 节）。
+check-postgres:
+	@$(PYTHON) -c "import os, django; os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings'); django.setup(); from django.db import connection; print(connection.vendor)" | grep -qx postgresql || { \
+		echo "check-postgres 需要 PostgreSQL 后端：先 scripts/database/bootstrap.sh，并设置 CUSTOMS_DB_BACKEND=postgres 与 CUSTOMS_PG_*。" >&2; exit 2; }
+	$(MANAGE) check
+	$(MANAGE) makemigrations --check --dry-run
+	$(MANAGE) test tests/p12 tests/p09 tests/p10
