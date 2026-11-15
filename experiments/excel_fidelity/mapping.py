@@ -20,6 +20,8 @@ ALIASES = {
     "image": ("附图", "商品图片"),
     "refund_rate": ("退税率",),
     "merge_hint": ("合并申报",),
+    "quantity": ("数量",),
+    "unit": ("单位",),
 }
 
 RESULT_ALIASES = {
@@ -67,7 +69,7 @@ def detect_layout(workbook, role: str) -> dict:
     if role == "packing" and "primary_name" not in fields and "name" in fields:
         fields["primary_name"] = fields["name"]
         warnings.append("legacy_name_header: 品名用于本样本主品名，未声称存在合同第一条品名列")
-    optional = (("primary_name", "alias", "specification", "manufacturer_model")
+    optional = (("primary_name", "alias", "specification", "manufacturer_model", "quantity", "unit")
                 if role == "packing" else ("image", *RESULT_ALIASES))
     warnings.extend(f"missing_column:{field}" for field in optional if field not in fields)
     merges = []
@@ -94,15 +96,38 @@ def detect_layout(workbook, role: str) -> dict:
         contract = facts.get("contract", ("", ""))[0].strip()
         name = facts.get("primary_name" if role == "packing" else "name", ("", ""))[0].strip()
         item = facts.get("item", ("", ""))[0].strip()
-        if not contract and not item and not name:
+        raw_values = [cell for ref, cell in sheet["cells"].items()
+                      if cell_position(ref)[1] == number and (cell["value"] or cell["formula"])]
+        evidence_fields = ("hs", "elements", "image", "specification", "manufacturer_model",
+                           "material", "quantity", "unit", "refund_rate", *RESULT_ALIASES)
+        strong_fields = ("hs", "elements", "image", "specification", "manufacturer_model", "material")
+
+        def has_fact(field):
+            value, ref = facts.get(field, ("", ""))
+            if field == "refund_rate" and not re.fullmatch(r"[0-9]+(?:\.[0-9]+)?%?", value.strip()):
+                return bool(sheet["cells"].get(ref, {}).get("formula"))
+            return bool(value.strip() or sheet["cells"].get(ref, {}).get("formula"))
+
+        evidence = any(has_fact(field) for field in evidence_fields)
+        elements_ref = facts.get("elements", ("", ""))[1]
+        aggregate_elements = re.match(r"(?:SUM|SUBTOTAL|AGGREGATE|COUNT|COUNTA|AVERAGE|MIN|MAX)\s*\(",
+                                      sheet["cells"].get(elements_ref, {}).get("formula") or "", re.I)
+        if not contract and not item and re.fullmatch(r"(?:合计|总计|小计)[:：]?", name) and not any(
+            has_fact(field) for field in strong_fields if field != "elements"
+        ) and (not has_fact("elements") or aggregate_elements):
+            non_item_rows.append({"row": number, "reason": "summary_row; retained, not treated as an item"})
             continue
-        if contract and not item and not name and not facts.get("hs", ("", ""))[0]:
-            non_item_rows.append({"row": number, "reason": "contract_only_or_footer; retained, not treated as an item"})
+        if not item and not name and not evidence:
+            populated = bool(contract) or bool(raw_values)
+            if populated:
+                non_item_rows.append({"row": number, "reason": "contract_only_or_footer; retained, not treated as an item"})
             continue
-        if not contract and normalized(name).startswith(("合计", "总计")):
-            continue
+        missing = [f"missing_{field}" for field, value in
+                   (("contract", contract), ("item", item), ("name", name)) if not value]
         records.append({
             "row": number, "contract": contract, "item_raw": item,
+            "status": "requires_review" if missing else "identified",
+            "issues": missing,
             "facts": {field: {"value": value, "cell": ref} for field, (value, ref) in facts.items()},
         })
     return {"sheet": sheet["name"], "part": sheet["part"], "header_row": row,
@@ -154,7 +179,7 @@ def map_workbook(workbook) -> dict:
     used = set()
     owners = defaultdict(list)
     for record in declaration["records"]:
-        link = {"declaration_row": record["row"], "members": [], "issues": []}
+        link = {"declaration_row": record["row"], "members": [], "issues": list(record["issues"])}
         try:
             if not record["contract"] or re.search(r"[\r\n、]", record["contract"]):
                 raise FidelityError("missing_or_multiple_contracts")
@@ -177,6 +202,8 @@ def map_workbook(workbook) -> dict:
                 link["issues"].append(f"same_key_different_facts:{member}")
             for candidate in candidates:
                 link["members"].append({"item": member, "packing_row": candidate["row"]})
+                if candidate["issues"]:
+                    link["issues"].append(f"packing_row_requires_review:{candidate['row']}")
                 used.add(candidate["row"])
         link["status"] = "requires_review" if link["issues"] else "linked_by_contract_item"
         associations.append(link)
@@ -184,6 +211,13 @@ def map_workbook(workbook) -> dict:
         if len(rows) > 1:
             issues.append({"type": "member_claimed_by_multiple_declarations", "declaration_rows": rows,
                            "contract": key[0], "item": key[1]})
+            for link in associations:
+                if link["declaration_row"] in rows:
+                    link["status"] = "requires_review"
+                    link["issues"].append(f"member_claimed_by_multiple_declarations:{key[1]}")
+                    link["conflicting_declaration_rows"] = sorted(set(
+                        link.get("conflicting_declaration_rows", []) +
+                        [number for number in rows if number != link["declaration_row"]]))
     issues.extend({"type": "unlinked_packing_row", "row": r["row"]}
                   for r in packing["records"] if r["row"] not in used)
     return {"packing": packing, "declaration": declaration,
@@ -221,7 +255,12 @@ def map_images(workbook, declaration):
             unassigned.append({"kind": "floating_image", "record": obj,
                                "reason": "requires manual anchor/ownership confirmation"})
     for record in rows.values():
-        record["status"] = ("cell_image_reference" if record["cell_images"] else
+        needs_review = (any(i["status"] != "resource_found" or i.get("decode_status") != "passed"
+                            for i in record["cell_images"]) or
+                        any(i["status"] != "resource_found" or i.get("decode_status") != "passed"
+                            for obj in record["floating_images"] for i in obj["images"]))
+        record["status"] = ("requires_review" if needs_review else
+                            "cell_image_reference" if record["cell_images"] else
                             "single_cell_floating_anchor" if record["floating_images"] else
                             "no_mapped_image; check unassigned objects separately")
     return {"rows": list(rows.values()), "unassigned": unassigned,

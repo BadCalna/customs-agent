@@ -83,6 +83,7 @@ def text_content(element: ET.Element | None) -> str:
 class Workbook:
     def __init__(self, path: str | Path):
         self.path = Path(path)
+        self._media_checks = {}
         self.source_hash = sha256(self.path.read_bytes())
         with ZipFile(self.path) as archive:
             infos = archive.infolist()
@@ -139,6 +140,35 @@ class Workbook:
             raise FidelityError(f"Expected exactly one worksheet named {name}")
         return matches[0]
 
+    def media_check(self, part: str | None, external: bool = False) -> dict:
+        if external:
+            return {"status": "external_unsupported"}
+        if not part or not self.parts.get(part):
+            return {"status": "missing_resource"}
+        if part in self._media_checks:
+            return dict(self._media_checks[part])
+        media = self.parts[part]
+        result = {"status": "resource_found", "media_sha256": sha256(media)}
+        try:
+            from PIL import Image
+        except ImportError:
+            result["decode_status"] = "not_run_Pillow_unavailable"
+        else:
+            try:
+                with Image.open(io.BytesIO(media)) as image:
+                    result["size"] = list(image.size)
+                    result["format"] = image.format
+                    image.verify()
+                # verify() may only inspect a container; force pixel decoding.
+                with Image.open(io.BytesIO(media)) as image:
+                    image.load()
+                result["decode_status"] = "passed"
+            except Exception as exc:
+                result["status"] = "corrupt_resource"
+                result["decode_status"] = type(exc).__name__
+        self._media_checks[part] = result
+        return dict(result)
+
     def image_records(self) -> list[dict]:
         from .references import effective_formulas
         definitions: dict[str, list[dict]] = {}
@@ -161,45 +191,35 @@ class Workbook:
                     "definition_part": part, "relationship_id": rid,
                     "media_part": target, "external": rel.get("TargetMode") == "External",
                 })
+        def resolve_image(image_id):
+            candidates = definitions.get(image_id, [])
+            result = {"image_id": image_id}
+            if len(candidates) != 1:
+                result["status"] = "missing_definition" if not candidates else "ambiguous_definition"
+            else:
+                result.update(candidates[0])
+                result.update(self.media_check(result["media_part"], result["external"]))
+            return result
+
         records = []
+        call = r'(?:_xlfn\.)?DISPIMG\s*\(\s*"([^"\r\n]+)"\s*,\s*[0-9]+\s*\)'
         for sheet in self.sheets:
             formulas = effective_formulas(sheet)
             for ref, cell in sheet["cells"].items():
                 formula = formulas.get(ref, "")
                 if "DISPIMG" not in formula.upper():
                     continue
-                match = re.search(r'\bDISPIMG\s*\(\s*"([^"\r\n]+)"', formula, re.I)
-                image_id = match[1] if match else None
-                candidates = definitions.get(image_id, [])
-                record = {"sheet": sheet["name"], "cell": ref, "image_id": image_id}
-                if not match:
-                    record["status"] = "invalid_formula"
-                elif len(candidates) != 1:
-                    record["status"] = "missing_definition" if not candidates else "ambiguous_definition"
+                match = re.fullmatch(call, formula.strip().removeprefix("="), re.I)
+                record = {"sheet": sheet["name"], "cell": ref}
+                if match:
+                    record.update(resolve_image(match[1]))
+                    record["formula_status"] = "direct_image_call"
                 else:
-                    record.update(candidates[0])
-                    media = self.parts.get(record["media_part"])
-                    if record["external"]:
-                        record["status"] = "external_unsupported"
-                    elif not media:
-                        record["status"] = "missing_resource"
-                    else:
-                        record["media_sha256"] = sha256(media)
-                        record["status"] = "resource_found"
-                        try:
-                            from PIL import Image
-                        except ImportError:
-                            record["decode_status"] = "not_run_Pillow_unavailable"
-                        else:
-                            try:
-                                with Image.open(io.BytesIO(media)) as image:
-                                    record["size"] = list(image.size)
-                                    record["format"] = image.format
-                                    image.verify()
-                                record["decode_status"] = "passed"
-                            except Exception as exc:
-                                record["status"] = "corrupt_resource"
-                                record["decode_status"] = type(exc).__name__
+                    record.update({"image_id": None, "status": "requires_review",
+                                   "formula_status": "expression_display_not_evaluated",
+                                   "decode_status": "display_not_evaluated",
+                                   "reason": "conditional_or_dynamic_image; verify in target client",
+                                   "candidates": [resolve_image(m[1]) for m in re.finditer(call, formula, re.I)]})
                 records.append(record)
         return records
 
@@ -247,9 +267,7 @@ class Workbook:
                         rid = element.get(f"{{{R}}}embed", "")
                         rel = relationships.get(rid, {})
                         target = resolve_part(part, rel["Target"]) if rel.get("Target") else None
-                        media = self.parts.get(target)
                         record["images"].append({"relationship_id": rid, "media_part": target,
-                                                  "status": "resource_found" if media else "missing_resource",
-                                                  "media_sha256": sha256(media) if media else None})
+                                                  **self.media_check(target, rel.get("TargetMode") == "External")})
                     records.append(record)
         return records

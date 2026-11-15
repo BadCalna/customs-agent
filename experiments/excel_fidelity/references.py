@@ -37,7 +37,7 @@ def transform_formula(formula: str, context: str, target: str, start: int, count
             return match[0]
         sheet = match["sheet"]
         sheet_name = sheet[1:-1].replace("''", "'") if sheet and sheet.startswith("'") else sheet
-        if (sheet_name or context) != target:
+        if (sheet_name or context).casefold() != target.casefold():
             return match[0]
         try:
             for label in re.findall(r"[A-Za-z]+", match["ref"]):

@@ -101,7 +101,7 @@ class FidelityTests(unittest.TestCase):
             '<row r="8"><c r="A8" t="inlineStr"><is><t>合同出货备注</t></is></c></row></sheetData>'))
         layout = self.layout()
         self.assertEqual(layout['data_rows'], [2,3,4])
-        self.assertEqual(layout['non_item_rows'][0]['row'], 8)
+        self.assertEqual({r['row'] for r in layout['non_item_rows']}, {6,8})
 
     def test_missing_and_corrupt_images_differ_from_no_image(self):
         make_fixture(self.source, {'xl/media/test.png': None})

@@ -65,7 +65,9 @@ def check_supported(workbook: Workbook, target: dict, start: int, rows: list[int
         raise FidelityError("Protected target worksheet; do not bypass protection")
     if target["root"].find(".//s:filterColumn", NS) is not None:
         raise FidelityError("Active filter criteria require additional index handling")
-    if any(int(c.get("max")) > 16382 for c in target["root"].findall("s:cols/s:col", NS)):
+    if any(int(c.get("max")) > 16382 and not (
+        int(c.get("max")) == 16384 and int(c.get("min")) <= 16382
+    ) for c in target["root"].findall("s:cols/s:col", NS)):
         raise FidelityError("Explicit styles in final XLSX columns cannot be preserved during insertion")
     for sheet in workbook.sheets:
         for cell in sheet["cells"].values():
@@ -73,6 +75,11 @@ def check_supported(workbook: Workbook, target: dict, start: int, rows: list[int
                 raise FidelityError("Array/data-table formula requires native editor")
         for formula in effective_formulas(sheet).values():
             transform_formula(formula, sheet["name"], target["name"], start)
+        for node in sheet["root"].iter():
+            if node.tag.rsplit("}", 1)[-1] in ("f", "formula", "formula1", "formula2"):
+                if not node.tag.startswith("{" + NS["s"] + "}"):
+                    raise FidelityError("Extended validation/conditional formula requires additional handling")
+                transform_formula(node.text or "", sheet["name"], target["name"], start)
     for merge in target["root"].findall("s:mergeCells/s:mergeCell", NS):
         first, last = merge.attrib["ref"].split(":")
         c1, r1 = cell_position(first)
@@ -136,10 +143,10 @@ def rewrite_columns(raw: str, start: int, prefix: str) -> str:
         if last < start:
             columns.append((first, text))
         elif first >= start:
-            columns.append((first + 2, set_attribute(set_attribute(text, "min", str(first + 2)), "max", str(last + 2))))
+            columns.append((first + 2, set_attribute(set_attribute(text, "min", str(first + 2)), "max", str(min(last + 2, 16384)))))
         else:
             columns.append((first, set_attribute(text, "max", str(start - 1))))
-            columns.append((start + 2, set_attribute(set_attribute(text, "min", str(start + 2)), "max", str(last + 2))))
+            columns.append((start + 2, set_attribute(set_attribute(text, "min", str(start + 2)), "max", str(min(last + 2, 16384)))))
     columns.append((start, new_columns))
     replacement = match[1] + "".join(text for _, text in sorted(columns)) + match[3]
     return raw[:match.start()] + replacement + raw[match.end():]
@@ -177,9 +184,7 @@ def rewrite_target(raw: str, target: dict, start: int, header_row: int, data_row
 
     # Coordinates on <c> were already changed; r on rows is intentionally intact.
     raw = re.sub(rf"<{PREFIX}(?:dimension|mergeCell|autoFilter|sortState|sortCondition|selection|pane|sheetView|row|f|dataValidation|conditionalFormatting|hyperlink)\b[^>]*>", shift_tag, raw)
-    for tag in ("formula", "formula1", "formula2"):
-        raw = re.sub(rf"(<{PREFIX}{tag}\b[^>]*>)(.*?)(</{PREFIX}{tag}>)",
-                     lambda m: m[1] + escape(transform_formula(html.unescape(m[2]), target["name"], target["name"], start)) + m[3], raw, flags=re.S)
+    raw = rewrite_metadata_formulas(raw, target["name"], target["name"], start)
     raw = rewrite_columns(raw, start, prefix)
     selected_rows = set(data_rows) | {header_row}
 
@@ -199,6 +204,16 @@ def rewrite_target(raw: str, target: dict, start: int, header_row: int, data_row
         return match[1] + match[2][:position] + additions + match[2][position:] + match[3]
 
     raw = ROW.sub(add_cells, raw)
+    return raw
+
+
+def rewrite_metadata_formulas(raw: str, context: str, target: str, start: int) -> str:
+    for tag in ("formula", "formula1", "formula2"):
+        def change(match):
+            formula = html.unescape(match[2])
+            rewritten = transform_formula(formula, context, target, start)
+            return match[0] if rewritten == formula else match[1] + escape(rewritten) + match[3]
+        raw = re.sub(rf"(<{PREFIX}{tag}\b[^>]*>)(.*?)(</{PREFIX}{tag}>)", change, raw, flags=re.S)
     return raw
 
 
@@ -361,8 +376,8 @@ def audit_sheet_metadata(before, after, target, start):
                 node.set("spans", f"{first + (2 if first >= start else 0)}:{last + (2 if last >= start else 0)}")
             if local == "pane" and node.get("state") in ("frozen", "frozenSplit") and float(node.get("xSplit", 0)) >= start - 1:
                 node.set("xSplit", str(int(float(node.get("xSplit"))) + 2))
-            if local in ("formula", "formula1", "formula2"):
-                node.text = transform_formula(node.text or "", target, target, start)
+        if local in ("formula", "formula1", "formula2"):
+            node.text = transform_formula(node.text or "", before["name"], target, start)
         if local == "hyperlink" and node.get("location"):
             node.set("location", transform_formula(node.get("location"), before["name"], target, start))
     if shifted:
@@ -374,7 +389,8 @@ def audit_sheet_metadata(before, after, target, start):
                     result[number] = properties
             return result
         expected_columns, actual_columns = columns(expected), columns(actual)
-        expected_columns = {c + (2 if c >= start else 0): value for c,value in expected_columns.items()}
+        expected_columns = {c + (2 if c >= start else 0): value for c,value in expected_columns.items()
+                            if c + (2 if c >= start else 0) <= 16384}
         for c,width in ((start, "18"), (start + 1, "50")):
             expected_columns[c] = {"width": width, "customWidth": "1"}
         if expected_columns != actual_columns:
@@ -396,8 +412,8 @@ def insert_columns(source: str | Path, destination: str | Path, layout: dict) ->
     header_row = layout["header_row"]
     rows = layout["data_rows"]
     start = col_number(layout["fields"]["hs"]) + 1
-    for cell in target["cells"].values():
-        if any(field_matches(cell["value"], alias)
+    for ref, cell in target["cells"].items():
+        if cell_position(ref)[1] == header_row and any(field_matches(cell["value"], alias)
                for aliases in RESULT_ALIASES.values() for alias in aliases):
             raise FidelityError("Result columns already present; resolve reuse explicitly")
     check_supported(original, target, start, [header_row] + rows)
@@ -409,6 +425,7 @@ def insert_columns(source: str | Path, destination: str | Path, layout: dict) ->
             raw = rewrite_target(raw, sheet, start, header_row, rows)
         else:
             raw = rewrite_formulas(raw, sheet, target["name"], start, sheet_prefix(raw))
+            raw = rewrite_metadata_formulas(raw, sheet["name"], target["name"], start)
         raw = rewrite_hyperlinks(raw, sheet["name"], target["name"], start)
         parts[sheet["part"]] = raw.encode("utf-8")
     parts["xl/workbook.xml"] = rewrite_names(parts["xl/workbook.xml"].decode("utf-8"), original, target["name"], start).encode("utf-8")
