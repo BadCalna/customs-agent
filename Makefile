@@ -41,9 +41,10 @@ dev:
 	$(MANAGE) runserver $(BIND)
 
 workbench:
-	@echo "正式工作台（定稿 UI）：http://$(BIND)/workbench/"
-	@echo "  默认 LIVE 读 /api/v1；未登录或无数据时自动回退 FIXTURE（契约样例）。"
-	@echo "  可用 ?mode=fixture / ?mode=demo 强制模式；写动作待后端 P 任务，前端本地演示。"
+	@echo "工作台独立演示入口：http://$(BIND)/workbench/（现有首页不变）"
+	@echo "  默认 FIXTURE 样例数据；?mode=live 读 /api/v1，?mode=demo 内置演示。"
+	@echo "  还有商品未确认时显示『还有 N 条待确认』并禁用整批提交。"
+	@echo "  真实读/审批接通后再设为首页；写动作待后端 P 任务。"
 	$(MANAGE) runserver $(BIND)
 
 check:

@@ -1377,19 +1377,19 @@ function viewBusinessOverview(){
     </div>
     <div class="sect" style="margin-top:0">
       <div class="sect-hd"><h2>待确认批次</h2><span class="hint">${total?`${total} 处差异 · ${groups.length} 个合同`:'无待确认差异'}</span></div>
-      ${groups.length?groups.map(g=>{const collapsed=(S.ui.collapsed||[]).includes('biz-'+g.t.id);return `
+      ${groups.length?groups.map(g=>{const collapsed=(S.ui.collapsed||[]).includes('biz-'+g.t.id);const unconf=g.t.lines.filter(l=>!l.decision).length;return `
         <div class="sup-group ${collapsed?'collapsed':''}">
           <div class="sup-group-hd">
             <button class="sup-toggle" data-act="toggle-group" data-task="biz-${g.t.id}" aria-expanded="${!collapsed}">
               ${svg('chevD',14,'chev')}
               <span style="min-width:0">
                 <span class="sup-group-title mono">${esc(g.t.contract)}</span>
-                <span class="sup-group-meta" style="display:block">${g.t.id} · ${g.manual.length?g.manual.length+' 处待确认':'可直接提交'}</span>
+                <span class="sup-group-meta" style="display:block">${g.t.id} · ${unconf?`还有 ${unconf} 条待确认`:'已全部确认'}</span>
               </span>
             </button>
             <span style="display:flex;gap:8px;margin-left:auto;flex:none">
               <button class="btn" data-act="open-task" data-task="${g.t.id}">${svg('table',13)} 去处理</button>
-              <button class="btn primary" data-act="open-submit" data-task="${g.t.id}">${svg('arrowR',13)} 提交专家</button>
+              <button class="btn primary" data-act="open-submit" data-task="${g.t.id}" ${unconf?'disabled title="还有 '+unconf+' 条待确认，确认后才能整批提交"':''}>${svg('arrowR',13)} 提交专家</button>
             </span>
           </div>
           <div class="sup-group-bd">
@@ -1403,7 +1403,8 @@ function viewBusinessOverview(){
                 </span>
                 <span class="biz-why">${esc(l.aiGap||VERDICT[l.verdict].note)}</span>
               </button>`).join('')
-            :`<div class="biz-allmatch">${svg('checkCircle',14)} 全部一致，无需逐条确认，可直接提交专家。</div>`}
+            :unconf?`<div class="biz-allmatch" style="color:var(--gold)">${svg('alert',14)} 还有 ${unconf} 条一致项待确认，可在工作台批量确认后提交。</div>`
+            :`<div class="biz-allmatch">${svg('checkCircle',14)} 全部已确认，可提交专家。</div>`}
           </div>
         </div>`;}).join('')
       :`<div class="panel"><div class="task-empty">${svg('checkCircle',26)}没有待你确认的批次。<br><span class="dim">供应商上传并自动预审后，差异会按合同列在这里。</span></div></div>`}
@@ -1522,6 +1523,7 @@ function viewTask(role, t, lineId){
   const shown=filteredLines(t);
   const sel=S.ui.selected||[];
   const verdictCount=k=>lines.filter(l=>l.verdict===k).length;
+  const unconf=lines.filter(l=>!l.decision).length;
 
   const hdActions=isExpert
     ?(isApproved(t)?`<span class="btn" aria-disabled="true">${svg('checkCircle',14)} 已确认</span>`
@@ -1530,7 +1532,8 @@ function viewTask(role, t, lineId){
     :(t.submitted?`<span class="tag">已提交快照</span>`
       :t.prechecked?`<button class="btn" data-act="export">${svg('download',14)} 导出补料清单</button>
         <button class="btn" data-act="reprecheck" title="手动重新预审当前版本">${svg('refresh',14)} 重新预审</button>
-        <button class="btn primary" data-act="open-submit" data-task="${t.id}">${svg('arrowR',14)} 提交专家审核</button>`
+        ${unconf?`<span class="tag warn">${svg('alert',11)} 还有 ${unconf} 条待确认</span>`:''}
+        <button class="btn primary" data-act="open-submit" data-task="${t.id}" ${unconf?'disabled title="还有 '+unconf+' 条待确认，确认后才能整批提交"':''}>${svg('arrowR',14)} 提交专家审核</button>`
       :`<span class="tag">自动预审中</span>`);
 
   // 工具条：搜索 + 筛选 + 排序
@@ -2231,7 +2234,8 @@ async function loadLive(){
 function detectMode(){
   const q=new URLSearchParams(location.search).get('mode');
   if(q==='live'||q==='fixture'||q==='demo')return q;
-  return location.protocol==='file:'?'demo':'live';
+  // 独立演示入口默认样例数据；真实读/审批接通后再切 LIVE 并设为首页。
+  return location.protocol==='file:'?'demo':'fixture';
 }
 function modeLabel(){
   const m=window.WB_MODE||'demo';

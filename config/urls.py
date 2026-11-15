@@ -1,6 +1,5 @@
 from django.contrib import admin
 from django.urls import path
-from django.views.generic import RedirectView
 from ninja import NinjaAPI, Schema
 
 from apps.accounts.api import install_error_handlers
@@ -31,7 +30,6 @@ api_v1.add_router("", runs_router)
 api_v1.add_router("", pending_router)
 
 urlpatterns = [
-    path("", RedirectView.as_view(url="/workbench/", permanent=False), name="root"),
     path("admin/", admin.site.urls),
     path("api/v1/", api_v1.urls),
     path("api/", api.urls),
@@ -39,6 +37,7 @@ urlpatterns = [
     path("demo/", demo_index, name="demo-index"),
     path("demo/assets/<path:path>", demo_asset, name="demo-asset"),
     path("demo/fixtures/<path:path>", demo_fixture, name="demo-fixture"),
-    # 正式工作台前端（定稿 UI）：读 /api/v1 或契约样例，写动作待后端 P 任务。
+    # 独立演示入口（定稿 UI）：默认 FIXTURE 样例数据，不改动现有首页；
+    # 真实读/审批接口接通后再设为首页。写动作待后端 P 任务。
     path("workbench/", workbench_index, name="workbench-index"),
 ]
