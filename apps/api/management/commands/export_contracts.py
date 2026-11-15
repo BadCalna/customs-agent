@@ -27,7 +27,22 @@ from apps.api.schemas import (
 )
 from apps.reviews.management.commands.seed_contracts import MAIN_TITLE, RECODE_TITLE
 from apps.reviews.models import Task
-from apps.reviews.schemas import ItemCard, ItemFacts, ItemListEntry, ItemPage, TaskDetail, TaskListEntry, TaskPage, VersionEntry
+from apps.reviews.schemas import (
+    ConfirmationIn,
+    ConfirmationOut,
+    ItemCard,
+    ItemFacts,
+    ItemListEntry,
+    ItemPage,
+    SubmissionIn,
+    SubmissionLineIn,
+    SubmissionLineOut,
+    SubmissionOut,
+    TaskDetail,
+    TaskListEntry,
+    TaskPage,
+    VersionEntry,
+)
 from apps.reviews.serializers import item_to_card, item_to_list_entry, task_to_detail
 from apps.runs.models import Run
 from apps.runs.schemas import RunDetail, RunItemEntry
@@ -39,6 +54,8 @@ SCHEMAS = {
     "tasks": [VersionEntry, TaskListEntry, TaskPage, TaskDetail],
     "items": [ItemListEntry, ItemPage, ItemFacts, ItemCard],
     "runs": [RunItemEntry, RunDetail],
+    "confirmations": [ConfirmationIn, ConfirmationOut],
+    "submissions": [SubmissionIn, SubmissionLineIn, SubmissionLineOut, SubmissionOut],
     "engine": [
         protocols.ExecutionContext,
         protocols.RecommendInput,

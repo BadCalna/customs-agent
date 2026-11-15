@@ -1,0 +1,87 @@
+{
+  "$defs": {
+    "TaskStage": {
+      "enum": [
+        "uploaded",
+        "prechecking",
+        "awaiting_confirmation",
+        "submitted",
+        "approved",
+        "returned"
+      ],
+      "title": "TaskStage",
+      "type": "string"
+    }
+  },
+  "properties": {
+    "confirmation_id": {
+      "title": "Confirmation Id",
+      "type": "string"
+    },
+    "confirmed_hs": {
+      "title": "Confirmed Hs",
+      "type": "string"
+    },
+    "created_at": {
+      "title": "Created At",
+      "type": "string"
+    },
+    "created_by": {
+      "title": "Created By",
+      "type": "string"
+    },
+    "idempotent_replay": {
+      "default": false,
+      "title": "Idempotent Replay",
+      "type": "boolean"
+    },
+    "item_id": {
+      "title": "Item Id",
+      "type": "string"
+    },
+    "previous_hs": {
+      "title": "Previous Hs",
+      "type": "string"
+    },
+    "reason": {
+      "title": "Reason",
+      "type": "string"
+    },
+    "revision": {
+      "description": "确认后商品的新修订号",
+      "title": "Revision",
+      "type": "integer"
+    },
+    "task_id": {
+      "title": "Task Id",
+      "type": "string"
+    },
+    "task_revision": {
+      "title": "Task Revision",
+      "type": "integer"
+    },
+    "task_stage": {
+      "$ref": "#/$defs/TaskStage"
+    },
+    "version_id": {
+      "title": "Version Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "confirmation_id",
+    "task_id",
+    "version_id",
+    "item_id",
+    "revision",
+    "task_revision",
+    "previous_hs",
+    "confirmed_hs",
+    "reason",
+    "created_by",
+    "created_at",
+    "task_stage"
+  ],
+  "title": "ConfirmationOut",
+  "type": "object"
+}

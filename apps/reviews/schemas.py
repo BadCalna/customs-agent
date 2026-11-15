@@ -126,3 +126,64 @@ class ItemCard(Schema):
     task_stage: TaskStage
     submission_status: SubmissionStatus | None = None
     allowed_actions: list[Action]
+
+
+# --- P09 业务员确认与整批提交（D3 第 2 节） ---
+
+class ConfirmationIn(Schema):
+    """确认一次 HS；``expected_revision`` 是商品的当前修订号，不是任务修订号。"""
+
+    confirmed_hs: str = Field(description="10 位数字编码；不合法返回 422")
+    reason: str = ""
+    expected_revision: int = Field(ge=1)
+
+
+class ConfirmationOut(Schema):
+    confirmation_id: str
+    task_id: str
+    version_id: str
+    item_id: str
+    revision: int = Field(description="确认后商品的新修订号")
+    task_revision: int
+    previous_hs: str
+    confirmed_hs: str
+    reason: str
+    created_by: str
+    created_at: str
+    task_stage: TaskStage
+    idempotent_replay: bool = False
+
+
+class SubmissionLineIn(Schema):
+    """逐行显式引用确认记录：专家审核的就是这一条确认的 HS。"""
+
+    item_id: str
+    confirmation_id: str
+
+
+class SubmissionIn(Schema):
+    version_id: str
+    revision: int = Field(ge=1, description="提交时的任务修订号 Task.revision")
+    items: list[SubmissionLineIn]
+
+
+class SubmissionLineOut(Schema):
+    item_id: str
+    confirmation_id: str
+    submitted_hs: str
+    item_revision: int
+
+
+class SubmissionOut(Schema):
+    submission_id: str
+    task_id: str
+    version_id: str
+    revision: int
+    status: SubmissionStatus
+    items: list[SubmissionLineOut]
+    expert_run_id: str | None = None
+    expert_run_status: RunStatus | None = None
+    task_stage: TaskStage
+    task_revision: int
+    created_at: str
+    idempotent_replay: bool = False

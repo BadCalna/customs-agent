@@ -1,0 +1,26 @@
+{
+  "description": "确认一次 HS；``expected_revision`` 是商品的当前修订号，不是任务修订号。",
+  "properties": {
+    "confirmed_hs": {
+      "description": "10 位数字编码；不合法返回 422",
+      "title": "Confirmed Hs",
+      "type": "string"
+    },
+    "expected_revision": {
+      "minimum": 1,
+      "title": "Expected Revision",
+      "type": "integer"
+    },
+    "reason": {
+      "default": "",
+      "title": "Reason",
+      "type": "string"
+    }
+  },
+  "required": [
+    "confirmed_hs",
+    "expected_revision"
+  ],
+  "title": "ConfirmationIn",
+  "type": "object"
+}

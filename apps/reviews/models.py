@@ -446,6 +446,32 @@ class AuditEvent(models.Model):
         ordering = ["-created_at"]
 
 
+class IdempotencyRecord(models.Model):
+    """写动作的幂等记录（D3 第 1 节）：同一操作者 + 动作 + key 只产生一次有效结果。
+
+    只存请求指纹与首次响应，不存业务秘密；重放返回首次响应，内容不同则 409。
+    数据库唯一约束兜底，不靠进程内缓存去重。
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT,
+        related_name="idempotency_records", verbose_name="操作人",
+    )
+    action = models.CharField("动作", max_length=64)
+    key = models.CharField("幂等键", max_length=128)
+    request_hash = models.CharField("请求指纹", max_length=64)
+    response = models.JSONField("首次响应", default=dict)
+    created_at = models.DateTimeField("记录时间", auto_now_add=True)
+
+    class Meta:
+        verbose_name = "幂等记录"
+        verbose_name_plural = "幂等记录"
+        constraints = [
+            models.UniqueConstraint(fields=["user", "action", "key"], name="uniq_idempotency_user_action_key"),
+        ]
+
+
 # 历史记录：内容固定（fixed_input_fields）且禁止单独删除；随父记录级联删除仍允许。
 for _model in (SubmissionItem, Confirmation, Decision, DecisionItem):
     protect_from_direct_delete(_model)
