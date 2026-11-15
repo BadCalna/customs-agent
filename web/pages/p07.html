@@ -1,0 +1,408 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>P07 商品列表、卡片与阶段编码对照 · 组件自测</title>
+  <link rel="stylesheet" href="/demo/assets/styles.css">
+  <link rel="stylesheet" href="/demo/assets/styles/commodity.css">
+</head>
+<body class="p07-page">
+  <header class="p07-topbar">
+    <div class="p07-brand">
+      <span class="p07-mark" aria-hidden="true">P07</span>
+      <div>
+        <div class="p07-brand-name">商品列表、卡片与阶段编码对照</div>
+        <div class="p07-brand-sub">组件自测页 · 原生 ES module · 无构建 · 只读 fixture</div>
+      </div>
+    </div>
+    <span class="p07-spacer"></span>
+    <a class="p07-link" href="/demo/">返回 P02 演示壳</a>
+  </header>
+
+  <div class="p07-banner" role="note">
+    <b>FIXTURE 只读 · MOCK 结果</b>
+    <span>数据来自 contracts/fixtures（FIX-01/02/03/04/10 + DEMO-SET）；不调用后端接口、不校验权限、不写库。</span>
+    <span class="p07-banner-warn">MOCK 不是真实归类结论，不构成申报依据。</span>
+  </div>
+
+  <main class="p07-layout">
+    <section class="p07-pane" aria-labelledby="p07-list-title">
+      <div class="p07-pane-head">
+        <span id="p07-list-title" class="p07-pane-title">商品列表</span>
+        <span id="p07-count" class="p07-pane-meta">—</span>
+        <span class="p07-pane-help">Tab 进入 · ↑↓ 移动 · Enter 选中 · Esc 清除</span>
+      </div>
+      <div id="p07-list" class="p07-list-host">
+        <div class="commodity-list-empty" role="status"><b>fixture 加载中…</b><span>读取 contracts/fixtures 下的固定样例。</span></div>
+      </div>
+    </section>
+
+    <section class="p07-pane" aria-labelledby="p07-card-title">
+      <div class="p07-pane-head">
+        <span id="p07-card-title" class="p07-pane-title">商品卡片</span>
+        <span id="p07-selected" class="p07-selected">未选中</span>
+      </div>
+      <div id="p07-card" class="p07-card-host"></div>
+    </section>
+
+    <aside class="p07-pane" aria-labelledby="p07-detail-title">
+      <div class="p07-pane-head">
+        <span id="p07-detail-title" class="p07-pane-title">来源与附图</span>
+        <button id="p07-source-close" class="p07-source-close" type="button" aria-label="关闭来源详情">关闭</button>
+      </div>
+      <div id="p07-source" class="p07-source-host"></div>
+      <div style="padding: 0 12px 14px">
+        <div class="p07-limits">
+          <h2>已知限制</h2>
+          <ul>
+            <li>只到组件级 + fixture 级；P06 上传、P09 确认/提交、P10 决定/退回未交付，未做 live 接口联调。</li>
+            <li>图片 <code>download_url</code> 恒为 null，受控下载由 P05 提供；本页显示来源单元格与状态。</li>
+            <li>ItemCard v1 没有改码原因字段；本页不推断，已在交接 P07 提交契约申请。</li>
+            <li>FIX-07/08 是错误体样例，不在本页；权限、越权 404 与 409 由 P02 测试覆盖。</li>
+          </ul>
+        </div>
+        <p class="p07-footer-note">
+          本地派生样例（关联异常、超长品名/多图）只用于验证布局与枚举，不是契约 fixture；
+          行内标注了“本地派生”。
+        </p>
+      </div>
+    </aside>
+  </main>
+
+  <div id="p07-status" class="sr-only" role="status" aria-live="polite"></div>
+
+  <script type="module">
+    import { renderCommodityList } from "/demo/assets/components/commodity-list.js";
+    import { renderCommodityCard } from "/demo/assets/components/commodity-card.js";
+    import { SOURCE_KIND_LABEL, imageStatusView } from "/demo/assets/components/hs-comparison.js";
+
+    const FIXTURE_FILES = ["FIX-01.json", "FIX-02.json", "FIX-03.json", "FIX-04.json", "FIX-10.json"];
+
+    const listHost = document.querySelector("#p07-list");
+    const cardHost = document.querySelector("#p07-card");
+    const sourceHost = document.querySelector("#p07-source");
+    const statusLine = document.querySelector("#p07-status");
+    const countNode = document.querySelector("#p07-count");
+    const selectedNode = document.querySelector("#p07-selected");
+    const detailTitle = document.querySelector("#p07-detail-title");
+    const closeButton = document.querySelector("#p07-source-close");
+
+    let rows = [];
+    let byId = new Map();
+    let annotations = new Map();
+    let selectedId = null;
+    let selectedSource = null;
+    let sourceTrigger = null;
+
+    const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (ch) => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;",
+    })[ch]);
+
+    const clone = (value) => JSON.parse(JSON.stringify(value));
+
+    async function loadJson(name) {
+      const response = await fetch(`/demo/fixtures/${name}`);
+      if (!response.ok) throw new Error(`${name} 返回 ${response.status}`);
+      return response.json();
+    }
+
+    function stageValue(stage) {
+      return stage && typeof stage === "object" ? stage.value ?? null : stage ?? null;
+    }
+
+    /** ItemCard → ItemListEntry，列表组件只吃契约列表字段。 */
+    function toListEntry(card) {
+      const facts = card.facts || {};
+      return {
+        task_id: card.task_id,
+        version_id: card.version_id,
+        item_id: card.item_id,
+        revision: card.revision,
+        source_location: card.source_location,
+        name: facts.name,
+        supplier_hs_raw: facts.supplier_hs_raw,
+        precheck_suggested_hs: stageValue(card.precheck_suggested_hs),
+        business_confirmed_hs: stageValue(card.business_confirmed_hs),
+        submitted_hs: stageValue(card.submitted_hs),
+        expert_final_hs: stageValue(card.expert_final_hs),
+        comparison_status: card.comparison_status,
+        image_status: card.image_status,
+        latest_run_id: card.latest_run_id,
+        result_mode: card.result_mode,
+      };
+    }
+
+    function addRow(card, label, origin) {
+      if (!card || !card.item_id || byId.has(card.item_id)) return;
+      const row = { card, label, origin, list: toListEntry(card) };
+      rows.push(row);
+      byId.set(card.item_id, row);
+      annotations.set(card.item_id, { label, note: origin });
+    }
+
+    function derivedAssociationCard(base) {
+      const card = clone(base);
+      card.item_id = "demo-association-error";
+      card.facts.name = "关联异常样例（本地派生）";
+      card.facts.attributes = { ...card.facts.attributes, 品名: card.facts.name };
+      card.comparison_status = "association_error";
+      card.latest_expert_check = null;
+      card.latest_run_id = null;
+      card.submission_status = null;
+      card.allowed_actions = ["read"];
+      card.issues = [{
+        code: "ASSOCIATION_ERROR",
+        field: "version_id",
+        message: "本地派生样例：展示六类比较结论中的关联异常，不是契约 fixture。",
+        missing: null,
+        suggested_role: null,
+      }];
+      return card;
+    }
+
+    function derivedStressCard(base) {
+      const card = clone(base);
+      const longName = `超长品名样例：${"不锈钢制多规格无缝管件（含法兰、弯头、三通与异径接头）".repeat(4)}`;
+      card.item_id = "demo-long-multi-image";
+      card.facts.name = longName;
+      card.facts.attributes = {
+        品名: longName,
+        规格型号: `SPEC-${"LONG-".repeat(14)}`,
+        用途: `用于压力管道与换热设备，${"需要在申报要素中完整描述用途、材质与加工方法。".repeat(4)}`,
+      };
+      card.facts.supplier_elements_raw =
+        `品名:${longName}|规格型号:SPEC-${"LONG-".repeat(14)}|` +
+        `用途:${"用于压力管道与换热设备，".repeat(4)}|材质:不锈钢|加工方法:冷拔`;
+      card.comparison_status = "needs_confirmation";
+      card.image_status = "available";
+      card.latest_expert_check = null;
+      card.images = Array.from({ length: 7 }, (_, index) => ({
+        image_id: `demo-image-${index + 1}`,
+        status: index === 5 ? "read_failed" : index === 6 ? "absent" : "available",
+        source_sheet: index % 2 ? "申报要素" : "产品图片",
+        source_cell: `H${index + 2}`,
+        dispimg_id: `DISPIMG_DEMO_${index + 1}`,
+        download_url: null,
+        error_message: index === 5 ? "本地派生样例：图片存在但读取失败，保留来源单元格" : "",
+      }));
+      card.issues = [
+        {
+          code: "IMAGE_READ_FAILED",
+          field: "images",
+          message: "本地派生样例：其中一张附图读取失败，不能当作无图。",
+          missing: "附图内容",
+          suggested_role: "supplier",
+        },
+        {
+          code: "MISSING_USAGE",
+          field: "attributes.usage",
+          message: "本地派生样例：超长要素用于验证折行与内部滚动。",
+          missing: "用途细节",
+          suggested_role: "supplier",
+        },
+      ];
+      return card;
+    }
+
+    async function boot() {
+      const [demoSet, ...fixtures] = await Promise.all([
+        loadJson("DEMO-SET.json"),
+        ...FIXTURE_FILES.map(loadJson),
+      ]);
+
+      fixtures.forEach((doc, index) => {
+        addRow(doc.card, `${doc.scenario} · ${doc.title}`, `contracts/fixtures/${FIXTURE_FILES[index]}`);
+      });
+
+      const demoCards = Object.values(demoSet.cards || {});
+      const extras = [
+        [demoCards.find((card) => card.comparison_status === "inconsistent"), "补充 · 不一致样例"],
+        [demoCards.find((card) => card.comparison_status === "supplier_invalid"), "补充 · 原码异常"],
+        [demoCards.find((card) => card.comparison_status === null && card.latest_run_id), "补充 · 比较结论为空（技术失败行）"],
+        [demoCards.find((card) => card.evidence_status === "query_failed"), "补充 · 证据查询失败"],
+      ];
+      extras.forEach(([card, label]) => addRow(card, label, "contracts/fixtures/DEMO-SET.json"));
+
+      addRow(
+        derivedAssociationCard(fixtures[0].card),
+        "补充 · 关联异常（本地派生）",
+        "页面内合成，仅用于展示枚举",
+      );
+      addRow(
+        derivedStressCard(fixtures[0].card),
+        "补充 · 超长品名 / 多图（本地派生）",
+        "页面内合成，仅用于验证布局",
+      );
+
+      selectedId = rows[0]?.card.item_id ?? null;
+      const params = new URLSearchParams(location.search);
+      const wantedItem = params.get("item");
+      if (wantedItem && byId.has(wantedItem)) selectedId = wantedItem;
+      const wantedScenario = params.get("scenario");
+      if (wantedScenario) {
+        const hit = rows.find((row) => row.label.startsWith(wantedScenario));
+        if (hit) selectedId = hit.card.item_id;
+      }
+      render();
+      statusLine.textContent = `已加载 ${rows.length} 件商品；列表中可用 Tab、方向键、Enter 与 Esc。`;
+    }
+
+    function selectItem(itemId) {
+      const row = byId.get(itemId);
+      if (!row) return;
+      selectedId = itemId;
+      selectedSource = null;
+      sourceTrigger = null;
+      render();
+      statusLine.textContent = `已选中 ${row.card.facts.name}，第 ${row.card.source_location.row_number} 行；右侧卡片已更新。`;
+    }
+
+    function handleEscape() {
+      if (selectedSource) {
+        closeSource();
+        return;
+      }
+      if (!selectedId) return;
+      const previous = selectedId;
+      selectedId = null;
+      render();
+      const node = Array.from(listHost.querySelectorAll(".commodity-row"))
+        .find((row) => row.dataset.itemId === previous);
+      (node || listHost.querySelector(".commodity-row"))?.focus();
+      statusLine.textContent = "已清除选中；列表仍可用 Tab、方向键浏览。";
+    }
+
+    function openSource(source) {
+      selectedSource = { kind: "source", ...source };
+      sourceTrigger = source.trigger || null;
+      detailTitle.textContent = "来源引用";
+      renderSource();
+      statusLine.textContent = `已打开${source.label}的来源引用详情。`;
+    }
+
+    function openImage(image) {
+      selectedSource = { kind: "image", image };
+      sourceTrigger = null;
+      detailTitle.textContent = "附图详情";
+      renderSource();
+      statusLine.textContent = `已打开附图 ${image.image_id} 的详情。`;
+    }
+
+    function openRun(runId) {
+      selectedSource = { kind: "run", runId };
+      sourceTrigger = null;
+      detailTitle.textContent = "执行引用";
+      renderSource();
+      statusLine.textContent = `已打开执行引用 ${runId}。`;
+    }
+
+    function closeSource() {
+      selectedSource = null;
+      detailTitle.textContent = "来源与附图";
+      renderSource();
+      sourceTrigger?.focus();
+      sourceTrigger = null;
+    }
+
+    function renderSource() {
+      if (!selectedSource) {
+        sourceHost.innerHTML = `<div class="p07-empty">
+          在卡片“编码阶段对照”中点 <code>↳</code> 来源按钮，这里显示完整 <code>source_id</code>；
+          点附图条目则显示图片状态与源单元格。
+          <span class="p07-hint">本页只渲染 fixture 字段，不请求后端对象。</span>
+        </div>`;
+        return;
+      }
+
+      if (selectedSource.kind === "source") {
+        const source = selectedSource;
+        sourceHost.innerHTML = `<div class="p07-source-card">
+          <div class="p07-source-kicker">阶段来源</div>
+          <div class="p07-source-value">${esc(source.label)}</div>
+          <dl>
+            <dt>阶段值</dt><dd><code>${esc(source.text)}</code></dd>
+            <dt>阶段键</dt><dd><code>${esc(source.stageKey)}</code></dd>
+            <dt>source_id</dt><dd><code class="p07-break">${esc(source.sourceId || "—")}</code></dd>
+            <dt>来源类型</dt><dd>${esc(SOURCE_KIND_LABEL[source.sourceKind] || "未登记")}</dd>
+          </dl>
+          <p class="p07-hint">来源类型按阶段约定展示，仅用于说明该引用可能是 run / confirmation / submission / decision；
+            本页不调用接口验证对象是否存在。</p>
+        </div>`;
+        return;
+      }
+
+      if (selectedSource.kind === "image") {
+        const image = selectedSource.image;
+        const status = imageStatusView(image.status);
+        sourceHost.innerHTML = `<div class="p07-source-card">
+          <div class="p07-source-kicker">附图明细</div>
+          <div class="p07-source-value">${esc(status.label)}</div>
+          <dl>
+            <dt>image_id</dt><dd><code class="p07-break">${esc(image.image_id || "—")}</code></dd>
+            <dt>状态</dt><dd><code>${esc(image.status || "—")}</code></dd>
+            <dt>源位置</dt><dd>${esc(image.source_sheet || "—")} · ${esc(image.source_cell || "—")}</dd>
+            <dt>dispimg_id</dt><dd><code class="p07-break">${esc(image.dispimg_id || "—")}</code></dd>
+            <dt>download_url</dt><dd><code class="p07-break">${esc(image.download_url || "null（受控下载由 P05 提供）")}</code></dd>
+          </dl>
+          ${image.error_message ? `<p class="p07-hint" style="color: var(--cinnabar)">${esc(image.error_message)}</p>` : ""}
+          <p class="p07-hint">${esc(status.hint)}</p>
+        </div>`;
+        return;
+      }
+
+      sourceHost.innerHTML = `<div class="p07-source-card">
+        <div class="p07-source-kicker">执行引用</div>
+        <div class="p07-source-value">${esc(selectedSource.runId)}</div>
+        <p class="p07-hint">只展示卡片上的 run 引用；执行进度与逐行结果属于 P08/P13，本页不请求。</p>
+      </div>`;
+    }
+
+    function render() {
+      const row = selectedId ? byId.get(selectedId) : null;
+      renderCommodityList(listHost, {
+        items: rows.map((entry) => entry.list),
+        selectedItemId: selectedId,
+        annotations,
+        onSelectItem: selectItem,
+        onEscape: handleEscape,
+        ariaLabel: "P07 商品列表，按行展示源位置、原码、预审建议、比较结论与图片状态",
+        emptyTitle: "没有商品行",
+        emptyHint: "fixture 未提供商品，先执行 make contracts 生成样例。",
+      });
+      renderCommodityCard(cardHost, {
+        card: row?.card ?? null,
+        contractNotes: true,
+        onSelectSource: openSource,
+        onSelectImage: openImage,
+        onOpenRun: openRun,
+      });
+      countNode.textContent = `${rows.length} 件`;
+      selectedNode.textContent = row
+        ? `${row.label} · 第 ${row.card.source_location.row_number} 行`
+        : "未选中";
+      renderSource();
+    }
+
+    closeButton.addEventListener("click", () => closeSource());
+    document.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      event.preventDefault();
+      handleEscape();
+    });
+
+    boot().catch((error) => {
+      listHost.innerHTML = `<div class="commodity-list-empty" role="alert">
+        <b>fixture 加载失败</b>
+        <span>${esc(error.message || error)}</span>
+        <span>先执行 <code>make contracts</code> 生成 contracts/fixtures，再刷新本页。</span>
+      </div>`;
+      statusLine.textContent = "fixture 加载失败。";
+    });
+  </script>
+</body>
+</html>
