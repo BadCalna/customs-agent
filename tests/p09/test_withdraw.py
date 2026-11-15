@@ -132,3 +132,54 @@ class WithdrawSubmissionTests(TestCase):
         self.assertEqual(second["submission_id"], first["submission_id"])
         self.assertTrue(second["idempotent_replay"])
         self.assertEqual(AuditEvent.objects.filter(action="submission.withdrawn").count(), 1)
+
+
+class WithdrawRaceAndIdempotencyTests(WithdrawSubmissionTests):
+    """评审复现的两个问题：stale 读后撤回已批准提交、跨提交复用幂等键。"""
+
+    def test_stale_read_cannot_withdraw_already_decided_submission(self):
+        from unittest import mock
+
+        stale = Submission.objects.get(pk=self.submission.pk)  # 读到的是 pending
+        Submission.objects.filter(pk=self.submission.pk).update(status=Submission.Status.APPROVED)
+        with mock.patch("apps.reviews.services.submissions._read_submission", return_value=stale):
+            response = self.post()
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json()["error"]["code"], "submission_closed")
+        self.submission.refresh_from_db()
+        self.assertEqual(self.submission.status, Submission.Status.APPROVED)
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.stage, Task.Stage.SUBMITTED)
+
+    def _second_pending_submission(self):
+        from tests.p01.factories import make_item, make_task, make_version
+
+        task = make_task(self.supplier, title="第二个任务", stage=Task.Stage.SUBMITTED)
+        assign(task, self.operator, Role.OPERATOR)
+        version = make_version(task, self.supplier)
+        item = make_item(version, row=5, name="另一商品")
+        confirmation = Confirmation.objects.create(
+            item=item, revision=1, previous_hs="", confirmed_hs=HS_A,
+            reason="合成确认", created_by=self.operator,
+        )
+        submission = Submission.objects.create(
+            task=task, version=version, revision=task.revision, created_by=self.operator,
+        )
+        SubmissionItem.objects.create(
+            submission=submission, item=item, confirmation=confirmation,
+            submitted_hs=HS_A, item_revision=1,
+        )
+        return submission
+
+    def test_same_key_on_another_submission_returns_409(self):
+        first = self.post(key="w-cross")
+        self.assertEqual(first.status_code, 200)
+        other = self._second_pending_submission()
+        response = self.client.post(
+            f"/api/v1/submissions/{other.pk}/withdraw", data="{}",
+            content_type="application/json", HTTP_IDEMPOTENCY_KEY="w-cross",
+        )
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json()["error"]["code"], "idempotency_conflict")
+        other.refresh_from_db()
+        self.assertEqual(other.status, Submission.Status.PENDING)

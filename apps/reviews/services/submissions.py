@@ -24,6 +24,31 @@ from .confirmations import current_confirmation
 ACTION = "submission.create"
 
 
+def _read_submission(submission_id: str) -> Submission:
+    """首次读取只用于权限判断；写入前必须再走 ``lock_submission`` 拿锁后重读。"""
+    try:
+        submission = Submission.objects.select_related("task", "version").filter(pk=submission_id).first()
+    except (ValueError, TypeError) as exc:
+        raise Http404("提交不存在或不在可见范围") from exc
+    if submission is None:
+        raise Http404("提交不存在或不在可见范围")
+    return submission
+
+
+def lock_submission(user, submission_id: str, action: str) -> tuple[Task, Submission]:
+    """按 **Task → Submission** 的固定顺序加锁，并返回锁内重读的记录。
+
+    审批（P10）与撤回（P09）都改任务状态，必须先拿同一把任务锁再改提交状态；
+    否则会出现"批准发生在撤回读取与加锁之间"的交错：撤回看到的是旧状态，
+    把已批准的任务改回待确认，而批准记录仍然存在。
+    """
+    submission = _read_submission(submission_id)
+    require_action(user, action, submission)
+    task = Task.objects.select_for_update().get(pk=submission.task_id)
+    submission = Submission.objects.select_for_update().select_related("task", "version").get(pk=submission.pk)
+    return task, submission
+
+
 def _get_version(task, version_id):
     try:
         version = task.versions.filter(pk=version_id).first()
@@ -132,7 +157,8 @@ def create_submission(user, task_id: str, payload, idempotency_key: str | None =
     require_action(user, SUBMIT, task)
     task = Task.objects.select_for_update().get(pk=task.pk)
 
-    replay = idempotency.begin(user, ACTION, idempotency_key, payload)
+    fingerprint = {"task_id": str(task.pk), **payload.model_dump(mode="json")}
+    replay = idempotency.begin(user, ACTION, idempotency_key, fingerprint)
     if replay is not None:
         return replay
 
@@ -189,7 +215,7 @@ def create_submission(user, task_id: str, payload, idempotency_key: str | None =
         },
     )
     response = submission_to_out(submission, run, task).model_dump(mode="json")
-    idempotency.store(user, ACTION, idempotency_key, payload, response)
+    idempotency.store(user, ACTION, idempotency_key, fingerprint, response)
 
     def _dispatch():
         from apps.runs.inline import execute_expert_check
@@ -211,19 +237,10 @@ def withdraw_submission(user, submission_id: str, idempotency_key: str | None = 
     - 撤回后该提交绑定的专家核查执行不再视为当前有效（结果原样保留）；
     - 只允许撤回最新文件版本的提交，旧版本提交由补料重传自然失效。
     """
-    from ..models import Submission as SubmissionModel
+    task, submission = lock_submission(user, submission_id, SUBMIT)
+    fingerprint = {"submission_id": str(submission.pk)}
 
-    try:
-        submission = SubmissionModel.objects.select_related("task", "version").filter(pk=submission_id).first()
-    except (ValueError, TypeError) as exc:
-        raise Http404("提交不存在或不在可见范围") from exc
-    if submission is None:
-        raise Http404("提交不存在或不在可见范围")
-
-    task = require_action(user, SUBMIT, submission)
-    task = Task.objects.select_for_update().get(pk=task.pk)
-
-    replay = idempotency.begin(user, WITHDRAW_ACTION, idempotency_key, {})
+    replay = idempotency.begin(user, WITHDRAW_ACTION, idempotency_key, fingerprint)
     if replay is not None:
         return replay
 
@@ -259,5 +276,5 @@ def withdraw_submission(user, submission_id: str, idempotency_key: str | None = 
         status=submission.status, task_stage=task.stage, task_revision=task.revision,
         idempotent_replay=False,
     ).model_dump(mode="json")
-    idempotency.store(user, WITHDRAW_ACTION, idempotency_key, {}, response)
+    idempotency.store(user, WITHDRAW_ACTION, idempotency_key, fingerprint, response)
     return response
