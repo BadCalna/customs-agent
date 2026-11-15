@@ -82,6 +82,10 @@ MAX_ATTRIBUTES = 50
 
 USAGE_NOTE = "历史成功码仅作参考线索，不能作为当前归类结论；须按现行税则与申报要素重新核对。"
 
+#: 只有 outcome 落在这些明确成功取值里的记录才进入“历史成功案例”。
+#: 空值、未知值、已拒绝/已退回等一律排除，绝不默认成“通过”。
+SUCCESS_OUTCOMES = frozenset({"approved", "passed", "放行", "通过"})
+
 _CJK_RUN = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff]+")
 _ALNUM_RUN = re.compile(r"[0-9a-z]+")
 _TOKEN_SEPARATOR = re.compile(r"[\s,，、;；/|\\()（）\[\]【】{}《》<>·.。:：\"'“”‘’_\-—]+")
@@ -145,7 +149,7 @@ class HistoryRecord(Schema):
     spec: str = ""
     attributes: dict[str, str] = Field(default_factory=dict, description="其他结构化属性")
     recorded_at: str = Field(min_length=1, description="历史业务日期，原样保留")
-    outcome: str = Field(default="approved", description="历史结果，如 approved / 放行")
+    outcome: str = Field(default="", description="历史结果；仅 approved/passed/放行/通过 视为成功，缺失或其它值一律排除")
     hs_version: str | None = Field(default=None, description="记录声明的税则/HS 版本，未知为空")
     applicable_scope: str | None = Field(default=None, description="适用范围，未知为空")
     valid_until: str | None = Field(default=None, description="有效期，未知为空且不推断")
@@ -298,6 +302,11 @@ class HistorySnapshot:
 
     dataset: HistoryDatasetInfo
     records: tuple[HistoryRecord, ...]
+
+
+def _is_success_record(record: HistoryRecord) -> bool:
+    """只有明确标记为成功的记录才可进入历史成功案例；空/未知/已拒绝都排除。"""
+    return _normalize(record.outcome) in SUCCESS_OUTCOMES
 
 
 class HistoryStoreError(RuntimeError):
@@ -666,9 +675,10 @@ class HistorySearchSource:
                 searched_at=searched_at,
             )
 
+        success_records = [record for record in snapshot.records if _is_success_record(record)]
         candidates = [
             candidate
-            for record in snapshot.records
+            for record in success_records
             if (candidate := self._build_candidate(prepared, record, now)) is not None
             and candidate.score >= self.min_score
         ]
@@ -681,7 +691,8 @@ class HistorySearchSource:
                 evidence_status=EvidenceStatus.NOT_FOUND,
                 reason=(
                     f"检索执行成功，未取得达到阈值 {self.min_score:.2f} 的历史参考记录"
-                    f"（扫描 {len(snapshot.records)} 条）；这是没查到，不是查询失败"
+                    f"（扫描 {len(snapshot.records)} 条，其中明确成功 {len(success_records)} 条）；"
+                    f"这是没查到，不是查询失败"
                 ),
                 query=prepared,
                 dataset=snapshot.dataset,
@@ -696,7 +707,8 @@ class HistorySearchSource:
             outcome=HistorySearchOutcome.MATCHED,
             evidence_status=EvidenceStatus.OBTAINED,
             reason=(
-                f"检索到 {len(candidates)} 条历史参考记录（扫描 {len(snapshot.records)} 条）"
+                f"检索到 {len(candidates)} 条历史参考记录"
+                f"（扫描 {len(snapshot.records)} 条，其中明确成功 {len(success_records)} 条）"
                 f"{gap_note}；历史成功码仅作参考，不能作为当前归类结论"
             ),
             query=prepared,

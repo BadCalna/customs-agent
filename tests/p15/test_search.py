@@ -476,3 +476,45 @@ class DatasetDeclarationTest(SimpleTestCase):
                 os.environ.pop(ENV_RECORDS_PATH, None)
             else:
                 os.environ[ENV_RECORDS_PATH] = previous
+
+
+class SuccessOutcomeFilterTest(SimpleTestCase):
+    """只有明确成功的记录进入历史成功案例；已拒绝/缺失 outcome 一律排除（Jay 评审）。"""
+
+    def _records(self):
+        base = JsonHistoryStore(RECORDS_PATH).load().records[0].model_dump()
+        rejected = dict(base, record_id="SYN-H-REJECT", outcome="rejected")
+        missing = dict(base, record_id="SYN-H-NOOUTCOME")
+        missing.pop("outcome", None)
+        approved = dict(base, record_id="SYN-H-OK", outcome="approved")
+        return rejected, missing, approved
+
+    def test_rejected_record_is_excluded(self):
+        rejected, _, approved = self._records()
+        result = HistorySearchSource([rejected, approved], clock=fixed_clock).search(
+            HistoryQuery(name="不锈钢法兰盘")
+        )
+        self.assertIs(result.outcome, HistorySearchOutcome.MATCHED)
+        ids = {c.record_id for c in result.candidates}
+        self.assertEqual(ids, {"SYN-H-OK"})
+
+    def test_missing_outcome_is_not_treated_as_success(self):
+        _, missing, _ = self._records()
+        result = HistorySearchSource([missing], clock=fixed_clock).search(
+            HistoryQuery(name="不锈钢法兰盘")
+        )
+        self.assertIs(result.outcome, HistorySearchOutcome.NO_MATCH)
+        self.assertIn("明确成功 0 条", result.reason)
+
+    def test_only_explicit_success_values_are_eligible(self):
+        base = JsonHistoryStore(RECORDS_PATH).load().records[0].model_dump()
+        rows = [
+            dict(base, record_id=f"SYN-{value}", outcome=value)
+            for value in ("approved", "passed", "放行", "通过", "returned", "", "unknown")
+        ]
+        result = HistorySearchSource(rows, clock=fixed_clock).search(
+            HistoryQuery(name="不锈钢法兰盘")
+        )
+        eligible = {c.record_id for c in result.candidates}
+        self.assertEqual(eligible, {"SYN-approved", "SYN-passed", "SYN-放行", "SYN-通过"})
+        self.assertIn("明确成功 4 条", result.reason)
