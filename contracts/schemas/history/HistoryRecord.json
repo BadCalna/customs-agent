@@ -1,0 +1,159 @@
+{
+  "$defs": {
+    "HistorySourceRef": {
+      "description": "历史记录的来源引用，必须能定位到具体单据与项号。",
+      "properties": {
+        "document": {
+          "description": "单据/文件标识，原样保留",
+          "minLength": 1,
+          "title": "Document",
+          "type": "string"
+        },
+        "locator": {
+          "description": "单据内的项号、行号或页签定位",
+          "minLength": 1,
+          "title": "Locator",
+          "type": "string"
+        },
+        "system": {
+          "default": "",
+          "description": "来源系统标识，便于区分真实库与合成样本",
+          "title": "System",
+          "type": "string"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "可打开的来源地址；无则为空",
+          "title": "Url"
+        }
+      },
+      "required": [
+        "document",
+        "locator"
+      ],
+      "title": "HistorySourceRef",
+      "type": "object"
+    }
+  },
+  "description": "一条历史成功记录（存储层 DTO，字段对应关系见交接文档）。\n\n``recorded_at`` 是历史业务日期，**原样保存**：不解析成统一格式、不补时区、\n不用查询时间替换。``elements`` 是当时的申报要素键值。",
+  "properties": {
+    "applicable_scope": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "适用范围，未知为空",
+      "title": "Applicable Scope"
+    },
+    "attributes": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "其他结构化属性",
+      "title": "Attributes",
+      "type": "object"
+    },
+    "elements": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "当时申报要素键值",
+      "title": "Elements",
+      "type": "object"
+    },
+    "historical_hs": {
+      "description": "历史成功 HS，仅作参考",
+      "minLength": 1,
+      "title": "Historical Hs",
+      "type": "string"
+    },
+    "historical_name": {
+      "minLength": 1,
+      "title": "Historical Name",
+      "type": "string"
+    },
+    "hs_version": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "记录声明的税则/HS 版本，未知为空",
+      "title": "Hs Version"
+    },
+    "material": {
+      "default": "",
+      "title": "Material",
+      "type": "string"
+    },
+    "notes": {
+      "default": "",
+      "title": "Notes",
+      "type": "string"
+    },
+    "outcome": {
+      "default": "",
+      "description": "历史结果；仅 approved/passed/放行/通过 视为成功，缺失或其它值一律排除",
+      "title": "Outcome",
+      "type": "string"
+    },
+    "record_id": {
+      "minLength": 1,
+      "title": "Record Id",
+      "type": "string"
+    },
+    "recorded_at": {
+      "description": "历史业务日期，原样保留",
+      "minLength": 1,
+      "title": "Recorded At",
+      "type": "string"
+    },
+    "source": {
+      "$ref": "#/$defs/HistorySourceRef"
+    },
+    "spec": {
+      "default": "",
+      "title": "Spec",
+      "type": "string"
+    },
+    "valid_until": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "有效期，未知为空且不推断",
+      "title": "Valid Until"
+    }
+  },
+  "required": [
+    "record_id",
+    "historical_hs",
+    "historical_name",
+    "recorded_at",
+    "source"
+  ],
+  "title": "HistoryRecord",
+  "type": "object"
+}

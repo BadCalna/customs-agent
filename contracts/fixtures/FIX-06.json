@@ -85,7 +85,7 @@
     "task_stage": "awaiting_confirmation",
     "version_id": "d1051286-aecb-47e1-a614-1f53ed7aef65"
   },
-  "contract_version": "1.0.0",
+  "contract_version": "1.1.0",
   "notes": "evidence_status=query_failed，置信度为 null，不生成已核实结论。",
   "scenario": "FIX-06",
   "title": "查询失败"

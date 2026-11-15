@@ -1,0 +1,93 @@
+{
+  "description": "P15 固定检索样例。记录集是 adapters/sources/fixtures/history_records.sample.json（合成样本，非真实历史库）。用例只锁定接口行为与差异标注，不证明检索效果。",
+  "records_path": "adapters/sources/fixtures/history_records.sample.json",
+  "clock": "2026-11-15T00:00:00+08:00",
+  "cases": [
+    {
+      "case_id": "hit-basic",
+      "description": "有命中：品名与申报要素一致，历史 HS、日期与来源引用原样返回。",
+      "query": {
+        "name": "不锈钢法兰盘",
+        "material": "不锈钢",
+        "spec": "DN50",
+        "elements": {
+          "材质": "不锈钢",
+          "用途": "管道连接",
+          "工艺": "锻造"
+        }
+      },
+      "expected_outcome": "matched",
+      "expected_top_record": "SYN-H-0001",
+      "expected_diff_keys": {},
+      "expected_query_gaps": []
+    },
+    {
+      "case_id": "no-match",
+      "description": "无命中：品名与要素均不相关，应返回 no_match（not_found），不能伪装成 query_failed。",
+      "query": {
+        "name": "碳纤维网球拍",
+        "material": "碳纤维",
+        "spec": "标准",
+        "elements": {
+          "材质": "碳纤维",
+          "用途": "运动器材"
+        }
+      },
+      "expected_outcome": "no_match",
+      "expected_top_record": null,
+      "expected_diff_keys": {},
+      "expected_query_gaps": []
+    },
+    {
+      "case_id": "key-attribute-diff",
+      "description": "相似但关键属性不同：品名一致，材质与规格不同；差异必须出现在 diff_keys，不能因总分高被吞掉。",
+      "query": {
+        "name": "不锈钢法兰盘",
+        "material": "碳钢",
+        "spec": "DN80",
+        "elements": {
+          "材质": "碳钢",
+          "用途": "管道连接",
+          "工艺": "锻造"
+        }
+      },
+      "expected_outcome": "matched",
+      "expected_top_record": "SYN-H-0002",
+      "expected_diff_keys": {
+        "SYN-H-0001": ["材质", "规格"]
+      },
+      "expected_query_gaps": []
+    },
+    {
+      "case_id": "old-version",
+      "description": "旧时间版本：2019 年业务日期、2017 税则版本、有效期已过；历史时间原样保留并标注版本未核实。",
+      "query": {
+        "name": "不锈钢法兰",
+        "material": "不锈钢",
+        "spec": "DN50",
+        "elements": {
+          "材质": "不锈钢",
+          "用途": "管道连接",
+          "工艺": "铸造"
+        }
+      },
+      "expected_outcome": "matched",
+      "expected_top_record": "SYN-H-0003",
+      "expected_diff_keys": {},
+      "expected_query_gaps": [],
+      "expected_stale_records_include": ["SYN-H-0003"],
+      "expected_expired_records": ["SYN-H-0003"]
+    },
+    {
+      "case_id": "missing-elements",
+      "description": "缺要素：只给品名，仍可检索但必须在 query_gaps 标注并降低分数，不能当作强匹配。",
+      "query": {
+        "name": "不锈钢法兰盘"
+      },
+      "expected_outcome": "matched",
+      "expected_top_record": "SYN-H-0001",
+      "expected_diff_keys": {},
+      "expected_query_gaps": ["申报要素"]
+    }
+  ]
+}

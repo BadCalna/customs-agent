@@ -1,8 +1,8 @@
 # 契约 v1 发布记录
 
-版本：`1.0.0`（`apps.api.schemas.CONTRACT_VERSION`）
+版本：`1.1.0`（`apps.api.schemas.CONTRACT_VERSION`）
 发布：2026-11-14，任务包 P02（分支 `feature/P02-contracts-mock`）。
-状态：只读查询与 mock 引擎边界已发布；写动作端点仍为显式 501，见下表。
+状态：只读查询、P09/P10 写动作与历史记录 DTO 已发布；其余写动作端点仍为显式 501，见下表。
 
 本目录是 D3《接口与页面约定》、D4《Agent 输入输出与证据约定》的可校验发布物。
 **唯一的字段来源是 Python schema**，本目录文件全部由命令生成，不要手工编辑。
@@ -17,6 +17,7 @@
 | `schemas/items/` | 商品列表、商品卡片、事实组 | `apps/reviews/schemas.py` |
 | `schemas/runs/` | 执行详情、逐行结果 | `apps/runs/schemas.py` |
 | `schemas/engine/` | 两阶段引擎输入输出 DTO | `adapters/engines/protocols.py` |
+| `schemas/history/` | 历史记录 DTO、检索输入/候选/结果与来源引用（1.1.0 新增） | `adapters/sources/history_search.py` |
 | `schemas/fixtures/` | 固定样例文档结构 | `apps/api/fixtures.py` |
 | `openapi/v1.json` | 由 `api_v1.get_openapi_schema()` 生成 | `config/urls.py` |
 | `fixtures/FIX-01.json` ~ `FIX-10.json` | D3 第 4 节场景样例 | 由演示数据真实序列化生成 |
@@ -86,3 +87,9 @@ make test TASK=P02     # 与上一条同入口，58 项
 
 写动作的 `Idempotency-Key` 持久化与 409 冲突检测**尚未实现**，只有错误形状样例；
 FIX-08 不代表重试去重已可用。
+
+## 1.1.0 变更（2026-11-15）
+
+- 新增 `schemas/history/`：`HistoryRecord`、`HistoryQuery`、`HistoryCandidate`、
+  `HistorySearchResult`、`HistorySourceRef`、`HistoryDatasetInfo`，供 P16 依赖公共结构而不 import 适配器内部类。
+- 仅新增，不改既有字段与端点；`contract_version` 同步升为 `1.1.0`（FIX 样例与 DEMO-SET 已更新）。

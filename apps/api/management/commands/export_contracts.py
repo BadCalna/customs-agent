@@ -27,6 +27,14 @@ from apps.api.schemas import (
 )
 from apps.reviews.management.commands.seed_contracts import MAIN_TITLE, RECODE_TITLE
 from apps.reviews.models import Task
+from adapters.sources.history_search import (
+    HistoryCandidate,
+    HistoryDatasetInfo,
+    HistoryQuery,
+    HistoryRecord,
+    HistorySearchResult,
+    HistorySourceRef,
+)
 from apps.reviews.schemas import (
     ConfirmationIn,
     ConfirmationOut,
@@ -65,7 +73,16 @@ SCHEMAS = {
     "confirmations": [ConfirmationIn, ConfirmationOut],
     "submissions": [SubmissionIn, SubmissionLineIn, SubmissionLineOut, SubmissionOut],
     "decisions": [DecisionIn, DecisionLineIn, DecisionLineOut, DecisionOut, TaskReturnIn, TaskReturnOut],
-    "history": [TaskHistoryOut, HistoryVersion],
+    "history": [
+        TaskHistoryOut,
+        HistoryVersion,
+        HistoryRecord,
+        HistoryQuery,
+        HistoryCandidate,
+        HistorySearchResult,
+            HistorySourceRef,
+        HistoryDatasetInfo,
+    ],
     "engine": [
         protocols.ExecutionContext,
         protocols.RecommendInput,
