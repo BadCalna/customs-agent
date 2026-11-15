@@ -1,0 +1,66 @@
+{
+  "$defs": {
+    "SubmissionStatus": {
+      "enum": [
+        "pending",
+        "approved",
+        "returned",
+        "superseded"
+      ],
+      "title": "SubmissionStatus",
+      "type": "string"
+    },
+    "TaskStage": {
+      "enum": [
+        "uploaded",
+        "prechecking",
+        "awaiting_confirmation",
+        "submitted",
+        "approved",
+        "returned"
+      ],
+      "title": "TaskStage",
+      "type": "string"
+    }
+  },
+  "description": "撤回提交的结果：提交转为 superseded，任务回到待业务员确认。",
+  "properties": {
+    "idempotent_replay": {
+      "default": false,
+      "title": "Idempotent Replay",
+      "type": "boolean"
+    },
+    "status": {
+      "$ref": "#/$defs/SubmissionStatus"
+    },
+    "submission_id": {
+      "title": "Submission Id",
+      "type": "string"
+    },
+    "task_id": {
+      "title": "Task Id",
+      "type": "string"
+    },
+    "task_revision": {
+      "title": "Task Revision",
+      "type": "integer"
+    },
+    "task_stage": {
+      "$ref": "#/$defs/TaskStage"
+    },
+    "version_id": {
+      "title": "Version Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "submission_id",
+    "task_id",
+    "version_id",
+    "status",
+    "task_stage",
+    "task_revision"
+  ],
+  "title": "WithdrawalOut",
+  "type": "object"
+}

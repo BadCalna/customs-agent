@@ -341,3 +341,15 @@ class TaskHistoryOut(Schema):
     cross_version_candidates: list[CrossVersionCandidate]
     issues: list[HistoryIssue]
     audit_events: list[HistoryAuditEvent]
+
+
+class WithdrawalOut(Schema):
+    """撤回提交的结果：提交转为 superseded，任务回到待业务员确认。"""
+
+    submission_id: str
+    task_id: str
+    version_id: str
+    status: SubmissionStatus
+    task_stage: TaskStage
+    task_revision: int
+    idempotent_replay: bool = False

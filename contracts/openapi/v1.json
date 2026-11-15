@@ -2388,6 +2388,48 @@
         ],
         "title": "VersionEntry",
         "type": "object"
+      },
+      "WithdrawalOut": {
+        "description": "撤回提交的结果：提交转为 superseded，任务回到待业务员确认。",
+        "properties": {
+          "idempotent_replay": {
+            "default": false,
+            "title": "Idempotent Replay",
+            "type": "boolean"
+          },
+          "status": {
+            "$ref": "#/components/schemas/SubmissionStatus"
+          },
+          "submission_id": {
+            "title": "Submission Id",
+            "type": "string"
+          },
+          "task_id": {
+            "title": "Task Id",
+            "type": "string"
+          },
+          "task_revision": {
+            "title": "Task Revision",
+            "type": "integer"
+          },
+          "task_stage": {
+            "$ref": "#/components/schemas/TaskStage"
+          },
+          "version_id": {
+            "title": "Version Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "submission_id",
+          "task_id",
+          "version_id",
+          "status",
+          "task_stage",
+          "task_revision"
+        ],
+        "title": "WithdrawalOut",
+        "type": "object"
       }
     }
   },
@@ -2636,6 +2678,38 @@
         "summary": "Decide Submission",
         "tags": [
           "专家处置与退回"
+        ]
+      }
+    },
+    "/api/v1/submissions/{submission_id}/withdraw": {
+      "post": {
+        "operationId": "apps_reviews_api_submissions_withdraw_task_submission",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "submission_id",
+            "required": true,
+            "schema": {
+              "title": "Submission Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WithdrawalOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Withdraw Task Submission",
+        "tags": [
+          "业务员提交"
         ]
       }
     },
