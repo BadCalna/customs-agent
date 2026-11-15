@@ -585,7 +585,7 @@
         "更新：D6 实际 PostgreSQL 启动/迁移/回退步骤；回交：交接/P12.md。"
       ],
       "verification_command": "make test TASK=P12",
-      "status": "待开始"
+      "status": "模块自验通过，见交接/P12.md"
     },
     {
       "id": "P13",
