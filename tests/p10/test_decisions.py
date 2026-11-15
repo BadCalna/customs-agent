@@ -2,7 +2,7 @@
 import json
 
 from apps.accounts.models import Role
-from apps.reviews.models import AuditEvent, Decision, DecisionItem, Issue, Submission, Task
+from apps.reviews.models import AuditEvent, Confirmation, Decision, DecisionItem, Issue, Submission, SubmissionItem, Task
 
 from .factories import HS_A, HS_B, SubmissionFixture
 
@@ -176,6 +176,35 @@ class DecisionApiTests(SubmissionFixture):
     def test_anonymous_gets_401(self):
         self.client.logout()
         self.assertEqual(self.post().status_code, 401)
+
+    def test_return_issue_must_belong_to_the_submission_being_decided(self):
+        """专家退回 V2 时传入 V1 的商品行必须被拒绝（Jay 评审）。"""
+        from tests.p01.factories import make_item, make_version
+
+        v2 = make_version(self.task, self.supplier, number=2, filename="V2.xlsx")
+        item_v2 = make_item(v2, row=5, name="V2商品")
+        confirmation = Confirmation.objects.create(
+            item=item_v2, revision=1, previous_hs="", confirmed_hs=HS_A,
+            reason="合成确认", created_by=self.operator,
+        )
+        sub2 = Submission.objects.create(
+            task=self.task, version=v2, revision=self.task.revision, created_by=self.operator,
+        )
+        SubmissionItem.objects.create(
+            submission=sub2, item=item_v2, confirmation=confirmation,
+            submitted_hs=HS_A, item_revision=1,
+        )
+        body = {
+            "action": "return", "return_to": "supplier", "reason": "缺资料",
+            "issues": [{"item_id": str(self.item_a.pk), "message": "错挂到 V1 商品行"}],
+        }
+        response = self.client.post(
+            f"/api/v1/submissions/{sub2.pk}/decisions",
+            data=json.dumps(body), content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.json()["error"]["code"], "item_not_in_submission")
+        self.assertEqual(Decision.objects.count(), 0)
 
     def test_idempotent_replay_returns_same_decision(self):
         first = self.post(key="d-1").json()

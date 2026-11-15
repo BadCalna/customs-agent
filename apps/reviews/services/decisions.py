@@ -92,6 +92,15 @@ def _return(user, submission, payload, decision):
     issues = [issue for issue in payload.issues if issue.message.strip()]
     if not issues:
         raise ApiError(422, "missing_issues", "退回必须至少给出一条具体问题，不能只退不写")
+    # 退回问题只能挂到专家正在审的这份提交快照上，不能把 V1 的商品行混进 V2 的退回。
+    line_ids = {str(line.item_id) for line in submission.items.all()}
+    for issue in issues:
+        if issue.item_id and issue.item_id not in line_ids:
+            raise ApiError(
+                422, "item_not_in_submission",
+                "退回问题只能定位到本次提交快照中的商品，不能引用同一任务其它版本的商品行",
+                {"item_id": issue.item_id},
+            )
     return issues
 
 
