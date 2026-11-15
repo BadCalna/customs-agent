@@ -114,3 +114,16 @@ class OperatorReturnTests(SubmissionFixture):
         self.assertEqual(second["issue_ids"], first["issue_ids"])
         self.assertTrue(second["idempotent_replay"])
         self.assertEqual(Issue.objects.count(), 1)
+
+
+class ReturnPermissionExposureTest(SubmissionFixture):
+    def test_operator_allowed_actions_include_task_return(self):
+        self.client.force_login(self.operator)
+        detail = self.client.get(f"/api/v1/tasks/{self.task.pk}").json()
+        self.assertIn("task.return", detail["allowed_actions"])
+
+    def test_expert_and_supplier_do_not_see_task_return(self):
+        for user in (self.expert, self.supplier):
+            self.client.force_login(user)
+            detail = self.client.get(f"/api/v1/tasks/{self.task.pk}").json()
+            self.assertNotIn("task.return", detail["allowed_actions"])

@@ -1,14 +1,13 @@
 """P10 业务员退回：补料/问题回供应商，走 Issue + 审计，不冒充专家决定。
 
-- 业务员退回与提交同属业务员对任务的处置，权限沿用 ``submission.create`` 动作
-  （D3 角色矩阵没有单列"退回"动作，本口径已写入 D3 第 9 节，待 Jay 确认）；
+- 业务员退回复用独立的 ``task.return`` 动作（D3 第 9 节，Jay 2026-11-15 确认单列）；
 - 存在待专家审核的提交时不允许业务员直接退回，避免出现"提交在审、任务又被退回"的双轨；
 - 退回不创建版本、不导出文件、不发通知（B05：导出不等于退回或已发送）。
 """
 from django.db import transaction
 
 from apps.accounts.errors import ApiError
-from apps.accounts.permissions import SUBMIT, get_visible_task, require_action
+from apps.accounts.permissions import RETURN_TASK, get_visible_task, require_action
 
 from ..models import AuditEvent, Issue, Submission, Task
 from ..schemas import TaskReturnOut
@@ -21,7 +20,7 @@ ACTION = "task.return"
 @transaction.atomic
 def return_version(user, task_id: str, payload, idempotency_key: str | None = None) -> dict:
     task = get_visible_task(user, task_id)
-    require_action(user, SUBMIT, task)
+    require_action(user, RETURN_TASK, task)
     task = Task.objects.select_for_update().get(pk=task.pk)
 
     replay = idempotency.begin(user, ACTION, idempotency_key, payload)

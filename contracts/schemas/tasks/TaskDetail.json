@@ -7,7 +7,8 @@
         "version.create",
         "confirmation.write",
         "submission.create",
-        "decision.resolve"
+        "decision.resolve",
+        "task.return"
       ],
       "title": "Action",
       "type": "string"

@@ -98,6 +98,7 @@ class Action(str, Enum):
     CONFIRMATION_WRITE = "confirmation.write"
     SUBMISSION_CREATE = "submission.create"
     DECISION_RESOLVE = "decision.resolve"
+    TASK_RETURN = "task.return"
 
 
 # --- 错误与分页 ---

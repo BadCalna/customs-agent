@@ -20,11 +20,12 @@ UPLOAD_VERSION = "version.create"
 CONFIRM = "confirmation.write"
 SUBMIT = "submission.create"
 DECIDE = "decision.resolve"
+RETURN_TASK = "task.return"
 
 # 角色动作矩阵（D3 第 5 节发布）；空 role 的非业务账号不在表中，没有任何业务动作。
 ROLE_ACTIONS = {
     Role.SUPPLIER: frozenset({READ, UPLOAD_VERSION}),
-    Role.OPERATOR: frozenset({READ, CONFIRM, SUBMIT}),
+    Role.OPERATOR: frozenset({READ, CONFIRM, SUBMIT, RETURN_TASK}),
     Role.EXPERT: frozenset({READ, DECIDE}),
 }
 
