@@ -20,6 +20,11 @@ class ImportGuardTest(SimpleTestCase):
         load = self.source.index("loaddata --ignorenonexistent")
         self.assertLess(guard, load)
 
+    def test_guard_only_counts_business_apps(self):
+        """框架表（auth/contenttypes/迁移记录）不算业务数据，否则空库会被误拒。"""
+        self.assertIn("BUSINESS_APPS", self.source)
+        self.assertIn('"accounts", "reviews", "runs", "notifications"', self.source)
+
     def test_guard_is_explained_as_overwrite_not_error(self):
         self.assertIn("覆盖", self.source)
         self.assertNotIn("会因主键/唯一约束报错", self.source)

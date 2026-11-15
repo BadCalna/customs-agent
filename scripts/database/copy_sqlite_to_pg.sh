@@ -114,9 +114,14 @@ import django
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 django.setup()
 from django.apps import apps
+
+# 只看业务库：migrate 会写入 django_migrations、auth.Permission、contenttypes 等框架行，
+# 把它们算进来会让"刚初始化、还没业务数据"的库被误判为非空。
+BUSINESS_APPS = {"accounts", "reviews", "runs", "notifications"}
 total = 0
 for model in apps.get_models():
-    if model._meta.auto_created:
+    meta = model._meta
+    if meta.auto_created or meta.app_label not in BUSINESS_APPS:
         continue
     total += model._default_manager.count()
     if total:
