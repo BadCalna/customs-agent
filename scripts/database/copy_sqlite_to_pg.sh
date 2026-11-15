@@ -94,14 +94,41 @@ CUSTOMS_DB_BACKEND=sqlite CUSTOMS_SQLITE_PATH="$workcopy" \
 echo "    $(wc -c < "$fixture" | tr -d ' ') 字节"
 
 export CUSTOMS_DB_BACKEND=postgres
-export CUSTOMS_PG_NAME CUSTOMS_PG_USER CUSTOMS_PG_HOST CUSTOMS_PG_PORT
+# pg_env.sh 用的是 PG* 变量名，Django 读 CUSTOMS_PG_*，必须显式映射；
+# 只 export 未赋值的变量等于什么都没导出。
+export CUSTOMS_PG_NAME="$PGDATABASE_NAME"
+export CUSTOMS_PG_USER="$PGROLE"
+export CUSTOMS_PG_HOST="$PGHOST"
+export CUSTOMS_PG_PORT="$PGPORT"
 "$SCRIPT_DIR/pg_ctl.sh" start >/dev/null
 
 if [ "$fresh" = 1 ]; then
   echo "4/5 清空目标库（--fresh）并导入"
   "$python_bin" manage.py flush --noinput
 else
-  echo "4/5 不清库；目标库已有数据时 loaddata 会因主键/唯一约束报错（这是保护，不是缺陷）"
+  echo "4/5 检查目标库为空（loaddata 对相同主键是覆盖，不是报错）"
+  # loaddata 遇到相同主键会更新已有记录，单靠唯一约束不会拦住覆盖，所以必须先显式拒绝非空库。
+  nonempty="$("$python_bin" - <<'PY'
+import os
+import django
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+django.setup()
+from django.apps import apps
+total = 0
+for model in apps.get_models():
+    if model._meta.auto_created:
+        continue
+    total += model._default_manager.count()
+    if total:
+        break
+print(total)
+PY
+)"
+  if [ "$nonempty" != "0" ]; then
+    echo "目标库非空（至少 ${nonempty} 行）：loaddata 会按主键覆盖已有记录，已拒绝导入。" >&2
+    echo "请换一个空库，或确认是本机开发库后加 --fresh 清空再导入。" >&2
+    exit 3
+  fi
 fi
 "$python_bin" manage.py loaddata --ignorenonexistent "$fixture"
 # 整数主键表（auth.Group 等）的序列要跟着实际数据往前走，否则后续插入撞主键。
