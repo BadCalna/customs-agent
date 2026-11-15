@@ -189,16 +189,18 @@ class SubmissionApiTests(TestCase):
         self.client.logout()
         self.assertEqual(self.post().status_code, 401)
 
-    def test_later_edit_does_not_change_frozen_snapshot(self):
+    def test_edit_after_submit_is_rejected_and_snapshot_untouched(self):
         submission_id = self.submit().json()["submission_id"]
-        self.client.patch(
+        response = self.client.patch(
             f"/api/v1/versions/{self.version.pk}/items/{self.item_a.pk}/confirmation",
             data=json.dumps({"confirmed_hs": HS_B, "reason": "提交后改主意", "expected_revision": 1}),
             content_type="application/json",
         )
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json()["error"]["code"], "submission_pending")
         submission = Submission.objects.get(pk=submission_id)
         self.assertEqual(submission.items.get(item=self.item_a).submitted_hs, HS_A)
-        # 新值只进入下一次提交：旧快照与旧执行原样可查。
+        self.assertEqual(Confirmation.objects.filter(item=self.item_a).count(), 1)
         run = Run.objects.get(submission=submission)
         self.assertEqual(run.items.get(item=self.item_a).result["target_hs"], HS_A)
 

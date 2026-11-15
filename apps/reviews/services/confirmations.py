@@ -59,6 +59,12 @@ def write_confirmation(user, version_id: str, item_id: str, payload) -> tuple[Co
             "该商品属于旧文件版本，请切换到最新版本后再修改确认值；旧版本只读回查",
             {"current_version_id": str(latest_version.pk), "item_version_id": str(item.version_id)},
         )
+    if task.stage == Task.Stage.SUBMITTED:
+        raise ApiError(
+            409, "submission_pending",
+            "该版本已提交专家审核，不能再修改确认值；如需修改请等专家退回或走补料重传",
+            {"stage": task.stage},
+        )
     if task.stage == Task.Stage.APPROVED:
         raise ApiError(409, "task_closed", "任务已通过，不能再修改确认值；如需变更请走补料重传")
     if payload.expected_revision != item.revision:
