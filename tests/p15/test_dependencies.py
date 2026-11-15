@@ -76,12 +76,26 @@ class NoExtraDependencyTest(SimpleTestCase):
         self.assertFalse(modules & FORBIDDEN_TOP_LEVEL)
 
     def test_project_dependencies_are_unchanged(self):
+        """P15 不得加依赖；其它任务包的基础设施依赖（如 P12 的 psycopg）不算本包加料。
+
+        基线依赖必须仍在；只允许出现明确登记过的基础设施依赖。
+        """
         project = tomllib.loads((BASE_DIR / "pyproject.toml").read_text(encoding="utf-8"))["project"]
         names = {
-            re.split(r"[<>=!~ ]", dependency, maxsplit=1)[0].lower()
+            re.split(r"[\[<>=!~ ]", dependency, maxsplit=1)[0].lower()
             for dependency in project["dependencies"]
         }
-        self.assertEqual(names, {"django", "django-ninja", "python-dotenv"})
+        baseline = {"django", "django-ninja", "python-dotenv"}
+        infrastructure = {
+            "psycopg", "psycopg-binary", "psycopg2", "psycopg2-binary",
+            "redis", "django-rq",
+        }
+        self.assertLessEqual(baseline, names, f"基线依赖被移除：{sorted(baseline - names)}")
+        self.assertLessEqual(
+            names - baseline,
+            infrastructure,
+            f"出现未登记的依赖：{sorted(names - baseline - infrastructure)}",
+        )
 
     def test_no_vector_store_or_network_client_in_source(self):
         source = MODULE_PATH.read_text(encoding="utf-8").lower()
