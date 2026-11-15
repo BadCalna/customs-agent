@@ -183,3 +183,34 @@ class WithdrawRaceAndIdempotencyTests(WithdrawSubmissionTests):
         self.assertEqual(response.json()["error"]["code"], "idempotency_conflict")
         other.refresh_from_db()
         self.assertEqual(other.status, Submission.Status.PENDING)
+
+
+class LateExpertRunTests(WithdrawSubmissionTests):
+    """迟到执行（队列延后启动）不得抢占当前，也不得挤掉新提交的执行。"""
+
+    def test_late_run_for_withdrawn_submission_is_superseded(self):
+        from apps.runs.inline import execute_expert_check
+
+        self.run.status = Run.Status.QUEUED
+        self.run.is_current = True
+        self.run.save(update_fields=["status", "is_current"])
+
+        self.post()  # 撤回：提交 superseded，旧执行 is_current=False
+
+        newer = Submission.objects.create(
+            task=self.task, version=self.version, revision=self.task.revision + 1, created_by=self.operator,
+        )
+        new_run = Run.objects.create(
+            task=self.task, version=self.version, kind=Run.Kind.EXPERT_CHECK,
+            submission=newer, status=Run.Status.SUCCEEDED, is_current=True,
+        )
+
+        # 旧执行此时才被 worker 捡起
+        execute_expert_check(self.submission, run=self.run)
+
+        self.run.refresh_from_db()
+        new_run.refresh_from_db()
+        self.assertEqual(self.run.status, Run.Status.SUPERSEDED)
+        self.assertFalse(self.run.is_current)
+        self.assertEqual(self.run.items.count(), 0)
+        self.assertTrue(new_run.is_current)  # 新提交的执行没有被挤掉

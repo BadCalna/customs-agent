@@ -22,7 +22,7 @@ from adapters.engines.protocols import (
     get_engine,
 )
 from apps.api.schemas import ResultMode
-from apps.reviews.models import Item
+from apps.reviews.models import Item, Submission
 
 from .models import Run, RunItem
 
@@ -190,6 +190,18 @@ def execute_expert_check(submission, scenarios: dict[str, str] | None = None, tr
             submission=submission, triggered_by=triggered_by,
         )
     else:
+        # 迟到执行（P13 队列延后启动）不得抢占当前：
+        # 提交已被撤回/处置，或同版本已有更新的执行时，本轮直接作废，不写任何行结果。
+        submission.refresh_from_db(fields=["status"])
+        newer_exists = Run.objects.filter(
+            version_id=run.version_id, kind=run.kind, created_at__gt=run.created_at,
+        ).exists()
+        if submission.status != Submission.Status.PENDING or newer_exists:
+            run.status = Run.Status.SUPERSEDED
+            run.is_current = False
+            run.finished_at = timezone.now()
+            run.save(update_fields=["status", "is_current", "finished_at"])
+            return run
         Run.objects.filter(version=run.version, kind=run.kind, is_current=True).exclude(pk=run.pk).update(is_current=False)
         run.status = Run.Status.RUNNING
         run.is_current = True

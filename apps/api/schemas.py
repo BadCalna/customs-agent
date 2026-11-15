@@ -54,6 +54,7 @@ class RunStatus(str, Enum):
     RUNNING = "running"
     SUCCEEDED = "succeeded"
     FAILED = "failed"
+    SUPERSEDED = "superseded"
 
 
 class ComparisonStatus(str, Enum):

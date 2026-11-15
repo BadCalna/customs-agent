@@ -34,6 +34,7 @@ class Run(FixedInputModel):
         RUNNING = "running", "执行中"
         SUCCEEDED = "succeeded", "执行成功"
         FAILED = "failed", "执行失败"
+        SUPERSEDED = "superseded", "已作废"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     task = models.ForeignKey("reviews.Task", on_delete=models.CASCADE, related_name="runs", verbose_name="审核任务")

@@ -64,7 +64,8 @@ class EnumAlignmentTest(SimpleTestCase):
         self.assertEqual({i.value for i in SubmissionStatus}, set(Submission.Status.values))
         self.assertEqual({i.value for i in ImageStatus}, set(ItemImage.Status.values))
         self.assertEqual({i.value for i in RunStatus}, set(Run.Status.values))
-        self.assertEqual({i.value for i in RunStatus}, set(RunItem.Status.values))
+        # 行状态是执行状态的子集：superseded 只发生在整轮执行上，不会出现在单行。
+        self.assertLessEqual(set(RunItem.Status.values), {i.value for i in RunStatus})
 
     def test_actions_match_permission_matrix(self):
         expected = set().union(*ROLE_ACTIONS.values())

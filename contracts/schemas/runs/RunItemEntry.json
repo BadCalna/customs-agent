@@ -87,7 +87,8 @@
         "queued",
         "running",
         "succeeded",
-        "failed"
+        "failed",
+        "superseded"
       ],
       "title": "RunStatus",
       "type": "string"
