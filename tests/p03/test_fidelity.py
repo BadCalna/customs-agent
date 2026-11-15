@@ -42,29 +42,32 @@ class FidelityTests(unittest.TestCase):
         self.assertEqual([a['members'][0]['packing_row'] for a in mapping['associations']], [2,3,4])
 
     def test_result_columns_located_by_labels_at_different_positions(self):
-        labels = (' AI推荐 hsCode ', '业务员确认HS编码', '置信度', '预审结论')
         fields = ('ai_hs', 'confirmed_hs', 'confidence', 'precheck_conclusion')
         values = ('SYNTHETIC_AI', 'SYNTHETIC_CONFIRM', '中', '需核对合成参数')
-        for columns in (('AF', 'AG', 'AH', 'AI'), ('M', 'N', 'O', 'Q'), ('J', 'AF', 'N', 'Z')):
-            with self.subTest(columns=columns):
-                make_fixture(self.source)
-                headers = ''.join(cell(f'{column}1', label) for column, label in zip(columns, labels))
-                data = ''.join(cell(f'{column}2', value) for column, value in zip(columns, values))
-                self.edit_part('xl/worksheets/sheet2.xml', lambda text:
-                    text.replace('</row>', headers + '</row>', 1)
-                        .replace(cell('H2', '0') + '</row>', cell('H2', '0') + data + '</row>', 1))
-                before_hash = sha256(self.source.read_bytes())
-                layout = self.layout()
-                self.assertEqual(layout['fields']['hs'], 'D')
-                for field, column, value in zip(fields, columns, values):
-                    self.assertEqual(layout['fields'][field], column)
-                    self.assertEqual(layout['records'][0]['facts'][field],
-                                     {'value': value, 'cell': f'{column}2'})
-                destination = self.root / ('existing-' + columns[0] + '.xlsx')
-                with self.assertRaisesRegex(FidelityError, 'Result columns already present'):
-                    insert_columns(self.source, destination, layout)
-                self.assertFalse(destination.exists())
-                self.assertEqual(sha256(self.source.read_bytes()), before_hash)
+        for labels in ((' AI推荐 hsCode ', '业务员确认HS编码', '置信度', '预审结论'),
+                       ('AI推荐hscode', '业务员确认Hscode（有变更再填写即可）',
+                        '置信度（物流审核环节参考）', 'AI预审结论（业务员参考）')):
+            for columns in (('AF', 'AG', 'AH', 'AI'), ('M', 'N', 'O', 'Q'),
+                            ('J', 'AF', 'N', 'Z'), ('AF', 'AH', 'AI', 'AG')):
+                with self.subTest(columns=columns, labels=labels):
+                    make_fixture(self.source)
+                    headers = ''.join(cell(f'{column}1', label) for column, label in zip(columns, labels))
+                    data = ''.join(cell(f'{column}2', value) for column, value in zip(columns, values))
+                    self.edit_part('xl/worksheets/sheet2.xml', lambda text:
+                        text.replace('</row>', headers + '</row>', 1)
+                            .replace(cell('H2', '0') + '</row>', cell('H2', '0') + data + '</row>', 1))
+                    before_hash = sha256(self.source.read_bytes())
+                    layout = self.layout()
+                    self.assertEqual(layout['fields']['hs'], 'D')
+                    for field, column, value in zip(fields, columns, values):
+                        self.assertEqual(layout['fields'][field], column)
+                        self.assertEqual(layout['records'][0]['facts'][field],
+                                         {'value': value, 'cell': f'{column}2'})
+                    destination = self.root / ('existing-' + columns[0] + '.xlsx')
+                    with self.assertRaisesRegex(FidelityError, 'Result columns already present'):
+                        insert_columns(self.source, destination, layout)
+                    self.assertFalse(destination.exists())
+                    self.assertEqual(sha256(self.source.read_bytes()), before_hash)
 
     def test_missing_result_columns_reported_and_duplicate_labels_rejected(self):
         layout = self.layout()

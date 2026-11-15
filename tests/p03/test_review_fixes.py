@@ -29,6 +29,21 @@ class ReviewFixTests(unittest.TestCase):
     def layout(self):
         return detect_layout(Workbook(self.source), 'declaration')
 
+    def test_ai_precheck_label_reuses_existing_column_and_rejects_duplicates(self):
+        self.edit('xl/worksheets/sheet2.xml', lambda text:
+                  text.replace('</row>', cell('AG1', 'AI预审结论（业务员参考）') + '</row>', 1))
+        layout = self.layout()
+        self.assertEqual(layout['fields']['precheck_conclusion'], 'AG')
+        self.assertNotIn('missing_column:precheck_conclusion', layout['warnings'])
+        destination = self.root / 'duplicate-precheck.xlsx'
+        with self.assertRaisesRegex(FidelityError, 'Precheck conclusion column already present'):
+            append_precheck_column(self.source, destination, layout)
+        self.assertFalse(destination.exists())
+        self.edit('xl/worksheets/sheet2.xml', lambda text:
+                  text.replace('</row>', cell('AK1', '预审结论') + '</row>', 1))
+        with self.assertRaisesRegex(FidelityError, 'Duplicate semantic header'):
+            self.layout()
+
     def test_incomplete_products_are_retained_with_missing_fields(self):
         rows = ''.join(f'<row r="{number}">{contents}</row>' for number, contents in (
             (8, cell('D8', 'SYNTHETIC_HS')),

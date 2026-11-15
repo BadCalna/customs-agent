@@ -28,7 +28,7 @@ RESULT_ALIASES = {
     "ai_hs": ("AI推荐HScode", "AI推荐HS编码", "AI推荐海关编码"),
     "confirmed_hs": ("业务员确认HScode", "业务员确认HS编码"),
     "confidence": ("置信度",),
-    "precheck_conclusion": ("预审结论",),
+    "precheck_conclusion": ("预审结论", "AI预审结论"),
 }
 
 
