@@ -8,6 +8,8 @@
 
 2026-11-15用户反馈 **WPS 与 Microsoft Excel 均可打开文件**，打开能力已有用户确认。兼容目标为本机 **WPS 12.1.0.29690、Microsoft Excel 2016 16.0.4266.1001**。图片显示/归属、公式重算及另存后重开仍单独待验，不能由“可打开”推断这些项目全部通过；WPS `DISPIMG` 在该Excel版本中的显示尤其需要实测。
 
+**后续用户实测：S-P03-02/03原验收副本在Excel 2016中未显示图片，显示DISPIMG相关内容，该路径图片兼容验收失败。** 已新增`--excel2016-images`静态图片兼容输出：02/03分别转换47/24处公式，原文件保留。用户收到兼容副本后回复“验证通过了 用microsoft excel打开可以了”，Microsoft Excel图片复验记录为用户确认通过；兼容副本的WPS显示、重算和保存重开仍待确认，不扩展为全部兼容验收通过。
+
 | 样本 | 装箱/申报条目 | 表头差异 | 商品图片位置映射 |
 |---|---|---|---|
 | S-P03-01 | 18 / 14 | 装箱页为旧“品名/规格型号”，无别名和独立厂家型号；申报项号在D、要素在AD，无附图表头 | 无可确定的逐商品图片；3个浮图在数据区外，保留为未归属对象 |
@@ -72,7 +74,11 @@ python -m experiments.excel_fidelity.cli "<已有结果列的模板.xlsx>" \
   --sample-id S-P03-01 --output-dir data/private/p03/conclusion-run --add-precheck
 
 # 核心试验的独立验证入口
-python -m unittest tests.p03.test_fidelity tests.p03.test_review_fixes -v
+python -m unittest tests.p03.test_fidelity tests.p03.test_review_fixes tests.p03.test_compat_images -v
+
+# 单独生成静态普通图片兼容副本，不插列、不修改原WPS文件
+python -m experiments.excel_fidelity.cli "<已有附图的模板.xlsx>" \
+  --sample-id S-P03-02 --output-dir data/private/p03/excel2016-new-run --excel2016-images
 
 # 已按主工程D6完成环境准备时
 make test TASK=P03
@@ -100,4 +106,8 @@ python manage.py test tests/p03 --verbosity 2
 
 逐份使用WPS、Excel打开最新试验副本，按本地清单所列位置检查表头，抽查首/中/末条图片、原编码、要素、旧意见、汇总公式和其他页签。须记录具体软件版本、修复提示、错误单元格及图片归属；不以“文件可打开”代替全部检查。详细本地清单在`data/private/p03/验收清单-审查修复版.md`，使用v5副本，不包含在Git中。
 
-若某版本Excel不能显示DISPIMG，保留本格式原件，并评估单独的普通浮图兼容副本或网页图片预览。该替代尚未实现和验收，不能将“图片资源未丢失”等同于Excel已支持。客户端验收未完成前，P20不得承诺双软件保真导出，P04/P05可按已核对的字段及资源映射继续设计。
+Excel 2016原路径失败已由用户实测确认，普通浮图替代现已实现，**兼容副本Microsoft Excel图片复验已获用户确认**，其余客户端项目待完成。`compat_images.py`接受商品附图列内可唯一解析、像素解码通过的直接DISPIMG mode 1（包括共享公式从属行），转为标准DrawingML图片，按原单元格行列居中同比例放置。现有浮图、其他单元格及元数据、原媒体保持，图片函数/缓存只在兼容副本中清空并将原公式及来源记入本地报告。图片为静态显示，不再保留DISPIMG动态行为；列宽换算采用近似字体指标并留内边距。
+
+正交旋转/翻转通过派生PNG保留显示方向，原媒体不删除。条件/动态表达式、模式非1、缺失/损坏或未解码资源、隐藏或合并的图片格、裁剪/复杂效果、宏/签名/计算链及共享绘图等明确拒绝，不猜图。仅向新文件发布，审计失败或源文件途中变化不发布；本模式不插列、追加结论或填写业务结果。
+
+新增9项兼容测试，Django入口合计48项通过，涵盖共享图、新旧drawing、旋转、拒绝路径、覆盖保护及独立损坏审计。02/03本地输出为`data/private/p03/excel2016-compat-v1/`，结构审计分别核对5,202/3,976个原单元格、58/30个原媒体部件；分别只修改目标页、drawing及其关系三个原部件，02额外新增1个旋转PNG，其他部件字节不变。图片转换/结构审计仍不能证明原生显示；P20在客户端验收完成前不能承诺双软件保真导出。
