@@ -186,6 +186,21 @@ class LayoutTest(WorkbookTestCase):
         self.assertEqual([item["value"] for item in extraction.records[0].unmapped], [])
         self.assertEqual([item["value"] for item in extraction.records[1].unmapped], ["历史说明"])
 
+    def test_single_total_formula_row_is_not_a_product(self):
+        # 审阅复现：一条商品 + 一行只有 SUM(F2:F2) 的行，应只有 1 个商品，合计行进报告。
+        package = build_package(
+            declaration_rows=[("SYN-C", "1", "合成甲", "0000000000", "用途", "0.13")],
+            include_packing=False,
+        )
+        sheet = sheet_of(package, DECLARATION_SHEET)
+        sheet.formula("F3", "SUM(F2:F2)")
+        extraction = extract_declarations(self.build(package))
+        self.assertEqual(len(extraction.records), 1)
+        self.assertEqual(
+            [(item["row"], item["reason"]) for item in extraction.non_item_rows],
+            [(3, "summary_formula_only")],
+        )
+
     def test_labelled_opinion_column_keeps_original_text(self):
         # 有明确表头的“历史意见”属于 D2 历史上下文，原文保留（含 OK 字样），不按旧 OK 列丢弃。
         package = build_package(

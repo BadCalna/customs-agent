@@ -186,7 +186,14 @@ def locate_packing_layout(
     columns = dict(layout.columns)
     headers = dict(layout.headers)
     warnings = list(layout.warnings)
-    if "primary_name" not in columns:
+    # 主品名列本身有歧义（例如两个“合同第一条品名”列冲突）时，
+    # 不允许借用普通“品名”列来消歧：候选保留在 ambiguous_columns，商品行按缺主品名待核。
+    primary_name_ambiguous = any(
+        column.field == "primary_name" for column in layout.ambiguous_columns
+    )
+    if primary_name_ambiguous:
+        warnings.append("ambiguous_primary_name:no_fallback_to_name")
+    elif "primary_name" not in columns:
         if "name" not in columns:
             raise SemanticLayoutError(
                 "missing_required_columns",
@@ -234,7 +241,11 @@ def extract_packing(
 # --------------------------------------------------------------------------- 关联结果
 @dataclass(frozen=True)
 class MemberLink:
-    """一条申报成员与它命中的装箱行（未命中时 ``packing_row`` 为 0）。"""
+    """一条申报成员与它命中的装箱行（未命中时 ``packing_row`` 为 0）。
+
+    ``ownership_ambiguous=True`` 表示这条装箱行被多条申报行争抢：只作候选保留，
+    不进入正式落库输出（``member_values()``），由人工确认归属后再处理。
+    """
 
     contract_no: str
     item_no: str
@@ -243,6 +254,7 @@ class MemberLink:
     packing_row: int
     facts: Mapping[str, FieldFact] = field(default_factory=dict)
     issues: tuple[Issue, ...] = ()
+    ownership_ambiguous: bool = False
 
     @property
     def matched(self) -> bool:
@@ -286,15 +298,51 @@ class DeclarationLink:
     def matched_members(self) -> tuple[MemberLink, ...]:
         return tuple(member for member in self.members if member.matched)
 
+    @property
+    def confirmed_members(self) -> tuple[MemberLink, ...]:
+        """归属明确、可以落 ``ItemMember`` 的成员；归属歧义的只作候选。"""
+        return tuple(
+            member for member in self.matched_members if not member.ownership_ambiguous
+        )
+
     def item_values(self) -> dict:
-        """映射到 ``reviews.Item`` 的已有字段；``version`` 由 P06 补。"""
+        """映射到 ``reviews.Item`` 的已有字段；``version`` 由 P06 补。
+
+        ``attributes`` 除结构化属性外，还带保留的历史文字：
+        - ``existing_opinion``：有表头的“历史意见/审核意见”（含来源单元格）；
+        - ``unmapped_columns``：未识别列里保留下来的原文（旧 OK 已在上游过滤），
+          每条含列、表头、单元格与值，保证 P06 落库后页面仍能查到这些备注。
+        """
         facts = self.record.facts
+        attributes = dict(self.record.attributes)
+        if "existing_opinion" in facts and facts["existing_opinion"].filled:
+            fact = facts["existing_opinion"]
+            attributes["existing_opinion"] = {
+                "value": fact.value,
+                "cell": fact.cell,
+                "column": fact.column,
+                "header": fact.header,
+                "sheet": self.record.sheet,
+            }
+        unmapped = [
+            {
+                "column": item.get("column", ""),
+                "header": item.get("header", ""),
+                "cell": item.get("cell", ""),
+                "value": item.get("value", ""),
+                "sheet": self.record.sheet,
+            }
+            for item in self.record.unmapped
+            if str(item.get("value", "")).strip()
+        ]
+        if unmapped:
+            attributes["unmapped_columns"] = unmapped
         return {
             "source_sheet": self.record.sheet,
             "source_row": self.record.row,
             "source_cells": self.record.source_cells,
             "name": facts["name"].value if "name" in facts else "",
-            "attributes": dict(self.record.attributes),
+            "attributes": attributes,
             "supplier_hs_raw": facts["hs"].value if "hs" in facts else "",
             "supplier_elements_raw": (
                 facts["elements"].value if "elements" in facts else ""
@@ -305,7 +353,11 @@ class DeclarationLink:
         }
 
     def member_values(self) -> tuple[dict, ...]:
-        """映射到 ``reviews.ItemMember``（只含已命中的装箱行；未命中见问题列表）。"""
+        """映射到 ``reviews.ItemMember``。
+
+        只输出归属明确的成员；多条申报行争抢同一装箱行时，该装箱行不出现在这里，
+        候选与来源仍保留在 ``members`` 供人工核对（避免同一装箱行被两个商品重复采用）。
+        """
         return tuple(
             {
                 "relation_type": "packing",
@@ -314,7 +366,7 @@ class DeclarationLink:
                 "contract_no": member.contract_no,
                 "item_no": member.item_no,
             }
-            for member in self.matched_members
+            for member in self.confirmed_members
         )
 
     def as_dict(self) -> dict:
@@ -351,18 +403,44 @@ class DeclarationMemberMap:
     def link(self, row: int) -> DeclarationLink | None:
         return next((link for link in self.links if link.row == row), None)
 
+    @property
+    def blocking_issues(self) -> tuple[Issue, ...]:
+        """上传阶段必须拒绝的问题（资料笔误，无法可靠建立商品或关联）。
+
+        Jay 2026-11-16 口径：项号倒序、无法解析、合同/项号缺失等属于供应商资料错误，
+        应在**上传时**就报出来，不能先建任务再当行级待核。
+        """
+        found: list[Issue] = [issue for issue in self.issues if issue.blocking]
+        for link in self.links:
+            found.extend(issue for issue in link.issues if issue.blocking)
+            found.extend(issue for issue in link.record.issues if issue.blocking)
+        # 同一个问题既可能在申报行记录上、也会在关联结果里出现，按来源单元格去重。
+        unique: dict[tuple[str, str, str], Issue] = {}
+        for issue in found:
+            unique.setdefault((issue.code, issue.sheet, issue.cell), issue)
+        return tuple(unique.values())
+
+    @property
+    def ready_for_import(self) -> bool:
+        """``False`` 时 P06 不应创建任务/版本，应按上传校验错误返回问题清单。"""
+        return not self.blocking_issues
+
     def as_dict(self) -> dict:
         return {
             "packing": self.packing.as_dict(),
             "declaration": self.declaration.as_dict(),
             "links": [link.as_dict() for link in self.links],
             "issues": [issue.as_dict() for issue in self.issues],
+            "ready_for_import": self.ready_for_import,
+            "blocking_issues": [issue.as_dict() for issue in self.blocking_issues],
             "summary": {
                 "declaration_rows": len(self.declaration.records),
                 "packing_rows": len(self.packing.records),
                 "identified": self.identified_count,
                 "requires_review": self.requires_review_count,
                 "task_issues": len(self.issues),
+                "blocking_issues": len(self.blocking_issues),
+                "ready_for_import": self.ready_for_import,
             },
             "meaning": "位置与成员映射，不代表已完成 HS 归类或预审",
         }
@@ -383,6 +461,8 @@ def _issue(
     code: str,
     message: str,
     *,
+    severity: str = "warning",
+    blocking: bool = False,
     details: Mapping[str, Any] | None = None,
 ) -> Issue:
     """按字段所在列定位问题单元格；字段缺失时退回字段名，保证仍能定位到页签+位置。"""
@@ -395,6 +475,8 @@ def _issue(
         cell=f"{column}{record.row}" if re.fullmatch(r"[A-Z]{1,3}", column) else column,
         row=record.row,
         field=field,
+        severity=severity,
+        blocking=blocking,
         details=dict(details or {}),
     )
 
@@ -436,7 +518,10 @@ def link_declarations(
                 )
         except KeyParseError as exc:
             issues.append(
-                _issue(record, _field_for(exc.code), exc.code, str(exc))
+                _issue(
+                    record, _field_for(exc.code), exc.code, str(exc),
+                    severity="error", blocking=True,
+                )
             )
             continue
         index[(contract, normalized(members[0]))].append(record)
@@ -455,7 +540,10 @@ def link_declarations(
             contract, contract_raw = contract_key(_value(record, "contract"))
         except KeyParseError as exc:
             link_issues.append(
-                _issue(record, _field_for(exc.code), exc.code, str(exc))
+                _issue(
+                    record, _field_for(exc.code), exc.code, str(exc),
+                    severity="error", blocking=True,
+                )
             )
 
         item_members: list[str] | None = None
@@ -463,7 +551,10 @@ def link_declarations(
             item_members = parse_items(_value(record, "item"))
         except KeyParseError as exc:
             link_issues.append(
-                _issue(record, _field_for(exc.code), exc.code, str(exc))
+                _issue(
+                    record, _field_for(exc.code), exc.code, str(exc),
+                    severity="error", blocking=True,
+                )
             )
 
         if contract is not None and item_members is not None:
@@ -482,12 +573,16 @@ def link_declarations(
                         )
                     )
                 if len({_signature(candidate) for candidate in candidates}) > 1:
+                    # Jay 2026-11-16：同合同项多条装箱行按“同一商品分多箱”处理，
+                    # 申报行只保留一条、装箱行全部作为成员；事实差异只作提示，不阻断、不选边。
                     link_issues.append(
                         _issue(
                             record,
                             "item",
-                            f"same_key_different_facts:{item}",
-                            f"合同 {contract_raw} 项号 {item} 对应多条装箱行且事实不同，不选一条",
+                            f"packing_members_same_item:{item}",
+                            f"合同 {contract_raw} 项号 {item} 对应 "
+                            f"{len(candidates)} 条装箱行，按同一商品分箱处理；申报行保留一条，差异仅提示",
+                            severity="info",
                             details={
                                 "contract_no": contract_raw,
                                 "item": item,
@@ -539,6 +634,12 @@ def link_declarations(
         for entry in pending:
             if entry["record"].row not in claimed:
                 continue
+            # 同一装箱行被多条申报行争抢：成员只作候选，不进入正式落库输出。
+            entry["members"] = [
+                replace(member, ownership_ambiguous=True)
+                if member.item_no == key[1] else member
+                for member in entry["members"]
+            ]
             entry["issues"].append(
                 _issue(
                     entry["record"],
@@ -562,7 +663,8 @@ def link_declarations(
             issues=tuple(entry["issues"]),
             status=(
                 "requires_review"
-                if entry["issues"] or entry["record"].issues
+                if any(issue.severity != "info" for issue in entry["issues"])
+                or entry["record"].issues
                 else "identified"
             ),
             conflicting_declaration_rows=tuple(sorted(entry["conflicting"])),

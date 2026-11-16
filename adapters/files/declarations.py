@@ -178,7 +178,12 @@ def field_matches(value: str, alias: str) -> bool:
 # --------------------------------------------------------------------------- 问题与错误
 @dataclass(frozen=True)
 class Issue:
-    """行级或任务级问题；``sheet`` + ``cell`` 必须能定位回原表。"""
+    """行级或任务级问题；``sheet`` + ``cell`` 必须能定位回原表。
+
+    ``severity``：``info`` 只作提示（不改变识别状态）、``warning`` 需人工核对、
+    ``error`` 是资料错误。``blocking=True`` 表示上传阶段必须拒绝该文件（P06 据此
+    在创建任务/版本前报错，见 Jay 2026-11-16 口径：项号倒序/无法解析之类按笔误处理）。
+    """
 
     code: str
     message: str
@@ -186,6 +191,8 @@ class Issue:
     cell: str = ""
     row: int = 0
     field: str = ""
+    severity: str = "warning"
+    blocking: bool = False
     details: Mapping[str, Any] = dataclass_field(default_factory=dict)
 
     def as_dict(self) -> dict:
@@ -196,6 +203,8 @@ class Issue:
             "cell": self.cell,
             "row": self.row,
             "field": self.field,
+            "severity": self.severity,
+            "blocking": self.blocking,
             "details": dict(self.details),
         }
 
@@ -717,14 +726,17 @@ def _summary_reason(
     strong_fields: Sequence[str],
 ) -> str | None:
     """整行只有汇总本表前序区域的公式、或写成“合计”行时，判为汇总而不是商品。"""
-    strong = [facts[name] for name in strong_fields if name in facts]
-    if any(fact.filled for fact in strong):
-        return None
     cells = [cell for cell in sheet.cells.values() if cell.row == row and cell.has_content]
-    if len(cells) > 1 and all(
+    # 整行所有非空单元格都是“汇总本表前序区域”的公式（哪怕只有一格 SUM）就是合计行。
+    # 必须先于强事实判断：合计公式本身（例如退税列的 SUM）会让字段“有内容”，
+    # 但不能据此把合计行当成商品；有合同号/项号/品名的行不会走到这里。
+    if cells and all(
         _preceding_total(cell, layout.header_row, row) for cell in cells
     ):
         return "summary_formula_only"
+    strong = [facts[name] for name in strong_fields if name in facts]
+    if any(fact.filled for fact in strong):
+        return None
     name_field = "primary_name" if layout.role == "packing" else "name"
     name_fact = facts.get(name_field)
     if name_fact is not None and re.fullmatch(
@@ -851,6 +863,7 @@ def extract_records(
             fact = facts.get(field)
             if fact is not None and fact.value.strip():
                 continue
+            key_field = field in ("contract", "item")
             issues.append(
                 Issue(
                     code=f"missing_{field}",
@@ -859,6 +872,8 @@ def extract_records(
                     cell=f"{layout.columns.get(field, '')}{row}",
                     row=row,
                     field=field,
+                    severity="error" if key_field else "warning",
+                    blocking=key_field,
                 )
             )
         unmapped = _unmapped_values(sheet, layout, row)

@@ -306,6 +306,13 @@ class LinkTest(WorkbookTestCase):
             [(issue.code, issue.cell) for issue in link.issues],
             [("reversed_item_range", "B2")],
         )
+        # Jay 2026-11-16：倒序项号按笔误处理，上传时就该拒绝（P06 不建任务）。
+        self.assertTrue(link.issues[0].blocking)
+        self.assertEqual(link.issues[0].severity, "error")
+        self.assertFalse(mapping.ready_for_import)
+        self.assertEqual(
+            [issue.code for issue in mapping.blocking_issues], ["reversed_item_range"]
+        )
         self.assertEqual(
             [issue.code for issue in mapping.issues], ["unlinked_packing_row"] * 3
         )
@@ -331,8 +338,13 @@ class LinkTest(WorkbookTestCase):
         self.assertEqual(
             [issue.cell for issue in mapping.links[1].issues], ["B3"]
         )
+        self.assertFalse(mapping.ready_for_import)
+        self.assertEqual(
+            [issue.code for issue in mapping.blocking_issues],
+            ["unparsed_item_list", "duplicate_item_in_list"],
+        )
 
-    def test_same_key_different_facts_lists_conflicting_rows(self):
+    def test_same_item_with_multiple_packing_rows_is_one_commodity_in_boxes(self):
         workbook = self.build(
             build_package(
                 declaration_rows=[row("SYN-C", "2", "合成乙")],
@@ -344,12 +356,28 @@ class LinkTest(WorkbookTestCase):
         )
         mapping = map_workbook(workbook)
         link = mapping.links[0]
+        # Jay 2026-11-16 口径：同合同项多条装箱行 = 同一商品分多箱，
+        # 申报行只保留一条，装箱行全部作成员；事实差异只作 info 提示，不改识别状态。
         self.assertEqual([member.packing_row for member in link.members], [5, 6])
-        self.assertEqual(link.status, "requires_review")
+        self.assertEqual(link.status, "identified")
         issue = link.issues[0]
-        self.assertEqual(issue.code, "same_key_different_facts:2")
+        self.assertEqual(issue.code, "packing_members_same_item:2")
+        self.assertEqual(issue.severity, "info")
+        self.assertFalse(issue.blocking)
         self.assertEqual(issue.details["packing_rows"], [5, 6])
         self.assertEqual(issue.details["differing_fields"], ["specification"])
+        self.assertTrue(mapping.ready_for_import)
+
+    def test_missing_item_number_blocks_upload(self):
+        workbook = self.build(
+            build_package(
+                declaration_rows=[row("SYN-C", None, "合成甲")],
+                packing_rows=[pack("SYN-C", "1", "合成甲", quantity=1, unit="个")],
+            )
+        )
+        mapping = map_workbook(workbook)
+        self.assertFalse(mapping.ready_for_import)
+        self.assertEqual([issue.code for issue in mapping.blocking_issues], ["missing_item"])
 
     def test_same_key_claimed_by_two_declarations(self):
         workbook = self.build(
@@ -374,6 +402,63 @@ class LinkTest(WorkbookTestCase):
         self.assertEqual(first.issues[0].details["declaration_rows"], [2, 3])
         self.assertEqual(first.conflicting_declaration_rows, (3,))
         self.assertEqual(second.conflicting_declaration_rows, (2,))
+
+    def test_conflicting_primary_name_columns_do_not_fall_back_to_name(self):
+        workbook = self.build(
+            build_package(
+                declaration_rows=[row("SYN-C", "2", "合成乙")],
+                packing_headers=("合同号", "合同项号", "合同第一条品名", "合同第一条品名", "品名", "规格"),
+                packing_rows=[("SYN-C", "2", "主名甲", "主名乙", "合成乙", "规格B")],
+            )
+        )
+        mapping = map_workbook(workbook)
+        layout = mapping.packing.layout
+        self.assertIn("ambiguous_primary_name:no_fallback_to_name", layout.warnings)
+        self.assertNotIn("legacy_primary_name_from:品名", layout.warnings)
+        self.assertEqual(
+            [column.header_cell for column in layout.ambiguous_columns], ["C4", "D4"]
+        )
+        record = mapping.packing.records[0]
+        self.assertEqual(record.status, "requires_review")
+        self.assertEqual([issue.code for issue in record.issues], ["missing_primary_name"])
+        # 两个冲突列的原文都保留下来供人工核对，没有借用“品名”列冒充主品名。
+        self.assertEqual([item["value"] for item in record.unmapped], ["主名甲", "主名乙"])
+
+    def test_contested_packing_row_stays_candidate_not_written(self):
+        workbook = self.build(
+            build_package(
+                declaration_rows=[
+                    row("SYN-C", "2", "合成乙"),
+                    row("SYN-C", "2", "合成乙（另一行）"),
+                ],
+                packing_rows=[
+                    pack("SYN-C", "2", "合成乙", specification="规格A", quantity=10, unit="个")
+                ],
+            )
+        )
+        mapping = map_workbook(workbook)
+        for link in mapping.links:
+            # 归属有歧义的装箱行只保留候选与来源，不进入正式落库输出。
+            self.assertEqual(link.member_values(), ())
+            self.assertEqual([member.packing_row for member in link.members], [5])
+            self.assertTrue(all(member.ownership_ambiguous for member in link.members))
+
+    def test_item_values_keep_retained_comments_with_source(self):
+        headers = ("采购合同号", "合同项号", "品名", "海关编码", "申报要素", None, "历史意见")
+        package = build_package(
+            declaration_headers=headers,
+            declaration_rows=[("SYN-C", "1", "合成甲", "0000000000", "用途", "历史备注", "旧意见")],
+            packing_rows=[],
+        )
+        link = map_workbook(self.build(package)).links[0]
+        attributes = link.item_values()["attributes"]
+        self.assertEqual(attributes["existing_opinion"]["value"], "旧意见")
+        self.assertEqual(attributes["existing_opinion"]["cell"], "G2")
+        self.assertEqual(attributes["existing_opinion"]["sheet"], DECLARATION_SHEET)
+        self.assertEqual(attributes["unmapped_columns"][0]["value"], "历史备注")
+        self.assertEqual(attributes["unmapped_columns"][0]["cell"], "F2")
+        self.assertEqual(attributes["unmapped_columns"][0]["column"], "F")
+        self.assertEqual(attributes["unmapped_columns"][0]["sheet"], DECLARATION_SHEET)
 
     def test_unlinked_packing_row_is_a_task_issue(self):
         workbook = self.build(
