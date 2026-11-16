@@ -60,16 +60,23 @@ ENV_TARIFF_PATH = "CUSTOMS_TARIFF_PATH"
 _HSPACE = re.compile(r"[\s.\-‐‑–—_]+")
 #: 不可见/排版字符（含零宽空格、BOM、NBSP、各类空白），用于“去空白后非空”校验。
 def _strip_invisible(value: str | None) -> str:
-    """去掉不可见字符；按 Unicode 类别处理，避免枚举范围漏掉 U+2060/U+2063。"""
+    """返回可见基字符，仅用于“去空白后非空”判断。
+
+    不能只枚举已知零宽字符：`U+034F`（组合字素连接符）和 `U+E0100`（补充变体
+    选择符）属于 `Mn`，还有 Hangul filler、tag 字符等默认忽略项。这里按 Unicode
+    类别去掉空白、格式/控制/分隔符与所有组合类字符（Mn/Mc/Me），再显式排除
+    Hangul filler 与 tag/变体补充区，避免漏掉新的不可见码位。
+    """
 
     text = "" if value is None else value
     kept: list[str] = []
     for char in text:
+        code = ord(char)
         if char.isspace() or char in "\u115f\u1160\u3164\uffa0":
             continue
-        if unicodedata.category(char) in {"Cf", "Cc", "Zs", "Zl", "Zp"}:
+        if unicodedata.category(char) in {"Cf", "Cc", "Zs", "Zl", "Zp", "Mn", "Mc", "Me"}:
             continue
-        if "\ufe00" <= char <= "\ufe0f":  # variation selectors，单独不可见
+        if 0xE0000 <= code <= 0xE0FFF:  # tags / variation selectors supplement
             continue
         kept.append(char)
     return "".join(kept)

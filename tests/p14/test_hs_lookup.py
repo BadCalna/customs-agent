@@ -126,6 +126,28 @@ class HsLookupTest(SimpleTestCase):
         self.assertIs(result.evidence_status, EvidenceStatus.QUERY_FAILED)
         self.assertIsNone(result.code)
 
+
+    def test_invisible_only_source_is_query_failed_in_memory_path(self):
+        base = tariff_code()
+        for char in ("\u034f", "\U000e0100"):
+            with self.subTest(char=char):
+                store = tariff_store(
+                    codes=[
+                        tariff_code(
+                            source={**base["source"], "document": char, "locator": char}
+                        )
+                    ]
+                )
+                result = HsLookupSource(store, clock=FIXED_CLOCK).lookup(
+                    HsQuery(
+                        hs_code_raw="8544422900",
+                        basis=QueryBasis(declaration_date="2026-05-20"),
+                    )
+                )
+                self.assertIs(result.query_status, QueryStatus.SOURCE_UNREADABLE)
+                self.assertIs(result.evidence_status, EvidenceStatus.QUERY_FAILED)
+                self.assertIsNone(result.code)
+
     def test_no_validity_basis_is_unknown_not_effective(self):
         store = tariff_store(
             codes=[tariff_code()],
@@ -352,7 +374,7 @@ class HsLookupTest(SimpleTestCase):
             SourceRef(document="\u200b", locator="x")
         with self.assertRaises(ValidationError):
             SourceRef(document="x", locator="\ufeff")
-        for char in ("\u2060", "\u2063"):
+        for char in ("\u2060", "\u2063", "\u034f", "\U000e0100"):
             with self.subTest(char=char):
                 with self.assertRaises(ValidationError):
                     SourceRef(document=char, locator="x")

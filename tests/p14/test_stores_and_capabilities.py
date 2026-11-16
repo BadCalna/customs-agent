@@ -135,6 +135,9 @@ class JsonStoreTest(SimpleTestCase):
             lambda payload: payload["codes"][0].update(effective_to="not-a-date"),
             lambda payload: payload["codes"][2].pop("merged_to"),
             lambda payload: payload["codes"][0]["source"].pop("locator"),
+            lambda payload: payload["codes"][0]["source"].update(
+                document="\u034f", locator="\u034f"
+            ),
         ]
         for mutate in cases:
             with self.subTest(mutate=mutate):
