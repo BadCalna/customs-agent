@@ -364,6 +364,168 @@ class StagingTests(StorageTestCase):
         )
         self.assertEqual(again.relative_path, results[0].relative_path)
 
+    def test_slow_publisher_after_staged_check_still_returns_fast_result(self):
+        """慢调用越过暂存存在检查后暂停，快调用完成发布并清理，慢调用仍须成功。"""
+        staged = self.stage()
+        slow_paused = threading.Event()
+        fast_done = threading.Event()
+        results, errors = {}, []
+
+        def hook(stage, token, details):
+            if stage == "after_staged_check" and threading.current_thread().name == "slow":
+                slow_paused.set()
+                if not fast_done.wait(10):
+                    raise AssertionError("快调用未在超时内完成")
+
+        def slow():
+            try:
+                results["slow"] = storage.publish_staged_original(
+                    self.root, staged.token, task_id=self.task_id,
+                    version_id=self.version_id, filename="合成模板.xlsx",
+                )
+            except BaseException as exc:  # noqa: BLE001
+                errors.append(exc)
+
+        def fast():
+            try:
+                if not slow_paused.wait(10):
+                    raise AssertionError("慢调用未到达暂停点")
+                results["fast"] = storage.publish_staged_original(
+                    self.root, staged.token, task_id=self.task_id,
+                    version_id=self.version_id, filename="合成模板.xlsx",
+                )
+            except BaseException as exc:  # noqa: BLE001
+                errors.append(exc)
+            finally:
+                fast_done.set()
+
+        with patch.object(storage, "_PUBLISH_HOOK", hook):
+            slow_thread = threading.Thread(target=slow, name="slow")
+            fast_thread = threading.Thread(target=fast, name="fast")
+            slow_thread.start()
+            fast_thread.start()
+            slow_thread.join(timeout=15)
+            fast_thread.join(timeout=15)
+        self.assertEqual(errors, [])
+        self.assertEqual(results["slow"].relative_path, results["fast"].relative_path)
+        self.assertEqual(results["slow"].sha256, staged.sha256)
+        self.assertEqual(
+            len([path for path in (self.root / "tasks").rglob("*") if path.is_file()]), 1,
+        )
+
+    def test_publish_rechecks_receipt_when_staged_read_is_storage_unreadable(self):
+        """文件存在检查通过后、打开文件时被清理：storage_unreadable 也要回查回执。"""
+        first = self.stage()
+        other = self.stage()
+        stored = storage.publish_staged_original(
+            self.root, other.token, task_id=self.task_id,
+            version_id=self.version_id, filename="合成模板.xlsx",
+        )
+        receipt = {
+            "token": first.token,
+            "task_id": self.task_id,
+            "version_id": self.version_id,
+            "relative_path": stored.relative_path,
+            "sha256": first.sha256,
+            "size": first.size,
+            "suffix": ".xlsx",
+            "display_name": "合成模板.xlsx",
+        }
+        real_read_bytes = storage.read_bytes
+
+        def fake_read_bytes(root, relative_path, **kwargs):
+            if relative_path == first.relative_path:
+                storage._write_receipt(
+                    root, f"incoming/{first.token}.json", receipt,
+                )
+                raise StorageError("storage_unreadable", "模拟打开瞬间被另一发布清理")
+            return real_read_bytes(root, relative_path, **kwargs)
+
+        with patch.object(storage, "read_bytes", side_effect=fake_read_bytes):
+            result = storage.publish_staged_original(
+                self.root, first.token, task_id=self.task_id,
+                version_id=self.version_id, filename="合成模板.xlsx",
+            )
+        self.assertEqual(result.relative_path, stored.relative_path)
+        self.assertEqual(result.sha256, first.sha256)
+
+    def test_publish_binding_without_receipt_completes_after_crash(self):
+        """绑定已写、回执未写（前一次崩溃）时，重放应继续完成发布。"""
+        staged = self.stage()
+        storage._write_binding(
+            self.root, staged.token, task_id=self.task_id, version_id=self.version_id,
+        )
+        stored = storage.publish_staged_original(
+            self.root, staged.token, task_id=self.task_id,
+            version_id=self.version_id, filename="合成模板.xlsx",
+        )
+        self.assertTrue(stored.created)
+        self.assertTrue(storage.exists(self.root, stored.relative_path))
+
+    def test_concurrent_publish_to_different_versions_binds_only_one_target(self):
+        """同一 token 并发发布到 V1/V2：只有一个成功，失败目标不产生正式文件。"""
+        staged = self.stage()
+        other_version = "33333333-3333-4333-8333-333333333333"
+        barrier = threading.Barrier(2)
+        results, errors = {}, []
+
+        def hook(stage, token, details):
+            if stage == "after_staged_check":
+                barrier.wait(timeout=10)
+
+        def worker(name, version_id):
+            try:
+                results[name] = storage.publish_staged_original(
+                    self.root, staged.token, task_id=self.task_id,
+                    version_id=version_id, filename="合成模板.xlsx",
+                )
+            except BaseException as exc:  # noqa: BLE001
+                errors.append((name, exc))
+
+        with patch.object(storage, "_PUBLISH_HOOK", hook):
+            threads = [
+                threading.Thread(target=worker, args=("v1", self.version_id)),
+                threading.Thread(target=worker, args=("v2", other_version)),
+            ]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join(timeout=15)
+
+        self.assertEqual(len(results), 1)
+        self.assertEqual(len(errors), 1)
+        self.assertEqual(errors[0][1].code, "stage_publish_conflict")
+        winner_name, winner_stored = next(iter(results.items()))
+        loser_version = other_version if winner_name == "v1" else self.version_id
+        self.assertIn(self.version_id if winner_name == "v1" else other_version,
+                      winner_stored.relative_path)
+        self.assertFalse((self.root / "tasks" / self.task_id / "versions" / loser_version).exists())
+        with self.assertRaises(StorageError):
+            storage.publish_staged_original(
+                self.root, staged.token, task_id=self.task_id,
+                version_id=loser_version, filename="合成模板.xlsx",
+            )
+        again = storage.publish_staged_original(
+            self.root, staged.token, task_id=self.task_id,
+            version_id=self.version_id if winner_name == "v1" else other_version,
+            filename="合成模板.xlsx",
+        )
+        self.assertEqual(again.relative_path, winner_stored.relative_path)
+
+    def test_binding_target_mismatch_rejected_before_formal_write(self):
+        staged = self.stage()
+        other_version = "33333333-3333-4333-8333-333333333333"
+        storage._write_binding(
+            self.root, staged.token, task_id=self.task_id, version_id=other_version,
+        )
+        with self.assertRaises(StorageError) as caught:
+            storage.publish_staged_original(
+                self.root, staged.token, task_id=self.task_id,
+                version_id=self.version_id, filename="合成模板.xlsx",
+            )
+        self.assertEqual(caught.exception.code, "stage_publish_conflict")
+        self.assertFalse((self.root / "tasks").exists())
+
     def test_publish_tolerates_staged_cleanup_by_other_publisher(self):
         staged = self.stage()
         real_write_receipt = storage._write_receipt
