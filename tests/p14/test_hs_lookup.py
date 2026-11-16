@@ -113,6 +113,31 @@ class HsLookupTest(SimpleTestCase):
         self.assertFalse(result.declaration_ready)
         self.assertIn("HS_VERSION_UNVERIFIED", [item.code for item in result.issues])
 
+
+    def test_invalid_source_retrieved_at_is_query_failed_not_exception(self):
+        base = tariff_code()
+        store = tariff_store(
+            codes=[tariff_code(source={**base["source"], "retrieved_at": "2026/11/16"})]
+        )
+        result = HsLookupSource(store, clock=FIXED_CLOCK).lookup(
+            HsQuery(hs_code_raw="8544422900", basis=QueryBasis(declaration_date="2026-05-20"))
+        )
+        self.assertIs(result.query_status, QueryStatus.SOURCE_UNREADABLE)
+        self.assertIs(result.evidence_status, EvidenceStatus.QUERY_FAILED)
+        self.assertIsNone(result.code)
+
+    def test_no_validity_basis_is_unknown_not_effective(self):
+        store = tariff_store(
+            codes=[tariff_code()],
+            versions=[{"version": "2026", "effective_from": "2026-01-01", "effective_to": "2026-12-31"}],
+        )
+        result = HsLookupSource(store, clock=FIXED_CLOCK).lookup(
+            HsQuery(hs_code_raw="8544422900", basis=QueryBasis(declaration_date="2027-05-20"))
+        )
+        self.assertIs(result.version.status.value, "unverified")
+        self.assertIs(result.effective_status, EffectiveStatus.UNKNOWN)
+        self.assertFalse(result.declaration_ready)
+
     def test_no_basis_does_not_guess_between_multiple_versions(self):
         codes = [tariff_code(version="2025"), tariff_code(version="2026")]
         result = self.lookup(store=tariff_store(codes=codes), basis=QueryBasis())
@@ -327,6 +352,12 @@ class HsLookupTest(SimpleTestCase):
             SourceRef(document="\u200b", locator="x")
         with self.assertRaises(ValidationError):
             SourceRef(document="x", locator="\ufeff")
+        for char in ("\u2060", "\u2063"):
+            with self.subTest(char=char):
+                with self.assertRaises(ValidationError):
+                    SourceRef(document=char, locator="x")
+                with self.assertRaises(ValidationError):
+                    SourceRef(document="x", locator=char)
 
     def test_result_validator_rejects_invisible_evidence_locator(self):
         result = self.lookup()

@@ -119,7 +119,7 @@ P14 是**事实来源**，不是归类引擎。它只回答两件事：
 - 8 位数字是税目/子目（`subheading_only`），不是错码；仅当来源收录 8 位记录时可查该记录，不按 10 位前缀外推层级，也不能确认 10 位申报编码，`declaration_ready=false`。
 - `expired`、`merged` 只按来源记录声明，不按“查不到”推断，也不按本机日期推断。
 - 查到但来源非权威（合成、第三方、官方但未复核）时，`evidence_status` 仍可 `obtained`，但 `authoritative=false`、`usable_as_basis=false`，证据必须显著标注来源类型与“仅作线索”。
-- 编码记录的有效期单独用 `effective_status` 表达：`effective / not_yet_effective / expired / unknown`。即使来源声明 `active`，只要申报日期早于记录的 `effective_from`、晚于 `effective_to`，或没有业务申报日期可核对，`declaration_ready` 与 `usable_as_basis` 都必须为 false，并给出 `HS_RECORD_NOT_EFFECTIVE`、`HS_EFFECTIVE_DATE_UNKNOWN` 或 `HS_RECORD_EFFECTIVE_UNVERIFIED`。
+- 编码记录的有效期单独用 `effective_status` 表达：`effective / not_yet_effective / expired / unknown`。记录和税则版本都没有给出任何有效期依据时必须是 `unknown`，不能兜底成 `effective`。即使来源声明 `active`，只要申报日期早于记录的 `effective_from`、晚于 `effective_to`，或没有业务申报日期可核对，`declaration_ready` 与 `usable_as_basis` 都必须为 false，并给出 `HS_RECORD_NOT_EFFECTIVE`、`HS_EFFECTIVE_DATE_UNKNOWN` 或 `HS_RECORD_EFFECTIVE_UNVERIFIED`。
 - 编码状态（来源是否声明 active/expired/merged）与“在某个申报日期是否适用”是两件事：不能因为记录属于某税则版本就跳过记录自身的生效/失效日期。
 
 ### 6.3 来源权威与复核
@@ -158,7 +158,7 @@ P14 是**事实来源**，不是归类引擎。它只回答两件事：
 - 编号段超过 6 位数字不转整数、不按序号解释，直接记为未识别并转人工；
 - `品牌类型|用途|型号` 这类竖线模板按 `template_only` 处理，不会把要素名当成已填值；`名称:值|名称:值` 按键值式解析，不按位置硬塞；
 - 编号式只接受可识别的 `名称[:值]`；`1:无品牌` 这类无法区分“未知名称/纯值”的写法不按编号猜值，标 `partial`（纯值请用位置式或结构化输入）；
-- 同一要素名重复出现（含两个别名指向同一要素）标 `partial`，保留首个值并转人工，不允许后值静默覆盖前值；
+- 同一要素名重复出现（含两个别名指向同一要素）标 `partial`，保留首个值并转人工，不允许后值静默覆盖前值；模板原文与结构化值组合时，只要出现未识别字段也降 `partial`；
 - 换行、制表、以及“空白后跟已知要素名”作为分段边界；`|` 与 `;`/换行混用、或单个值内再出现 `名称:` 冒号时标 `partial`，不把下一段吞进上一段；
 - 只有名称没有值的模板按 `template_only` 处理，视为未填写，可判 `insufficient`；
 - 未识别的键不静默丢弃，进入 `unrecognized_keys`；
@@ -166,7 +166,7 @@ P14 是**事实来源**，不是归类引擎。它只回答两件事：
 
 ### 6.6 证据与引用
 
-每条编码/清单证据至少带：确定性 `evidence_id`（如 `hs:2026:8544422900`）、来源类型、标题、文档标识、定位（税则号列/清单条目）、摘录、取得时间、版本生效/失效日期、查询参数、状态与限制说明。`document`/`locator` 去除不可见字符（含零宽空格、BOM、NBSP）后必须非空，权威来源的证据必须有 ISO 格式 `retrieved_at`；没有取到记录或清单时不生成证据条目，不编造 URL/条款。
+每条编码/清单证据至少带：确定性 `evidence_id`（如 `hs:2026:8544422900`）、来源类型、标题、文档标识、定位（税则号列/清单条目）、摘录、取得时间、版本生效/失效日期、查询参数、状态与限制说明。`document`/`locator` 去除不可见字符（含零宽空格、BOM、NBSP、U+2060/U+2063 等 Cf 类字符）后必须非空，权威来源的证据必须有 ISO 格式 `retrieved_at`；来源的 `retrieved_at` 在导入/加载期校验，非法值返回 `query_failed`，不得在结果构造期抛异常；没有取到记录或清单时不生成证据条目，不编造 URL/条款。
 
 ### 6.7 来源能力清单（2026-11-16 本机实测）
 

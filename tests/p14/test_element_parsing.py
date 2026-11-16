@@ -241,6 +241,23 @@ class ParseTest(SimpleTestCase):
         self.assertEqual(result.sufficiency.value, "unverified")
         self.assertEqual(result.supplement_items, [])
 
+
+    def test_template_plus_complete_mapping_with_unknown_key_is_unverified_not_exception(self):
+        result = self.check(
+            declared_raw="1:品牌类型;2:用途;3:型号;4:品牌;5:GTIN",
+            declared={
+                "brand_type": "无品牌",
+                "usage": "工业",
+                "model": "X-100",
+                "brand": "无",
+                "unknown_field": "x",
+            },
+        )
+        self.assertIs(result.parse.status, ParseStatus.PARTIAL)
+        self.assertIs(result.sufficiency.value, "unverified")
+        self.assertEqual(result.supplement_items, [])
+        self.assertIn("unknown_field", result.parse.unrecognized_keys)
+
     def test_raw_and_mapping_agree_is_parsed(self):
         result = self.check(
             declared_raw=positional_declared(),

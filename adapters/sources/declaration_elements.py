@@ -1273,9 +1273,9 @@ class DeclarationElementsSource:
                 report.note = "存在无法唯一对应的结构化要素名：" + "、".join(sorted(set(ambiguous)))
             if unrecognized:
                 report.unrecognized_keys = sorted(set(report.unrecognized_keys) | set(unrecognized))
-                if report.status is ParseStatus.PARSED:
-                    report.status = ParseStatus.PARTIAL
-                    report.note = "存在未识别的结构化要素名：" + "、".join(sorted(set(unrecognized)))
+                # 不论此前是 parsed 还是 template_only，只要出现未识别键就必须降级。
+                report.status = ParseStatus.PARTIAL
+                report.note = "存在未识别的结构化要素名：" + "、".join(sorted(set(unrecognized)))
             report.matched_count = len(values)
         return values, labels, report
 

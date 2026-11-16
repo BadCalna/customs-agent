@@ -59,11 +59,20 @@ ENV_TARIFF_PATH = "CUSTOMS_TARIFF_PATH"
 
 _HSPACE = re.compile(r"[\s.\-‐‑–—_]+")
 #: 不可见/排版字符（含零宽空格、BOM、NBSP、各类空白），用于“去空白后非空”校验。
-_INVISIBLE = re.compile(r"[\u0000-\u0020\u00a0\u1680\u2000-\u200f\u2028\u2029\u202f\u205f\u3000\ufeff]+")
-
-
 def _strip_invisible(value: str | None) -> str:
-    return _INVISIBLE.sub("", "" if value is None else value)
+    """去掉不可见字符；按 Unicode 类别处理，避免枚举范围漏掉 U+2060/U+2063。"""
+
+    text = "" if value is None else value
+    kept: list[str] = []
+    for char in text:
+        if char.isspace() or char in "\u115f\u1160\u3164\uffa0":
+            continue
+        if unicodedata.category(char) in {"Cf", "Cc", "Zs", "Zl", "Zp"}:
+            continue
+        if "\ufe00" <= char <= "\ufe0f":  # variation selectors，单独不可见
+            continue
+        kept.append(char)
+    return "".join(kept)
 
 
 class SourceKind(str, Enum):
@@ -170,6 +179,8 @@ class SourceRef(Schema):
             raise ValueError("document 去除不可见字符后不能为空，否则无法定位来源")
         if not _strip_invisible(self.locator):
             raise ValueError("locator 去除不可见字符后不能为空，否则无法定位来源")
+        if self.retrieved_at and _parse_date(self.retrieved_at) is None:
+            raise ValueError("retrieved_at 必须是 ISO 日期/时间")
         return self
 
 
@@ -219,6 +230,8 @@ class DatasetInfo(Schema):
                 raise ValueError("reviewed_at 必须是 ISO 日期/时间")
             if _parse_date(self.retrieved_at) is None:
                 raise ValueError("已复核数据的 retrieved_at 必须是 ISO 日期/时间")
+        elif self.retrieved_at and _parse_date(self.retrieved_at) is None:
+            raise ValueError("retrieved_at 必须是 ISO 日期/时间")
         return self
 
     @property
@@ -547,6 +560,9 @@ def _effective_status(
         return EffectiveStatus.NOT_YET_EFFECTIVE
     if end is not None and query_date > end:
         return EffectiveStatus.EXPIRED
+    if start is None and end is None:
+        # 记录与版本都没有给出任何有效期依据：不能兜底成“有效”。
+        return EffectiveStatus.UNKNOWN
     if record.effective_from or record.effective_to:
         # 记录自身只给了一端日期：另一端未知，不能判“整个区间有效”。
         if start is None or end is None:
