@@ -13,6 +13,9 @@ const progress = createRunProgress(document.querySelector('#progress'), {
   client: {async getRun(id) {
     if (scenario.value === 'network') throw new ApiError(503,'network','连接暂时不可用，请点击重新连接',{},'preview-network');
     const value = structuredClone(await client.getRun(id));
+    if (scenario.value === 'expert-no-issues' && value.kind === 'expert_check') {
+      value.items = value.items.map(item => ({...item,issues:[]}));
+    }
     if (scenario.value === 'running') {
       value.status = 'running'; value.finished_at = null;
       value.items = value.items.map(item => ({...item,status:'queued',comparison_status:null,issues:[],error_message:''}));

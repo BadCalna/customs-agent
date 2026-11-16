@@ -19,23 +19,27 @@ export function progressView(run) {
   const completed = p.succeeded + p.failed;
   const failureIds = run.items.filter(i => i.status === "failed").map(i => i.item_id);
   const businessRows = run.items.filter(i => i.status === "succeeded" &&
-    (i.comparison_status !== "consistent" || i.issues?.length));
+    (i.issues?.length || run.kind === "precheck" && i.comparison_status !== "consistent"));
   return {counts: {...p}, completed, percent: p.total ? Math.floor(completed * 100 / p.total) : null,
     failureIds, businessRows: businessRows.length,
     active: run.is_current === true && ["queued", "running"].includes(run.status)};
 }
 
-function rowHtml(item, selected, retryEnabled) {
+function rowHtml(item, selected, retryEnabled, kind) {
   const failed = item.status === "failed";
   const location = item.source_location || {};
+  const businessText = kind === "expert_check"
+    ? (item.issues?.length ? "有核查问题，待专家确认" : "核查执行已完成，详细结论请查看商品详情")
+    : kind === "precheck" ? known(COMPARISONS, item.comparison_status) : "详细业务结论请查看商品详情";
+  const suggestionLabel = kind === "expert_check" ? "专家建议编码" : kind === "precheck" ? "预审建议编码" : "建议编码";
   return `<li class="p08-run-row ${failed ? "is-failed" : ""}">
     <div class="p08-row-main">${failed ? `<input type="checkbox" data-failed="${esc(item.item_id)}" aria-label="选择第${esc(location.row_number ?? "未知")}行重试" ${selected.includes(item.item_id) ? "checked" : ""} ${retryEnabled ? "" : "disabled"}>` : '<span class="p08-row-dot" aria-hidden="true"></span>'}
       <button type="button" class="p08-row-link" data-item="${esc(item.item_id)}">${esc(location.sheet_name || "原表")} · 第${esc(location.row_number ?? "—")}行</button>
       <span class="p08-row-status">${esc(known(RUN_STATUSES, item.status))}</span></div>
     ${failed ? `<p class="p08-technical">技术失败：${esc(item.error_message || "服务端未提供错误原因")}</p>` :
-      item.status === "succeeded" ? `<p class="p08-business">${esc(known(COMPARISONS, item.comparison_status))}</p>` : ""}
+      item.status === "succeeded" ? `<p class="p08-business">${esc(businessText)}</p>` : ""}
     ${(item.issues || []).map(i => `<p class="p08-issue">${esc(i.message)}${i.missing ? `；待补：${esc(i.missing)}` : ""}</p>`).join("")}
-    <small>已尝试 ${esc(item.attempts ?? "—")} 次${item.suggested_hs ? ` · 建议编码 ${esc(item.suggested_hs)}` : ""}</small></li>`;
+    <small>已尝试 ${esc(item.attempts ?? "—")} 次${item.suggested_hs ? ` · ${suggestionLabel} ${esc(item.suggested_hs)}` : ""}</small></li>`;
 }
 
 export function renderRunProgress(host, state, {retryConnected = false} = {}) {
@@ -58,13 +62,14 @@ export function renderRunProgress(host, state, {retryConnected = false} = {}) {
         ${COUNTS.map(k => `<span class="is-${k}" style="width:${view.counts.total ? view.counts[k] * 100 / view.counts.total : 0}%"></span>`).join("")}</div>
       <dl class="p08-counts">${COUNTS.map(k => `<div><dt>${esc(known(RUN_STATUSES, k))}</dt><dd>${view.counts[k]}</dd></div>`).join("")}</dl>
       <p class="p08-explanation">执行完成表示分析已结束。是否通过，以人工审核决定为准。</p>
-      ${view.businessRows ? `<p class="p08-business-summary">已返回的成功行中，${view.businessRows} 项有业务待核信息。待补资料不计入技术失败。</p>` : ""}
+      ${run.kind === "expert_check" ? '<p class="p08-explanation">问题数量仅统计已返回的核查问题，未返回问题不代表核查通过。要素、图片、退税及监管的详细结论请查看商品详情。</p>' : ""}
+      ${view.businessRows ? `<p class="p08-business-summary">已返回的成功行中，${view.businessRows} 项${run.kind === "expert_check" ? "有已返回的核查问题。核查问题" : "有业务待核信息。待补资料"}不计入技术失败。</p>` : ""}
       ${view.counts.failed ? `<div class="p08-retry"><strong>技术失败 ${view.counts.failed} 项</strong><p>仅重试已返回的失败行，保留成功行及原失败记录。</p>
         <button class="p08-button" data-action="select-failed" ${canRetry ? "" : "disabled"}>选择可重试失败行</button>
         <button class="p08-button p08-primary" data-action="retry" ${canRetry && state.selected.length ? "" : "disabled"}>${state.retrying ? "正在提交重试…" : `重试所选 ${state.selected.length} 项`}</button>
         ${!retryConnected ? '<p>重试入口待后台接通，当前未发送重试请求。</p>' : !state.retryAllowed ? '<p>当前未获得重试授权。</p>' : historical ? '<p>历史执行不能从这里重试。</p>' : view.active ? '<p>本轮仍在执行，结束后可重试失败行。</p>' : ""}</div>` : ""}
       ${state.retryError ? errorHtml(state.retryError) : ""}
-      <ul class="p08-run-rows">${run.items.map(i => rowHtml(i, state.selected, canRetry)).join("")}</ul>
+      <ul class="p08-run-rows">${run.items.map(i => rowHtml(i, state.selected, canRetry, run.kind)).join("")}</ul>
       ${run.items.length < view.counts.total ? '<p class="p08-list-note">当前逐行明细未全部返回，计数仍以服务端汇总为准。</p>' : ""}` : ""}</section>`;
 }
 

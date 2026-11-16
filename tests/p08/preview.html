@@ -24,7 +24,7 @@
       <label>文件版本<select id="version" aria-label="文件版本" disabled></select></label>
       <p>补料在同一任务新增版本；旧结果只作为历史查看。</p>
       <ol class="preview-steps"><li>AI预审建议与供应商原码比较，原因交业务员参考。</li><li>业务员有改码时单独填写，空白不代表自动采纳AI建议。</li><li>提交后进入物流 / 专家审核，置信度与预审结论分别保留。</li></ol>
-      <label>演练场景<select id="scenario" aria-label="演练场景"><option value="normal">部分失败（FIX-05）</option><option value="running">正在执行（固定服务端快照）</option><option value="network">轮询连接失败</option><option value="conflict">重试冲突（409）</option><option value="unimplemented">重试未接通（501）</option></select></label>
+      <label>演练场景<select id="scenario" aria-label="演练场景"><option value="normal">默认结果（预审含失败行）</option><option value="expert-no-issues">专家核查未返回问题（合成）</option><option value="running">正在执行（固定服务端快照）</option><option value="network">轮询连接失败</option><option value="conflict">重试冲突（409）</option><option value="unimplemented">重试未接通（501）</option></select></label>
       <p class="preview-note">状态演练使用固定合成响应，不校验权限、不写库。进度不会按计时器自动增加，演练不能当作真实队列验收。</p>
       <p id="selection" role="status">点击商品行可查看其原表位置。</p>
     </aside></main>

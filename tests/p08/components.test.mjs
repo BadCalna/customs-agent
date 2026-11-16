@@ -87,6 +87,66 @@ test('FIX-05 completed count includes failures, never turns business missing fac
   assert.equal(view.counts.failed,1);assert.equal(view.completed,value.progress.succeeded+1);
   assert.equal(view.failureIds.length,1);assert.ok(view.businessRows>0);assert.equal(view.percent,100);
 });
+
+test('FIX-10 expert run uses explicit issues without treating a null precheck comparison as an error',async()=>{
+  const value=fixture('FIX-10').run,node=host();
+  assert.equal(value.items[0].comparison_status,null);
+  assert.equal(progressView(value).businessRows,1);
+  const controller=createRunProgress(node,{client:{getRun:async()=>value}});
+  await controller.open(context(value));
+  assert.match(node.innerHTML,/有核查问题，待专家确认/);
+  assert.match(node.innerHTML,/提交码与要素核对冲突/);
+  assert.match(node.innerHTML,/专家建议编码/);
+  assert.match(node.innerHTML,/1 项有已返回的核查问题/);
+  assert.doesNotMatch(node.innerHTML,/未知状态：未提供|编码一致|编码不一致|原码缺失|预审比较/);
+  controller.destroy();
+});
+
+test('expert rows with no returned issues do not inflate the count or imply a passing decision',async()=>{
+  for(const comparison of [null,'consistent','inconsistent','supplier_missing']) {
+    const value=fixture('FIX-10').run,node=host();
+    value.items[0].issues=[];value.items[0].comparison_status=comparison;
+    assert.equal(progressView(value).businessRows,0);
+    const controller=createRunProgress(node,{client:{getRun:async()=>value}});
+    await controller.open(context(value));
+    assert.match(node.innerHTML,/核查执行已完成，详细结论请查看商品详情/);
+    assert.match(node.innerHTML,/未返回问题不代表核查通过/);
+    assert.doesNotMatch(node.innerHTML,/编码一致|编码不一致|原码缺失|未知状态：未提供|有业务待核信息|有已返回的核查问题/);
+    assert.match(node.innerHTML,/是否通过，以人工审核决定为准/);
+    controller.destroy();
+  }
+});
+
+test('precheck comparison labels and pending counts remain separate from expert findings',async()=>{
+  const values={association_error:'关联异常',supplier_missing:'原码缺失',supplier_invalid:'原码异常',
+    needs_confirmation:'待确认 / 补充资料',consistent:'编码一致',inconsistent:'编码不一致'};
+  for(const [status,label] of Object.entries(values)) {
+    const value=run(),node=host();
+    value.items=[{...value.items[0],status:'succeeded',comparison_status:status,issues:[]}];
+    value.progress={total:1,queued:0,running:0,succeeded:1,failed:0};
+    assert.equal(progressView(value).businessRows,status==='consistent'?0:1);
+    const controller=createRunProgress(node,{client:{getRun:async()=>value}});
+    await controller.open(context(value));
+    assert.ok(node.innerHTML.includes(label));
+    assert.doesNotMatch(node.innerHTML,/有核查问题|核查执行已完成/);
+    controller.destroy();
+  }
+});
+
+test('expert technical failure stays a failure and clicking its row retains expert run identity',async()=>{
+  const value=fixture('FIX-10').run,node=host(),clicked=[];
+  value.items[0]={...value.items[0],status:'failed',issues:[],error_message:'专家模型连接超时'};
+  value.progress={total:1,queued:0,running:0,succeeded:0,failed:1};
+  const controller=createRunProgress(node,{client:{getRun:async()=>value},onSelectItem:item=>clicked.push(item)});
+  await controller.open(context(value));
+  assert.equal(progressView(value).businessRows,0);
+  assert.match(node.innerHTML,/技术失败：专家模型连接超时/);
+  assert.doesNotMatch(node.innerHTML,/核查执行已完成|未知状态：未提供|编码一致/);
+  const button={dataset:{item:value.items[0].item_id},disabled:false};
+  node.listeners.get('click')({target:{closest:()=>button}});
+  assert.deepEqual(clicked,[{task_id:value.task_id,version_id:value.version_id,run_id:value.run_id,item_id:value.items[0].item_id}]);
+  controller.destroy();
+});
 test('inconsistent or negative progress and duplicate rows are rejected rather than shown complete',()=>{
   for(const value of [run({progress:{total:8,queued:0,running:0,succeeded:8,failed:1}}),
     run({progress:{total:8,queued:-1,running:1,succeeded:7,failed:1}}),run({items:[run().items[0],run().items[0]]})]) {
