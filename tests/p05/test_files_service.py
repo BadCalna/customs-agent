@@ -241,6 +241,25 @@ class ExtractImagesTests(FileServiceTestCase):
         with self.assertRaises(AuthenticationRequired):
             files.read_item_image(AnonymousUser(), record.pk)
 
+    def test_user_entry_requires_upload_version_action(self):
+        """用户入口是系统派生写动作：只读角色不能触发图片入库。"""
+        for user in (self.operator, self.expert):
+            with self.subTest(role=user.role):
+                with self.assertRaises(PermissionDenied):
+                    files.extract_version_images(
+                        user, self.version.pk, sheet_name=DECLARATION_SHEET,
+                    )
+        with self.assertRaises(AuthenticationRequired):
+            files.extract_version_images(
+                AnonymousUser(), self.version.pk, sheet_name=DECLARATION_SHEET,
+            )
+        with self.assertRaises(files.Http404):
+            files.extract_version_images(
+                self.other_supplier, self.version.pk, sheet_name=DECLARATION_SHEET,
+            )
+        # 拒绝发生在写库之前：图片记录没有被改动。
+        self.assertEqual(ItemImage.objects.filter(item__version=self.version).count(), 15)
+
     def test_unavailable_images_are_not_downloadable(self):
         absent = ItemImage.objects.get(item=self.items[5])
         failed = ItemImage.objects.get(item=self.items[7])

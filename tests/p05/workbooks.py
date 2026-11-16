@@ -10,7 +10,7 @@ import tempfile
 from pathlib import Path
 
 from adapters.files.ooxml import P, R
-from tests.p04.fixtures import Package, formula, png
+from tests.p04.fixtures import DRAW, A, Package, formula, png, standard_package
 
 #: 与 P04 样例一致的页签名；商品行按该页签的行号建立。
 DECLARATION_SHEET = "申报要素"
@@ -102,6 +102,81 @@ def no_image_column_package() -> Package:
     return package
 
 
+def _two_cell_anchor(rel_id: str, *, row: int, column: int, bottom_row: int | None = None,
+                     bottom_column: int | None = None) -> str:
+    """一个起止点明确的普通浮图；行列均 0 起始（与 OOXML 锚点一致）。"""
+    bottom_row = row if bottom_row is None else bottom_row
+    bottom_column = column if bottom_column is None else bottom_column
+
+    def marker(tag: str, at_row: int, at_column: int) -> str:
+        return (
+            f"<xdr:{tag}><xdr:col>{at_column}</xdr:col><xdr:colOff>0</xdr:colOff>"
+            f"<xdr:row>{at_row}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:{tag}>"
+        )
+
+    return (
+        "<xdr:twoCellAnchor>"
+        + marker("from", row, column) + marker("to", bottom_row, bottom_column)
+        + "<xdr:pic><xdr:nvPicPr><xdr:cNvPr id=\"1\" name=\"SYNTHETIC\"/></xdr:nvPicPr>"
+        + f'<xdr:blipFill><a:blip r:embed="{rel_id}"/></xdr:blipFill></xdr:pic>'
+        + "<xdr:clientData/></xdr:twoCellAnchor>"
+    )
+
+
+def floating_drawing(anchors) -> str:
+    """把若干 ``(rel_id, 关键字参数)`` 组装成一个 drawing 部件。"""
+    body = "".join(_two_cell_anchor(rel_id, **markers) for rel_id, markers in anchors)
+    return (
+        f'<xdr:wsDr xmlns:xdr="{DRAW}" xmlns:a="{A}" xmlns:r="{R}">'
+        f"{body}</xdr:wsDr>"
+    )
+
+
+def floating_package() -> Package:
+    """附图列只有普通浮图或浮图异常的行：单格可用/多张/坏资源/缺资源/跨行/公式+浮图。"""
+    package = Package()
+    sheet = _declaration_sheet(package)
+    for row in range(2, 9):
+        _data_row(sheet, row)
+    # E7 同时有 DISPIMG 公式和同一单元格的浮图：以公式为准，浮图进 notes 待核。
+    sheet.formula("E7", '_xlfn.DISPIMG("ID_A",1)')
+    anchors = [
+        ("rOk", {"row": 1, "column": 4}),                      # E2 单张可用
+        ("rOk", {"row": 2, "column": 4}),                      # E3 两张
+        ("rOk", {"row": 2, "column": 4}),
+        ("rCorrupt", {"row": 3, "column": 4}),                 # E4 坏资源
+        ("rMissing", {"row": 4, "column": 4}),                 # E5 缺资源
+        ("rOk", {"row": 5, "column": 4, "bottom_row": 6}),     # E6 跨行：不参与归属
+        ("rOk", {"row": 6, "column": 4}),                      # E7 公式 + 浮图
+    ]
+    package.cell_image("ID_A", "xl/media/float-ok.png")
+    package.image("xl/media/float-ok.png", png(b"\x00\x80\xff"))
+    package.image("xl/media/float-corrupt.png", b"not a png")
+    package.attach_drawing(DECLARATION_SHEET, floating_drawing(anchors), "xl/media/float-ok.png")
+    package.parts["xl/drawings/_rels/drawing1.xml.rels"] = (
+        f'<Relationships xmlns="{P}">'
+        f'<Relationship Id="rOk" Type="{R}/image" Target="../media/float-ok.png"/>'
+        f'<Relationship Id="rCorrupt" Type="{R}/image" Target="../media/float-corrupt.png"/>'
+        f'<Relationship Id="rMissing" Type="{R}/image" Target="../media/float-missing.png"/>'
+        "</Relationships>"
+    )
+    return package
+
+
+def compose_package() -> Package:
+    """P04→P05 组合样例：P04 标准两页签 + 共享公式图片行 + 单格浮图行（含只有浮图的行）。"""
+    package = standard_package()
+    package.attach_drawing(
+        "节点①申报要素",
+        floating_drawing([
+            ("rImage1", {"row": 3, "column": 4}),   # 第 4 行：有其它字段，附图格是浮图
+            ("rImage1", {"row": 5, "column": 4}),   # 第 6 行：只有浮图，没有文字
+        ]),
+        "xl/media/image1.png",
+    )
+    return package
+
+
 def ambiguous_image_column_package() -> Package:
     """表头同时出现“附图”和“图片”：图片列有歧义，需人工核对。"""
     package = Package()
@@ -122,7 +197,10 @@ __all__ = [
     "DECLARATION_SHEET",
     "IMAGE_COLUMN",
     "ambiguous_image_column_package",
+    "compose_package",
     "external_package",
+    "floating_drawing",
+    "floating_package",
     "mixed_package",
     "no_image_column_package",
     "package_bytes",

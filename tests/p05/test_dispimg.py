@@ -1,5 +1,6 @@
 """DISPIMG 逐行提取：状态三分、共享公式逐行、错误码可区分（P05、R11）。"""
 
+import hashlib
 import json
 import tempfile
 import unittest
@@ -10,6 +11,8 @@ from adapters.files.dispimg import (
     CODE_DEFINITION_DUPLICATE,
     CODE_DEFINITION_MISSING,
     CODE_EXPRESSION,
+    CODE_FLOATING_MULTIPLE,
+    CODE_FLOATING_UNAVAILABLE,
     CODE_FORMULA_TEXT_ONLY,
     CODE_MEDIA_CORRUPT,
     CODE_MEDIA_EXTERNAL,
@@ -20,6 +23,7 @@ from adapters.files.dispimg import (
     CODE_SHEET_MISSING,
     CODE_TEXT_CONTENT,
     CODE_UNSUPPORTED_FORMULA,
+    ID_SOURCE_SINGLE_CELL_FLOATING,
     STATUS_ABSENT,
     STATUS_AVAILABLE,
     STATUS_READ_FAILED,
@@ -33,6 +37,7 @@ from tests.p05.workbooks import (
     DECLARATION_SHEET,
     ambiguous_image_column_package,
     external_package,
+    floating_package,
     mixed_package,
     no_image_column_package,
 )
@@ -191,6 +196,61 @@ class RowStatusTests(DispimgTestCase):
         self.assertEqual(payload["column_status"], "found")
         self.assertEqual(payload["counts"][STATUS_AVAILABLE], 3)
         self.assertNotIn("data", payload["rows"][0])
+
+
+class FloatingImageTests(DispimgTestCase):
+    """附图格内普通浮图：只认精确单格锚点，多张/不可用不猜。"""
+
+    def extract_floating(self, **kwargs):
+        return extract_images(
+            self.workbook(floating_package()), sheet_name=DECLARATION_SHEET,
+            rows=range(2, 9), **kwargs,
+        )
+
+    def test_single_cell_floating_image_is_available(self):
+        row = self.extract_floating().rows[0]
+        self.assertEqual(row.row, 2)
+        self.assertEqual(row.status, STATUS_AVAILABLE)
+        self.assertEqual(row.code, "ok")
+        self.assertEqual(row.id_source, ID_SOURCE_SINGLE_CELL_FLOATING)
+        self.assertEqual(row.formula_status, ID_SOURCE_SINGLE_CELL_FLOATING)
+        self.assertEqual(row.dispimg_id, "")
+        self.assertTrue(row.data)
+        self.assertEqual(row.sha256, hashlib.sha256(row.data).hexdigest())
+        self.assertEqual(row.image_format, "PNG")
+        self.assertTrue(row.notes)
+
+    def test_multiple_floating_images_are_read_failed(self):
+        row = next(item for item in self.extract_floating().rows if item.row == 3)
+        self.assertEqual(row.status, STATUS_READ_FAILED)
+        self.assertEqual(row.code, CODE_FLOATING_MULTIPLE)
+        self.assertIn("需人工核对", row.message)
+
+    def test_corrupt_or_missing_floating_image_is_read_failed(self):
+        rows = {item.row: item for item in self.extract_floating().rows}
+        for row_number in (4, 5):
+            with self.subTest(row=row_number):
+                self.assertEqual(rows[row_number].status, STATUS_READ_FAILED)
+                self.assertEqual(rows[row_number].code, CODE_FLOATING_UNAVAILABLE)
+                self.assertIn("需人工核对", rows[row_number].message)
+
+    def test_cross_row_floating_is_not_attributed(self):
+        row = next(item for item in self.extract_floating().rows if item.row == 6)
+        self.assertEqual(row.status, STATUS_ABSENT)
+        self.assertEqual(row.code, CODE_BLANK_CELL)
+
+    def test_formula_takes_precedence_and_reports_floating_for_review(self):
+        row = next(item for item in self.extract_floating().rows if item.row == 7)
+        self.assertEqual(row.status, STATUS_AVAILABLE)
+        self.assertEqual(row.id_source, "formula")
+        self.assertEqual(row.dispimg_id, "ID_A")
+        self.assertTrue(any("浮图" in note for note in row.notes))
+
+    def test_floating_size_limit_is_read_failed(self):
+        row = self.extract_floating(max_image_bytes=1).rows[0]
+        self.assertEqual(row.status, STATUS_READ_FAILED)
+        self.assertEqual(row.code, CODE_MEDIA_TOO_LARGE)
+        self.assertEqual(row.data, b"")
 
 
 class StructuralErrorTests(DispimgTestCase):
