@@ -1,6 +1,6 @@
 # D4 Agent 输入输出与证据约定
 
-版本：0.2，2026-11-14。状态：P02 第一批已发布引擎协议与 mock 实现。协议 DTO 在 `adapters/engines/protocols.py`，固定场景实现与比较优先级在 `adapters/engines/mock.py`，JSON Schema 见 `contracts/schemas/engine/`。本文件规定系统内关务 AI 引擎；编程 Agent 的分工见 [协作与交接约定](Agent协作与交接约定.md)。
+版本：0.3，2026-11-16。状态：P02 第一批已发布引擎协议与 mock 实现；P14 已发布 HS 与申报要素来源适配契约（第 6 节，合成样本自验，真实官方来源未接入）。协议 DTO 在 `adapters/engines/protocols.py`，固定场景实现与比较优先级在 `adapters/engines/mock.py`，JSON Schema 见 `contracts/schemas/engine/`。本文件规定系统内关务 AI 引擎；编程 Agent 的分工见 [协作与交接约定](Agent协作与交接约定.md)。
 
 ## 1. 引擎边界
 
@@ -84,3 +84,103 @@ M0/M1 的 inline mock 只验证短时顺序流程；在 PostgreSQL + RQ 下完�
 业务评测同时检查编码、关键补料问题、引用是否真实可定位、置信度是否有依据、错误是否被明确暴露。专家预期与模型生成结果分开保存；100～200 行或某个 8 位一致率都不能单独证明全部商品可靠。阈值和样本覆盖由 Jay/专家在真实评测前确定，未确认时写“质量门槛待定”。
 
 主控检查契约与落库，验收 Agent 检查流程与异常，关务专家检查专业答案。相关任务：P02、P13～P18、P21。
+
+## 6. HS 与申报要素来源适配（P14 发布，2026-11-16）
+
+### 6.1 边界与入口
+
+P14 是**事实来源**，不是归类引擎。它只回答两件事：
+
+1. 某个编码在某个税则版本里是什么、状态如何（`adapters/sources/hs_lookup.py`）；
+2. 该编码在该版本要求哪些申报要素，现有事实是否充足（`adapters/sources/declaration_elements.py`）。
+
+两个入口都只接收编码与查询基准，**不接收品名去猜码，不产生 `suggested_hs`，不生成要素值，不落库、不调用模型、不访问网络**。数据由可替换存储注入；默认读环境变量指向的本地 JSON，未配置就明确返回来源未配置。
+
+| 入口 | 输入 | 输出 | 典型调用 |
+|---|---|---|---|
+| `HsLookupSource.lookup(HsQuery)` | 编码原文、`QueryBasis` | 格式分类、版本解析、税则记录、四态、问题、证据 | 校验推荐/提交/专家改码后的编码是否真实存在 |
+| `DeclarationElementsSource.check(ElementQuery)` | 编码、`QueryBasis`、结构化要素和/或要素原文 | 清单、逐项核对、`sufficiency`、待补项、四态、问题、证据 | 预审/专家核查时判断“还缺哪些事实” |
+
+`QueryBasis` 只有 `declaration_date`、`tariff_version`、`note` 三个字段。**系统不填拟申报日期**：两个基准都为空时版本一律 `unverified`，不得用查询当天顶替；调用方必须把申报要素表里的业务日期或明确税则版本传进来。
+
+### 6.2 状态必须分开
+
+查询技术状态与 D4 证据四态分开，格式、存在性、有效性、版本也分开：
+
+| 情形 | `query_status` | `evidence_status` | 编码状态 |
+|---|---|---|---|
+| 输入为空/非数字/长度不对 | `invalid_input` | `null`（未发起查询） | 不判断 |
+| 来源未配置/文件读不了/存储异常 | `source_unconfigured` / `source_unreadable` / `source_error` | `query_failed` | 不判断 |
+| 查到 + 版本已核 | `ok` | `obtained` | 来源声明的 `active/expired/merged/unknown` |
+| 查到 + 版本未核 | `ok` | `version_unverified` | 同上，但不得作为申报依据 |
+| 本版本未收录 + 版本已核 | `ok` | `not_found` | `not_found` |
+| 未收录 + 版本未核 | `ok` | `version_unverified` | `unknown`，不得宣称该码不存在 |
+
+- 8 位数字是税目/子目（`subheading_only`），不是错码；可查层级，但不能确认 10 位申报编码，`declaration_ready=false`。
+- `expired`、`merged` 只按来源记录声明，不按“查不到”推断，也不按本机日期推断。
+- 查到但来源非权威（合成、第三方、官方但未复核）时，`evidence_status` 仍可 `obtained`，但 `authoritative=false`、`usable_as_basis=false`，证据必须显著标注来源类型与“仅作线索”。
+
+### 6.3 来源权威与复核
+
+`DatasetInfo.authority=authoritative` 只在同时满足以下条件时成立：
+
+- `source_type` 是 `official_tariff` 或 `official_declaration`；
+- `synthetic` 不为 true；
+- `review_status=reviewed`，且 `reviewed_by`、`reviewed_at` 非空（复核人必须是关务人员，不是导入脚本）；
+- 第三方数据不得声明 `authoritative`，合成数据不得声明 `authoritative` 或 `synthetic=false`。
+
+“官方文件导入”不等于“已复核”。未复核数据可用于技术联调，但不能产出 `sufficient` 或 `declaration_ready`。
+
+### 6.4 事实充足性判定
+
+`sufficiency` 只有四个取值，判定顺序固定：
+
+| 取值 | 条件 | 下游动作 |
+|---|---|---|
+| `not_checked` | 输入不合法、没有编码、未发起核对 | 补输入；不能读成“无需要素” |
+| `unverified` | 来源未配置/失败、清单未收录、版本未核、来源非权威、原文解析不确定、存在条件/口径待确认 | 转人工/专家；**不得生成供应商补料单** |
+| `insufficient` | 权威+已复核+版本已核+解析确定，且至少一个必填项缺失/为空/取值非法（整列要素为空也算） | 可生成 `supplement_items` 向供应商补料 |
+| `sufficient` | 上述门槛全部满足，且无缺失/非法/待确认项 | 仍不能替代人工确认与专家判断 |
+
+逐项状态区分 `missing`（根本没出现）、`empty`（出现但为空）、`invalid_enum`/`invalid_number`（有值但不合规）、`unverifiable`（条件要素或口径未知）、`not_applicable`（选填未提供）。只有 `insufficient` 才允许携带 `supplement_items`（结果模型强制），避免“版本待核/来源是 mock”时误发补料。
+
+整列要素为空与“未发起核对”不同：调用方明确传入空要素时按“必填全部缺失”判 `insufficient` 并生成补料；只有调用方根本没传核对对象（`None`）或编码/输入不合法时才 `not_checked`。这样供应商把要素栏留空不会被误读成“无需核对”。
+
+条件要素：来源只给人类可读的 `condition` 文本，P14**不自动判断条件是否成立**；条件要素未提供时一律 `unverifiable`，转专家确认。要自动化必须先由关务专家把条件写成机读规则并另行评审，不能由模型猜。
+
+### 6.5 要素原文解析
+
+支持位置式（`4|1|深沟球轴承|…`）、编号式（`1:品牌类型:无品牌;…`）、键值式（`品牌类型:无品牌;…`）与结构化映射。解析保守：
+
+- 位置数量与清单不一致、编号有缺口、名称歧义、结构化值与原文冲突，一律 `partial`，`sufficiency=unverified`，先人工核对原文；
+- `品牌类型|用途|型号` 这类竖线模板按 `template_only` 处理，不会把要素名当成已填值；`名称:值|名称:值` 按键值式解析，不按位置硬塞；
+- 编号式只接受可识别的 `名称[:值]`；`1:无品牌` 这类无法区分“未知名称/纯值”的写法不按编号猜值，标 `partial`（纯值请用位置式或结构化输入）；
+- 只有名称没有值的模板按 `template_only` 处理，视为未填写，可判 `insufficient`；
+- 未识别的键不静默丢弃，进入 `unrecognized_keys`；
+- 不允许通过“猜位置”把缺项洗成已填。
+
+### 6.6 证据与引用
+
+每条编码/清单证据至少带：确定性 `evidence_id`（如 `hs:2026:8544422900`）、来源类型、标题、文档标识、定位（税则号列/清单条目）、摘录、取得时间、版本生效/失效日期、查询参数、状态与限制说明。没有取到记录或清单时不生成证据条目，不编造 URL/条款。
+
+### 6.7 来源能力清单（2026-11-16 本机实测）
+
+| 来源 | 内容 | 访问方式 | 本机结论 | 限制 |
+|---|---|---|---|---|
+| 海关总署「互联网+海关」税则查询 | 税则 | 公开页面 | `unreachable` | 无开放 API；`www.customs.gov.cn` 返回 504/超时，TLS 证书链被本机代理替换（curl self signed） |
+| 《海关进出口商品涉税规范申报目录》年度版 | 要素 | 人工结构化导入 | `requires_authorization` | 无批量下载/开放接口；必填口径需专家确认；本机未取得 2026 年版原件 |
+| 中国国际贸易单一窗口参数查询 | 税则+要素 | 公开页面（需登录） | `requires_authorization` | JavaScript 单页应用，未登录只返回加载提示；HEAD 403 不能当可用性证明 |
+| 第三方 HS 编码站 | 税则+要素 | 公开页面 | `available`（仅初筛） | 可能滞后/缺项/错误；只能作字段形状参考，不得作为合规结论 |
+
+因此 P14 当前交付的是**可运行适配器 + 明确标注的合成样本 + 来源能力清单**，没有真实官方数据；任何“真实查询已通过”的说法都不成立。真实接入需 Jay/关务专家提供授权导出文件并按 D6 导入、复核。
+
+### 6.8 P16 集成规则
+
+P16 只能在以下条件同时满足时，把 P14 的结果当作“事实已核实”：
+
+- `authoritative=true` 且 `usable_as_basis=true`（HS）或 `sufficiency` 为 `sufficient`/`insufficient`（要素）；
+- 版本 `verified`；
+- 证据可定位且属于当前版本；
+- 未出现 `version_unverified`/`query_failed`/`not_found` 被当作“无风险”的情况。
+
+其余情况保持 `needs_confirmation`，把 P14 的 `gaps` 按 `suggested_role` 分流：`supplier` 只在 `insufficient` 时进入补料；`expert`/`operator` 进入人工核查。P16 不得用模型补齐 P14 未取得的条款或要素值。
