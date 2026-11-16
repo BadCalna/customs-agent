@@ -58,6 +58,28 @@ ENV_TARIFF_PATH = "CUSTOMS_TARIFF_PATH"
 #: 税则与申报要素数据共用同一套版本窗口；要素路径变量在 declaration_elements 中。
 
 _HSPACE = re.compile(r"[\s.\-‐‑–—_]+")
+#: 不可见/排版字符（含零宽空格、BOM、NBSP、各类空白），用于“去空白后非空”校验。
+def _strip_invisible(value: str | None) -> str:
+    """返回可见基字符，仅用于“去空白后非空”判断。
+
+    不能只枚举已知零宽字符：`U+034F`（组合字素连接符）和 `U+E0100`（补充变体
+    选择符）属于 `Mn`，还有 Hangul filler、tag 字符等默认忽略项。这里按 Unicode
+    类别去掉空白、格式/控制/分隔符与所有组合类字符（Mn/Mc/Me），再显式排除
+    Hangul filler 与 tag/变体补充区，避免漏掉新的不可见码位。
+    """
+
+    text = "" if value is None else value
+    kept: list[str] = []
+    for char in text:
+        code = ord(char)
+        if char.isspace() or char in "\u115f\u1160\u3164\uffa0":
+            continue
+        if unicodedata.category(char) in {"Cf", "Cc", "Cs", "Cn", "Zs", "Zl", "Zp", "Mn", "Mc", "Me"}:
+            continue
+        if 0xE0000 <= code <= 0xE0FFF:  # tags / variation selectors supplement
+            continue
+        kept.append(char)
+    return "".join(kept)
 
 
 class SourceKind(str, Enum):
@@ -120,6 +142,15 @@ class CodeState(str, Enum):
     UNKNOWN = "unknown"
 
 
+class EffectiveStatus(str, Enum):
+    """编码记录在“申报日期”这一天的适用性，与来源声明的状态分开。"""
+
+    EFFECTIVE = "effective"
+    NOT_YET_EFFECTIVE = "not_yet_effective"
+    EXPIRED = "expired"
+    UNKNOWN = "unknown"
+
+
 class AccessMode(str, Enum):
     MANUAL_IMPORT = "manual_import"
     PUBLIC_PAGE = "public_page"
@@ -149,6 +180,16 @@ class SourceRef(Schema):
     publisher: str = Field(default="", description="发布方")
     retrieved_at: str | None = Field(default=None, description="取得数据的时间")
 
+    @model_validator(mode="after")
+    def _require_locatable(self) -> "SourceRef":
+        if not _strip_invisible(self.document):
+            raise ValueError("document 去除不可见字符后不能为空，否则无法定位来源")
+        if not _strip_invisible(self.locator):
+            raise ValueError("locator 去除不可见字符后不能为空，否则无法定位来源")
+        if self.retrieved_at and _parse_date(self.retrieved_at) is None:
+            raise ValueError("retrieved_at 必须是 ISO 日期/时间")
+        return self
+
 
 class DatasetInfo(Schema):
     """数据集说明。``synthetic``/``authority`` 是给下游的诚实标记。"""
@@ -176,16 +217,28 @@ class DatasetInfo(Schema):
 
     @model_validator(mode="after")
     def _authority_consistency(self) -> "DatasetInfo":
-        if self.review_status is ReviewStatus.REVIEWED:
-            if not self.reviewed_by.strip() or not self.reviewed_at:
-                raise ValueError("reviewed 数据必须记录 reviewed_by 与 reviewed_at")
         if self.source_type is SourceKind.SYNTHETIC:
             if self.synthetic is False:
                 raise ValueError("source_type=synthetic 时 synthetic 不能为 false")
             if self.authority is Authority.AUTHORITATIVE:
                 raise ValueError("合成数据不能声明 authoritative")
-        if self.source_type is SourceKind.THIRD_PARTY and self.authority is Authority.AUTHORITATIVE:
-            raise ValueError("第三方数据不能声明 authoritative；只能作初筛，须官方核验")
+        elif self.synthetic is True:
+            raise ValueError("synthetic=true 只能与 source_type=synthetic 一起使用")
+        if self.source_type in (SourceKind.OFFICIAL_TARIFF, SourceKind.OFFICIAL_DECLARATION):
+            if self.authority in (Authority.SYNTHETIC, Authority.UNVERIFIED_THIRD_PARTY):
+                raise ValueError("官方来源不能声明 synthetic / unverified_third_party")
+        if self.source_type is SourceKind.THIRD_PARTY:
+            if self.authority not in (Authority.UNVERIFIED_THIRD_PARTY, Authority.UNSPECIFIED):
+                raise ValueError("第三方来源只能声明 unverified_third_party 或 unspecified")
+        if self.review_status is ReviewStatus.REVIEWED:
+            if not _strip_invisible(self.reviewed_by) or not self.reviewed_at:
+                raise ValueError("reviewed 数据必须记录 reviewed_by 与 reviewed_at")
+            if _parse_date(self.reviewed_at) is None:
+                raise ValueError("reviewed_at 必须是 ISO 日期/时间")
+            if _parse_date(self.retrieved_at) is None:
+                raise ValueError("已复核数据的 retrieved_at 必须是 ISO 日期/时间")
+        elif self.retrieved_at and _parse_date(self.retrieved_at) is None:
+            raise ValueError("retrieved_at 必须是 ISO 日期/时间")
         return self
 
     @property
@@ -347,6 +400,10 @@ class HsLookupResult(Schema):
     version: VersionResolution
     code: TariffCode | None = None
     code_state: CodeState = CodeState.UNKNOWN
+    effective_status: EffectiveStatus = Field(
+        default=EffectiveStatus.UNKNOWN,
+        description="按申报日期核对编码记录有效期；未提供日期时为 unknown",
+    )
     declaration_ready: bool = Field(
         default=False,
         description="仅当 10 位格式、版本已核、来源权威且编码为 active 时才为 true",
@@ -386,6 +443,8 @@ class HsLookupResult(Schema):
             return self
 
         if self.code is None:
+            if self.effective_status is not EffectiveStatus.UNKNOWN:
+                raise ValueError("没有税则记录时不得声明编码记录有效期状态")
             expected = (
                 EvidenceStatus.NOT_FOUND
                 if self.version.verified
@@ -422,13 +481,36 @@ class HsLookupResult(Schema):
             raise ValueError("code_state 必须与 code.state 一致")
         if self.dataset is not None and self.authoritative != self.dataset.authoritative:
             raise ValueError("authoritative 必须由 dataset 的来源/复核状态计算，不能手工覆盖")
+        if self.dataset is None:
+            raise ValueError("查到税则记录时必须携带 dataset，不能省略来源元数据")
+        if self.query is None:
+            raise ValueError("查到税则记录时必须携带 query，不能省略查询基准")
+        expected_effective = _effective_status(self.code, self.query.basis, self.version)
+        if self.effective_status is not expected_effective:
+            raise ValueError(
+                f"effective_status 必须由记录有效期与申报日期计算，期望 {expected_effective.value}"
+            )
+        if self.effective_status is not EffectiveStatus.UNKNOWN:
+            if not (self.query.basis.declaration_date or "").strip():
+                raise ValueError("编码记录有效期状态必须有业务申报日期才能声明")
         if len(self.evidence) != 1 or self.evidence[0].status is not self.evidence_status:
             raise ValueError("查到税则记录时必须且只能携带一条同状态的可定位证据")
+        evidence = self.evidence[0]
+        if not _strip_invisible(evidence.document) or not _strip_invisible(evidence.locator):
+            raise ValueError("证据必须带非空 document 与 locator，否则无法回查")
+        for field in ("retrieved_at", "effective_from", "effective_to"):
+            value = getattr(evidence, field)
+            if value and _parse_date(value) is None:
+                raise ValueError(f"证据的 {field} 必须是 ISO 日期/时间")
+        if self.authoritative and not evidence.retrieved_at:
+            raise ValueError("权威来源的证据必须记录 retrieved_at（取得时间）")
         if self.declaration_ready:
             if self.format.state is not HsFormatState.VALID:
                 raise ValueError("declaration_ready 要求 10 位完整编码")
             if not self.version.verified:
                 raise ValueError("declaration_ready 要求版本已核")
+            if self.effective_status is not EffectiveStatus.EFFECTIVE:
+                raise ValueError("declaration_ready 要求编码记录在申报日期有效")
             if not self.authoritative or not self.usable_as_basis:
                 raise ValueError("declaration_ready 要求来源权威且可作为依据")
             if self.code.state is not CodeState.ACTIVE:
@@ -460,6 +542,39 @@ def _parse_date(value: str | None) -> date | None:
         return datetime.fromisoformat(text.replace("Z", "+00:00").replace("z", "+00:00")).date()
     except ValueError:
         return None
+
+
+def _validity_window(record: TariffCode, version: VersionResolution) -> tuple[date | None, date | None]:
+    """编码自身的有效期优先；记录完全没给日期时才退回版本窗口，不混用两套边界。"""
+
+    if record.effective_from or record.effective_to:
+        return _parse_date(record.effective_from), _parse_date(record.effective_to)
+    if version.window is not None:
+        return _parse_date(version.window.effective_from), _parse_date(version.window.effective_to)
+    return None, None
+
+
+def _effective_status(
+    record: TariffCode, basis: QueryBasis, version: VersionResolution
+) -> EffectiveStatus:
+    """按业务申报日期判断编码记录是否适用；没有日期就不冒充“已核对”。"""
+
+    query_date = _parse_date(basis.declaration_date)
+    if query_date is None:
+        return EffectiveStatus.UNKNOWN
+    start, end = _validity_window(record, version)
+    if start is not None and query_date < start:
+        return EffectiveStatus.NOT_YET_EFFECTIVE
+    if end is not None and query_date > end:
+        return EffectiveStatus.EXPIRED
+    if start is None and end is None:
+        # 记录与版本都没有给出任何有效期依据：不能兜底成“有效”。
+        return EffectiveStatus.UNKNOWN
+    if record.effective_from or record.effective_to:
+        # 记录自身只给了一端日期：另一端未知，不能判“整个区间有效”。
+        if start is None or end is None:
+            return EffectiveStatus.UNKNOWN
+    return EffectiveStatus.EFFECTIVE
 
 
 def resolve_version(
@@ -835,28 +950,41 @@ class InMemoryTariffStore:
         self._dataset = dataset
 
     def load(self) -> TariffSnapshot:
-        versions: list[VersionWindow] = []
+        versions: list[dict[str, Any]] = []
         for index, item in enumerate(self._raw_versions):
             try:
-                versions.append(
-                    item if isinstance(item, VersionWindow) else VersionWindow.model_validate(item)
+                parsed = (
+                    item.model_dump(mode="json")
+                    if isinstance(item, VersionWindow)
+                    else VersionWindow.model_validate(item).model_dump(mode="json")
                 )
             except ValidationError as exc:
                 raise TariffStoreError(
                     f"第 {index + 1} 个税则版本不符合契约（{_summarize_validation_error(exc)}）"
                 ) from exc
-        codes: list[TariffCode] = []
+            versions.append(parsed)
+        codes: list[dict[str, Any]] = []
         for index, item in enumerate(self._raw_codes):
             try:
-                codes.append(
-                    item if isinstance(item, TariffCode) else TariffCode.model_validate(item)
+                parsed = (
+                    item.model_dump(mode="json")
+                    if isinstance(item, TariffCode)
+                    else TariffCode.model_validate(item).model_dump(mode="json")
                 )
             except ValidationError as exc:
                 raise TariffStoreError(
                     f"第 {index + 1} 条税则记录不符合契约（{_summarize_validation_error(exc)}）"
                 ) from exc
-        return TariffSnapshot(
-            dataset=self._dataset, versions=tuple(versions), codes=tuple(codes)
+            codes.append(parsed)
+        # 复用与 JSON 存储相同的结构校验：重复版本/编码、未声明版本引用、坏日期一律拒绝。
+        return _snapshot_from_payload(
+            {
+                "schema_version": SCHEMA_VERSION,
+                "dataset": self._dataset.model_dump(mode="json"),
+                "versions": versions,
+                "codes": codes,
+            },
+            source_name="in-memory",
         )
 
 
@@ -1133,11 +1261,13 @@ class HsLookupSource:
         now: str,
     ) -> HsLookupResult:
         authoritative = snapshot.dataset.authoritative
+        effective = _effective_status(record, query.basis, version)
         usable = (
             authoritative
             and version.verified
             and fmt.state is HsFormatState.VALID
             and record.state is CodeState.ACTIVE
+            and effective is EffectiveStatus.EFFECTIVE
         )
         issues: list[IssueEntry] = []
         if fmt.state is HsFormatState.SUBHEADING_ONLY:
@@ -1201,9 +1331,70 @@ class HsLookupSource:
                 )
             )
 
+        start, end = _validity_window(record, version)
+        query_date = _parse_date(query.basis.declaration_date)
+        if effective is EffectiveStatus.NOT_YET_EFFECTIVE:
+            issues.append(
+                IssueEntry(
+                    code="HS_RECORD_NOT_EFFECTIVE",
+                    message=(
+                        f"编码记录自 {start.isoformat()} 起生效，晚于申报日期 "
+                        f"{query_date.isoformat() if query_date else query.basis.declaration_date}；"
+                        "不能作为该日申报依据"
+                    ),
+                    field="query_basis",
+                    missing="与申报日期匹配的有效编码",
+                    suggested_role="expert",
+                )
+            )
+        elif effective is EffectiveStatus.EXPIRED:
+            issues.append(
+                IssueEntry(
+                    code="HS_RECORD_NOT_EFFECTIVE",
+                    message=(
+                        f"编码记录有效期至 {end.isoformat()}，早于申报日期 "
+                        f"{query_date.isoformat() if query_date else query.basis.declaration_date}；"
+                        "不能作为该日申报依据"
+                    ),
+                    field="query_basis",
+                    missing="与申报日期匹配的有效编码",
+                    suggested_role="expert",
+                )
+            )
+        elif effective is EffectiveStatus.UNKNOWN and version.verified and fmt.state is HsFormatState.VALID:
+            if query_date is None:
+                issues.append(
+                    IssueEntry(
+                        code="HS_EFFECTIVE_DATE_UNKNOWN",
+                        message="未提供申报日期，无法核对编码记录有效期；不标记为可申报",
+                        field="query_basis",
+                        missing="业务申报日期",
+                        suggested_role="expert",
+                    )
+                )
+            else:
+                issues.append(
+                    IssueEntry(
+                        code="HS_RECORD_EFFECTIVE_UNVERIFIED",
+                        message="编码记录只提供部分生效/失效日期，无法确认申报日期是否在整个有效期内；不标记为可申报",
+                        field="query_basis",
+                        missing="完整的编码记录有效期",
+                        suggested_role="expert",
+                    )
+                )
+
         source = record.source
-        if source.retrieved_at is None and snapshot.dataset.retrieved_at:
+        if not source.retrieved_at and snapshot.dataset.retrieved_at:
             source = source.model_copy(update={"retrieved_at": snapshot.dataset.retrieved_at})
+        record_has_dates = bool(record.effective_from or record.effective_to)
+        evidence_from = (
+            record.effective_from if record_has_dates
+            else (version.window.effective_from if version.window else None)
+        )
+        evidence_to = (
+            record.effective_to if record_has_dates
+            else (version.window.effective_to if version.window else None)
+        )
         evidence = EvidenceEntry(
             evidence_id=f"hs:{record.version}:{record.code}",
             source_type=snapshot.dataset.source_type.value,
@@ -1218,11 +1409,12 @@ class HsLookupSource:
             locator=source.locator,
             excerpt=record.description or None,
             retrieved_at=source.retrieved_at,
-            effective_from=record.effective_from
-            or (version.window.effective_from if version.window else None),
-            effective_to=record.effective_to
-            or (version.window.effective_to if version.window else None),
-            scope=f"税则版本 {record.version}；编码状态 {record.state.value}",
+            effective_from=evidence_from,
+            effective_to=evidence_to,
+            scope=(
+                f"税则版本 {record.version}；编码状态 {record.state.value}；"
+                f"申报日期适用性 {effective.value}"
+            ),
             query={
                 "hs_code": fmt.normalized,
                 "tariff_version": record.version,
@@ -1234,16 +1426,24 @@ class HsLookupSource:
                 + ("可作为该版本的税则事实" if usable else "仅作线索，不能作为申报依据")
                 + ("；编码已失效" if record.state is CodeState.EXPIRED else "")
                 + (f"；已并入 {record.merged_to}" if record.state is CodeState.MERGED else "")
+                + (f"；申报日期不在记录有效期（{effective.value}）" if effective in (
+                    EffectiveStatus.NOT_YET_EFFECTIVE,
+                    EffectiveStatus.EXPIRED,
+                ) else "")
             ),
         )
         reason = (
             f"在税则版本 {record.version} 查到 {record.code}：{record.description or '无描述'}；"
-            f"状态 {record.state.value}"
+            f"状态 {record.state.value}；申报日期适用性 {effective.value}"
         )
         if not version.verified:
             reason += f"；但版本未核实（{version.reason}）"
         if not authoritative:
             reason += "；来源非官方，不能作为申报依据"
+        if effective is EffectiveStatus.NOT_YET_EFFECTIVE:
+            reason += f"；记录自 {start.isoformat() if start else '未声明'} 起生效，晚于申报日期"
+        elif effective is EffectiveStatus.EXPIRED:
+            reason += f"；记录有效期至 {end.isoformat() if end else '未声明'}，早于申报日期"
 
         return HsLookupResult(
             query=query,
@@ -1253,6 +1453,7 @@ class HsLookupSource:
             version=version,
             code=record,
             code_state=record.state,
+            effective_status=effective,
             declaration_ready=usable,
             authoritative=authoritative,
             usable_as_basis=usable,

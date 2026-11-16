@@ -164,15 +164,36 @@ class DatasetAuthorityTest(SimpleTestCase):
             review_status=ReviewStatus.REVIEWED,
             reviewed_by="expert-a",
             reviewed_at="2026-11-16T00:00:00+08:00",
+            retrieved_at="2026-11-16T00:00:00+08:00",
         )
         self.assertTrue(info.authoritative)
 
-    def test_reviewed_data_requires_reviewer_and_time(self):
+    def test_reviewed_data_requires_reviewer_time_and_retrieved_at(self):
         with self.assertRaises(ValidationError):
             DatasetInfo(
                 source_type=SourceKind.OFFICIAL_TARIFF,
                 authority=Authority.AUTHORITATIVE,
                 review_status=ReviewStatus.REVIEWED,
+                reviewed_by="expert-a",
+                reviewed_at="2026-11-16T00:00:00+08:00",
+            )
+        with self.assertRaises(ValidationError):
+            DatasetInfo(
+                source_type=SourceKind.OFFICIAL_TARIFF,
+                authority=Authority.AUTHORITATIVE,
+                review_status=ReviewStatus.REVIEWED,
+                reviewed_by="expert-a",
+                reviewed_at="not-a-date",
+                retrieved_at="2026-11-16T00:00:00+08:00",
+            )
+        with self.assertRaises(ValidationError):
+            DatasetInfo(
+                source_type=SourceKind.OFFICIAL_TARIFF,
+                authority=Authority.AUTHORITATIVE,
+                review_status=ReviewStatus.REVIEWED,
+                reviewed_by="expert-a",
+                reviewed_at="2026-11-16T00:00:00+08:00",
+                retrieved_at="not-a-date",
             )
 
     def test_synthetic_cannot_claim_authoritative_or_real(self):

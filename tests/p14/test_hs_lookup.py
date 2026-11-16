@@ -6,6 +6,7 @@ from pydantic import ValidationError
 
 from adapters.sources.hs_lookup import (
     CodeState,
+    EffectiveStatus,
     EnvTariffStore,
     EvidenceStatus,
     HsLookupResult,
@@ -112,6 +113,53 @@ class HsLookupTest(SimpleTestCase):
         self.assertFalse(result.declaration_ready)
         self.assertIn("HS_VERSION_UNVERIFIED", [item.code for item in result.issues])
 
+
+    def test_invalid_source_retrieved_at_is_query_failed_not_exception(self):
+        base = tariff_code()
+        store = tariff_store(
+            codes=[tariff_code(source={**base["source"], "retrieved_at": "2026/11/16"})]
+        )
+        result = HsLookupSource(store, clock=FIXED_CLOCK).lookup(
+            HsQuery(hs_code_raw="8544422900", basis=QueryBasis(declaration_date="2026-05-20"))
+        )
+        self.assertIs(result.query_status, QueryStatus.SOURCE_UNREADABLE)
+        self.assertIs(result.evidence_status, EvidenceStatus.QUERY_FAILED)
+        self.assertIsNone(result.code)
+
+
+    def test_invisible_only_source_is_query_failed_in_memory_path(self):
+        base = tariff_code()
+        for char in ("\u034f", "\U000e0100"):
+            with self.subTest(char=char):
+                store = tariff_store(
+                    codes=[
+                        tariff_code(
+                            source={**base["source"], "document": char, "locator": char}
+                        )
+                    ]
+                )
+                result = HsLookupSource(store, clock=FIXED_CLOCK).lookup(
+                    HsQuery(
+                        hs_code_raw="8544422900",
+                        basis=QueryBasis(declaration_date="2026-05-20"),
+                    )
+                )
+                self.assertIs(result.query_status, QueryStatus.SOURCE_UNREADABLE)
+                self.assertIs(result.evidence_status, EvidenceStatus.QUERY_FAILED)
+                self.assertIsNone(result.code)
+
+    def test_no_validity_basis_is_unknown_not_effective(self):
+        store = tariff_store(
+            codes=[tariff_code()],
+            versions=[{"version": "2026", "effective_from": "2026-01-01", "effective_to": "2026-12-31"}],
+        )
+        result = HsLookupSource(store, clock=FIXED_CLOCK).lookup(
+            HsQuery(hs_code_raw="8544422900", basis=QueryBasis(declaration_date="2027-05-20"))
+        )
+        self.assertIs(result.version.status.value, "unverified")
+        self.assertIs(result.effective_status, EffectiveStatus.UNKNOWN)
+        self.assertFalse(result.declaration_ready)
+
     def test_no_basis_does_not_guess_between_multiple_versions(self):
         codes = [tariff_code(version="2025"), tariff_code(version="2026")]
         result = self.lookup(store=tariff_store(codes=codes), basis=QueryBasis())
@@ -133,6 +181,42 @@ class HsLookupTest(SimpleTestCase):
         self.assertIs(result.code_state, CodeState.EXPIRED)
         self.assertFalse(result.declaration_ready)
         self.assertIn("HS_CODE_EXPIRED", [item.code for item in result.issues])
+
+    def test_record_not_yet_effective_cannot_be_usable(self):
+        store = tariff_store(codes=[tariff_code(effective_from="2026-07-01")])
+        result = self.lookup(store=store, basis=QueryBasis(declaration_date="2026-05-20"))
+        self.assertIs(result.effective_status, EffectiveStatus.NOT_YET_EFFECTIVE)
+        self.assertFalse(result.declaration_ready)
+        self.assertFalse(result.usable_as_basis)
+        self.assertIn("HS_RECORD_NOT_EFFECTIVE", [item.code for item in result.issues])
+        self.assertIn("晚于申报日期", result.reason)
+
+    def test_record_expired_before_query_date_cannot_be_usable(self):
+        store = tariff_store(codes=[tariff_code(effective_to="2026-03-31")])
+        result = self.lookup(store=store, basis=QueryBasis(declaration_date="2026-05-20"))
+        self.assertIs(result.effective_status, EffectiveStatus.EXPIRED)
+        self.assertFalse(result.declaration_ready)
+        self.assertIn("HS_RECORD_NOT_EFFECTIVE", [item.code for item in result.issues])
+        self.assertIn("早于申报日期", result.reason)
+
+    def test_record_effective_on_query_date_is_usable(self):
+        store = tariff_store(codes=[tariff_code(effective_from="2026-05-20", effective_to="2026-05-20")])
+        result = self.lookup(store=store, basis=QueryBasis(declaration_date="2026-05-20"))
+        self.assertIs(result.effective_status, EffectiveStatus.EFFECTIVE)
+        self.assertTrue(result.declaration_ready)
+
+    def test_missing_business_date_is_not_declaration_ready(self):
+        result = self.lookup(basis=QueryBasis(tariff_version="2026"))
+        self.assertIs(result.effective_status, EffectiveStatus.UNKNOWN)
+        self.assertFalse(result.declaration_ready)
+        self.assertIn("HS_EFFECTIVE_DATE_UNKNOWN", [item.code for item in result.issues])
+
+    def test_partial_record_validity_is_not_treated_as_effective(self):
+        store = tariff_store(codes=[tariff_code(effective_from="2026-01-01")])
+        result = self.lookup(store=store, basis=QueryBasis(declaration_date="2026-05-20"))
+        self.assertIs(result.effective_status, EffectiveStatus.UNKNOWN)
+        self.assertFalse(result.declaration_ready)
+        self.assertIn("HS_RECORD_EFFECTIVE_UNVERIFIED", [item.code for item in result.issues])
 
     def test_merged_code_keeps_replacement_as_source_fact(self):
         store = tariff_store(codes=[tariff_code(state="merged", merged_to="8544422900")])
@@ -259,6 +343,69 @@ class HsLookupTest(SimpleTestCase):
         result = self.lookup()
         payload = result.model_dump(mode="json")
         payload["evidence"] = []
+        with self.assertRaises(ValidationError):
+            HsLookupResult.model_validate(payload)
+
+    def test_result_validator_rejects_effective_status_without_business_date(self):
+        result = self.lookup(basis=QueryBasis(tariff_version="2026"))
+        payload = result.model_dump(mode="json")
+        payload["effective_status"] = "effective"
+        with self.assertRaises(ValidationError):
+            HsLookupResult.model_validate(payload)
+
+    def test_result_validator_recomputes_effective_status_from_record_dates(self):
+        store = tariff_store(codes=[tariff_code(effective_from="2026-07-01")])
+        result = self.lookup(store=store, basis=QueryBasis(declaration_date="2026-05-20"))
+        payload = result.model_dump(mode="json")
+        payload["effective_status"] = "effective"
+        payload["declaration_ready"] = True
+        payload["usable_as_basis"] = True
+        with self.assertRaises(ValidationError):
+            HsLookupResult.model_validate(payload)
+
+    def test_blank_source_locator_is_rejected(self):
+        from adapters.sources.hs_lookup import SourceRef
+
+        with self.assertRaises(ValidationError):
+            SourceRef(document=" ", locator="x")
+        with self.assertRaises(ValidationError):
+            SourceRef(document="x", locator=" ")
+        with self.assertRaises(ValidationError):
+            SourceRef(document="\u200b", locator="x")
+        with self.assertRaises(ValidationError):
+            SourceRef(document="x", locator="\ufeff")
+        for char in ("\u2060", "\u2063", "\u034f", "\U000e0100"):
+            with self.subTest(char=char):
+                with self.assertRaises(ValidationError):
+                    SourceRef(document=char, locator="x")
+                with self.assertRaises(ValidationError):
+                    SourceRef(document="x", locator=char)
+
+    def test_result_validator_rejects_invisible_evidence_locator(self):
+        result = self.lookup()
+        payload = result.model_dump(mode="json")
+        payload["evidence"][0]["document"] = "\u200b"
+        with self.assertRaises(ValidationError):
+            HsLookupResult.model_validate(payload)
+
+    def test_result_validator_rejects_invalid_evidence_retrieved_at(self):
+        result = self.lookup()
+        payload = result.model_dump(mode="json")
+        payload["evidence"][0]["retrieved_at"] = "not-a-date"
+        with self.assertRaises(ValidationError):
+            HsLookupResult.model_validate(payload)
+
+    def test_result_validator_rejects_effective_status_without_record(self):
+        result = self.lookup("9999999999")
+        payload = result.model_dump(mode="json")
+        payload["effective_status"] = "effective"
+        with self.assertRaises(ValidationError):
+            HsLookupResult.model_validate(payload)
+
+    def test_result_validator_requires_dataset_when_record_present(self):
+        result = self.lookup()
+        payload = result.model_dump(mode="json")
+        payload["dataset"] = None
         with self.assertRaises(ValidationError):
             HsLookupResult.model_validate(payload)
 

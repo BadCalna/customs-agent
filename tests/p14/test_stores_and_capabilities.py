@@ -135,6 +135,9 @@ class JsonStoreTest(SimpleTestCase):
             lambda payload: payload["codes"][0].update(effective_to="not-a-date"),
             lambda payload: payload["codes"][2].pop("merged_to"),
             lambda payload: payload["codes"][0]["source"].pop("locator"),
+            lambda payload: payload["codes"][0]["source"].update(
+                document="\u034f", locator="\u034f"
+            ),
         ]
         for mutate in cases:
             with self.subTest(mutate=mutate):
@@ -183,6 +186,19 @@ class JsonStoreTest(SimpleTestCase):
         self.assertEqual(elements.query_status.value, "source_unconfigured")
         self.assertEqual(elements.sufficiency.value, "unverified")
         self.assertEqual(elements.supplement_items, [])
+
+    def test_in_memory_stores_reject_duplicates_like_json(self):
+        from adapters.sources.declaration_elements import ElementStoreError
+        from adapters.sources.hs_lookup import TariffStoreError
+
+        with self.assertRaises(TariffStoreError):
+            from tests.p14.helpers import tariff_code, tariff_store
+
+            tariff_store(codes=[tariff_code(), tariff_code()]).load()
+        with self.assertRaises(ElementStoreError):
+            from tests.p14.helpers import element_schema, element_store
+
+            element_store(schemas=[element_schema(), element_schema()]).load()
 
     def test_env_store_uses_variable_when_present(self):
         with patch.dict(os.environ, {ENV_TARIFF_PATH: str(TARIFF)}, clear=True):

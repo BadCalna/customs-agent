@@ -96,6 +96,64 @@ class ParseTest(SimpleTestCase):
         self.assertEqual(result.missing_count, 0)
         self.assertEqual(result.checks[1].declared_key, "使用用途")
 
+    def test_newline_tab_and_space_before_label_are_segment_boundaries(self):
+        for raw in (
+            "品牌类型:无品牌\n用途:工业\n型号:X",
+            "品牌类型:无品牌\t用途:工业\t型号:X",
+            "品牌类型:无品牌 用途:工业 型号:X",
+        ):
+            with self.subTest(raw=raw):
+                result = self.check(declared_raw=raw)
+                self.assertIs(result.parse.status, ParseStatus.PARSED)
+                self.assertNotIn("\n", result.checks[0].declared_value or "")
+                self.assertNotIn("\t", result.checks[0].declared_value or "")
+                self.assertEqual(result.checks[1].declared_value, "工业")
+                self.assertEqual(result.checks[2].declared_value, "X")
+                self.assertEqual(result.parse.unrecognized_keys, [])
+
+    def test_value_with_space_before_next_label_is_split_not_swallowed(self):
+        result = self.check(declared_raw="品牌类型:无品牌;用途:用于 型号:X;品牌:ACME")
+        self.assertIs(result.parse.status, ParseStatus.PARSED)
+        self.assertEqual(result.checks[1].declared_value, "用于")
+        self.assertEqual(result.checks[2].declared_value, "X")
+
+    def test_mixed_pipe_and_semicolon_is_partial(self):
+        result = self.check(declared_raw="品牌类型:无品牌|用途;型号:X")
+        self.assertIs(result.parse.status, ParseStatus.PARTIAL)
+        self.assertIs(result.sufficiency.value, "unverified")
+        self.assertEqual(result.supplement_items, [])
+
+    def test_trailing_label_without_colon_is_not_silently_split(self):
+        specs = [element_spec("a", "甲", 1), element_spec("b", "乙", 2, requirement="optional")]
+        store = element_store(schemas=[element_schema(specs=specs)])
+        src = DeclarationElementsSource(store, clock=FIXED_CLOCK)
+        result = src.check(
+            ElementQuery(
+                hs_code_raw="8544422900",
+                basis=QueryBasis(tariff_version="2026"),
+                declared_raw="甲:正确值 乙",
+            )
+        )
+        self.assertIs(result.parse.status, ParseStatus.PARSED)
+        self.assertEqual(result.checks[0].declared_value, "正确值 乙")
+        self.assertIs(result.sufficiency.value, "sufficient")
+
+    def test_newline_or_tab_bare_label_is_partial_not_swallowed(self):
+        specs = [element_spec("a", "甲", 1), element_spec("b", "乙", 2, requirement="optional")]
+        store = element_store(schemas=[element_schema(specs=specs)])
+        src = DeclarationElementsSource(store, clock=FIXED_CLOCK)
+        for raw in ("甲:正确值\n乙", "甲:正确值\t乙"):
+            with self.subTest(raw=raw):
+                result = src.check(
+                    ElementQuery(
+                        hs_code_raw="8544422900",
+                        basis=QueryBasis(tariff_version="2026"),
+                        declared_raw=raw,
+                    )
+                )
+                self.assertIs(result.parse.status, ParseStatus.PARTIAL)
+                self.assertIs(result.sufficiency.value, "unverified")
+
     def test_keyed_unknown_label_is_partial_not_silently_ignored(self):
         result = self.check(declared_raw="品牌类型:无品牌;用途:工业设备连接;型号:X-100;品牌:无;奇怪要素:值")
         self.assertIs(result.parse.status, ParseStatus.PARTIAL)
@@ -120,6 +178,40 @@ class ParseTest(SimpleTestCase):
         )
         self.assertIs(result.parse.status, ParseStatus.PARTIAL)
         self.assertTrue(any("重复" in item for item in result.parse.ambiguous_keys))
+
+    def test_duplicate_element_name_is_partial_and_first_value_is_kept(self):
+        result = self.check(
+            declared_raw=(
+                "1:品牌类型:无品牌;2:品牌类型:境外品牌（其它）;"
+                "3:用途:工业;4:型号:X-100;5:品牌:ACME"
+            )
+        )
+        self.assertIs(result.parse.status, ParseStatus.PARTIAL)
+        self.assertIs(result.sufficiency.value, "unverified")
+        self.assertEqual(result.supplement_items, [])
+        brand_type = next(item for item in result.checks if item.key == "brand_type")
+        self.assertEqual(brand_type.declared_value, "无品牌")
+        self.assertTrue(any("重复" in item for item in result.parse.ambiguous_keys))
+
+    def test_duplicate_keyed_element_name_is_partial(self):
+        result = self.check(
+            declared_raw="品牌类型:无品牌;品牌类型:境外品牌（其它）;用途:工业;型号:X-100;品牌:ACME"
+        )
+        self.assertIs(result.parse.status, ParseStatus.PARTIAL)
+        self.assertIs(result.sufficiency.value, "unverified")
+
+    def test_duplicate_structured_alias_is_partial(self):
+        result = self.check(
+            declared={
+                "品牌": "ACME",
+                "品牌（中文或外文名称）": "OTHER",
+                "品牌类型": "无品牌",
+                "用途": "工业",
+                "型号": "X-100",
+            }
+        )
+        self.assertIs(result.parse.status, ParseStatus.PARTIAL)
+        self.assertIs(result.sufficiency.value, "unverified")
 
     def test_ambiguous_element_name_is_not_guessed(self):
         specs = [
@@ -148,6 +240,23 @@ class ParseTest(SimpleTestCase):
         self.assertEqual(result.checks[2].declared_value, "Y-200")
         self.assertEqual(result.sufficiency.value, "unverified")
         self.assertEqual(result.supplement_items, [])
+
+
+    def test_template_plus_complete_mapping_with_unknown_key_is_unverified_not_exception(self):
+        result = self.check(
+            declared_raw="1:品牌类型;2:用途;3:型号;4:品牌;5:GTIN",
+            declared={
+                "brand_type": "无品牌",
+                "usage": "工业",
+                "model": "X-100",
+                "brand": "无",
+                "unknown_field": "x",
+            },
+        )
+        self.assertIs(result.parse.status, ParseStatus.PARTIAL)
+        self.assertIs(result.sufficiency.value, "unverified")
+        self.assertEqual(result.supplement_items, [])
+        self.assertIn("unknown_field", result.parse.unrecognized_keys)
 
     def test_raw_and_mapping_agree_is_parsed(self):
         result = self.check(
@@ -187,4 +296,20 @@ class ParseTest(SimpleTestCase):
         result = self.check(declared_raw="x" * 10_001)
         self.assertIs(result.sufficiency.value, "not_checked")
         self.assertIn("超过", result.reason)
+        self.assertEqual(result.supplement_items, [])
+
+    def test_nfkc_expansion_over_limit_is_unverified_not_truncated(self):
+        # ﬃ 归一化为 ffi 后长度膨胀；原串在限制内，但归一化后超过上限。
+        raw = "品牌类型:无品牌;" + ("ﬃ" * 3500) + ";型号:X-100"
+        result = self.check(declared_raw=raw)
+        self.assertIs(result.parse.status, ParseStatus.UNPARSED)
+        self.assertIs(result.sufficiency.value, "unverified")
+        self.assertIn("超过上限", result.parse.note)
+        self.assertEqual(result.supplement_items, [])
+
+    def test_absurdly_long_numbered_prefix_does_not_raise(self):
+        result = self.check(declared_raw=("9" * 5000) + ":品牌类型")
+        self.assertIs(result.parse.status, ParseStatus.PARTIAL)
+        self.assertIs(result.sufficiency.value, "unverified")
+        self.assertIn("未识别", result.parse.note)
         self.assertEqual(result.supplement_items, [])
