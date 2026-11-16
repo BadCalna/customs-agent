@@ -734,15 +734,21 @@ def _summary_reason(
         _preceding_total(cell, layout.header_row, row) for cell in cells
     ):
         return "summary_formula_only"
-    strong = [facts[name] for name in strong_fields if name in facts]
-    if any(fact.filled for fact in strong):
-        return None
+    # 写成“合计/总计/小计”的行，只要除品名外的非空单元格都是汇总前序数据的公式，
+    # 就判为合计行——即使退税率等列里的汇总公式会让强事实字段“有内容”也不例外。
+    # 本函数只在没有合同号/项号（且无浮图）时调用，不会误伤真实商品。
     name_field = "primary_name" if layout.role == "packing" else "name"
     name_fact = facts.get(name_field)
     if name_fact is not None and re.fullmatch(
         r"(?:合计|总计|小计)[:：]?", name_fact.value.strip()
     ):
-        return "summary_row"
+        name_column = col_number(name_fact.column) if name_fact.column else -1
+        others = [cell for cell in cells if cell.column != name_column]
+        if all(_preceding_total(cell, layout.header_row, row) for cell in others):
+            return "summary_row"
+    strong = [facts[name] for name in strong_fields if name in facts]
+    if any(fact.filled for fact in strong):
+        return None
     return None
 
 

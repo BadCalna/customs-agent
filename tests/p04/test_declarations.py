@@ -201,6 +201,26 @@ class LayoutTest(WorkbookTestCase):
             [(3, "summary_formula_only")],
         )
 
+    def test_total_row_with_summary_formula_is_not_a_product(self):
+        # 审阅复现：两条正常商品 + 第 4 行品名“合计”、退税率 AVERAGE(F2:F3)，
+        # 应只返回前两条商品；合计行不能被当成缺合同/项号的商品，也不能阻断整份文件。
+        package = build_package(
+            declaration_rows=[
+                ("SYN-C", "1", "合成甲", "0000000000", "用途", "0.13"),
+                ("SYN-C", "2", "合成乙", "0000000000", "用途", "0.09"),
+                (None, None, "合计", None, None, None),
+            ],
+            include_packing=False,
+        )
+        sheet = sheet_of(package, DECLARATION_SHEET)
+        sheet.formula("F4", "AVERAGE(F2:F3)")
+        extraction = extract_declarations(self.build(package))
+        self.assertEqual([record.row for record in extraction.records], [2, 3])
+        self.assertEqual(
+            [(item["row"], item["reason"]) for item in extraction.non_item_rows],
+            [(4, "summary_row")],
+        )
+
     def test_labelled_opinion_column_keeps_original_text(self):
         # 有明确表头的“历史意见”属于 D2 历史上下文，原文保留（含 OK 字样），不按旧 OK 列丢弃。
         package = build_package(
