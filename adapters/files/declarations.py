@@ -46,6 +46,7 @@ __all__ = [
     "DECLARATION_REQUIRED",
     "DECLARATION_STRONG_FIELDS",
     "HEADER_SCAN_ROWS",
+    "LEGACY_APPROVAL_MARKERS",
     "FIELD_LABELS",
     "FieldFact",
     "Issue",
@@ -68,6 +69,12 @@ __all__ = [
 HEADER_SCAN_ROWS = 30
 #: 未识别列的报告上限；超出时只保留前若干列并给出警告，避免畸形输入撑爆报告。
 MAX_UNMAPPED_COLUMNS = 64
+
+#: 旧模板常见把审批痕迹写在无表头列（实测列 Z 整列为“OK”）。按 Jay 2026-11-16 口径：
+#: 这类标记**不保留为业务字段**，也不作为当前或历史通过状态；原文件本身不被改写。
+LEGACY_APPROVAL_MARKERS = frozenset({
+    "OK", "OK.", "OK!", "OKAY", "PASS", "PASSED", "√", "✓", "通过", "已通过", "审核通过",
+})
 
 # --------------------------------------------------------------------------- 语义别名
 # 别名只写“表头原文”，匹配时做全半角、大小写、空白与括号说明归一（见 field_matches）。
@@ -479,12 +486,21 @@ def _choose_header_row(
     )
 
 
+def _is_legacy_approval(value: str) -> bool:
+    """旧审批标记（OK/通过等）；只按原文归一后整体判断，不做包含匹配。"""
+    return normalized(value).strip("。.!！") in LEGACY_APPROVAL_MARKERS
+
+
 def _unmapped_columns(
     sheet: Sheet,
     columns: Mapping[str, str],
     header_row: int,
-) -> tuple[ColumnMatch, ...]:
-    """有表头或数据、但没有命中任何语义的列；原文按行保留，不当作已知字段。"""
+) -> tuple[tuple[ColumnMatch, ...], tuple[str, ...], tuple[str, ...]]:
+    """有表头或数据、但没有命中任何语义的列；原文按行保留，不当作已知字段。
+
+    无表头且整列都是旧“OK/通过”标记的列按口径丢弃，返回 ``(保留列, 丢弃列, 混合列)``；
+    有表头的列（如明确的“审核意见”）即使内容含 OK 也原样保留，属于历史上下文。
+    """
     mapped = set(columns.values())
     grouped: dict[str, list] = defaultdict(list)
     for cell in sheet.cells.values():
@@ -493,6 +509,8 @@ def _unmapped_columns(
             continue
         grouped[column].append(cell)
     result: list[ColumnMatch] = []
+    ignored: list[str] = []
+    mixed: list[str] = []
     for column in sorted(grouped, key=col_number):
         cells = grouped[column]
         header_cell = next(
@@ -501,16 +519,28 @@ def _unmapped_columns(
         has_data = any(cell.row > header_row and cell.has_content for cell in cells)
         if header_cell is None and not has_data:
             continue
+        header_text = header_cell.value if header_cell is not None else ""
+        data_values = [
+            cell.value for cell in cells
+            if cell.row > header_row and (cell.value or "").strip()
+        ]
+        if not header_text.strip() and data_values:
+            marks = [_is_legacy_approval(value) for value in data_values]
+            if all(marks):
+                ignored.append(column)
+                continue
+            if any(marks):
+                mixed.append(column)
         result.append(
             ColumnMatch(
                 field="",
                 column=column,
-                header=header_cell.value if header_cell is not None else "",
+                header=header_text,
                 header_cell=header_cell.ref if header_cell is not None else "",
                 has_data=has_data,
             )
         )
-    return tuple(result)
+    return tuple(result), tuple(ignored), tuple(mixed)
 
 
 def locate_layout(
@@ -571,7 +601,11 @@ def locate_layout(
         if name not in columns:
             warnings.append(f"missing_column:{name}")
 
-    unmapped = _unmapped_columns(sheet, columns, header_row)
+    unmapped, ignored_legacy, mixed_legacy = _unmapped_columns(sheet, columns, header_row)
+    if ignored_legacy:
+        warnings.append(f"legacy_approval_column_ignored:{','.join(ignored_legacy)}")
+    if mixed_legacy:
+        warnings.append(f"legacy_approval_values_ignored:{','.join(mixed_legacy)}")
     if len(unmapped) > MAX_UNMAPPED_COLUMNS:
         warnings.append(f"unmapped_columns_truncated:{len(unmapped)}")
         unmapped = unmapped[:MAX_UNMAPPED_COLUMNS]
@@ -714,6 +748,8 @@ def _unmapped_values(
     for column in layout.unmapped_columns:
         cell = sheet.cell(f"{column.column}{row}")
         if cell is None or not cell.has_content:
+            continue
+        if not column.header.strip() and _is_legacy_approval(cell.value):
             continue
         values.append(
             {

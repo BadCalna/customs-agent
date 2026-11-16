@@ -155,6 +155,46 @@ class LayoutTest(WorkbookTestCase):
             [item["value"] for item in record.unmapped], ["高", "中"]
         )
 
+    def test_headerless_legacy_ok_column_is_dropped_but_comments_kept(self):
+        # Jay 2026-11-16 口径：无表头的旧“OK/通过”标记列不保留为业务字段。
+        headers = ("采购合同号", "合同项号", "品名", "海关编码", "申报要素", None, None)
+        package = build_package(
+            declaration_headers=headers,
+            declaration_rows=[("SYN-C", "1", "合成甲", "0000000000", "用途", "OK", "历史说明")],
+            include_packing=False,
+        )
+        extraction = extract_declarations(self.build(package))
+        self.assertIn("legacy_approval_column_ignored:F", extraction.layout.warnings)
+        self.assertNotIn("F", [column.column for column in extraction.layout.unmapped_columns])
+        record = extraction.records[0]
+        self.assertEqual([(item["column"], item["value"]) for item in record.unmapped],
+                         [("G", "历史说明")])
+        self.assertNotIn("OK", str(record.as_dict()))
+
+    def test_mixed_headerless_column_skips_ok_values_only(self):
+        headers = ("采购合同号", "合同项号", "品名", "海关编码", "申报要素", None)
+        package = build_package(
+            declaration_headers=headers,
+            declaration_rows=[
+                ("SYN-C", "1", "合成甲", "0000000000", "用途", "OK"),
+                ("SYN-C", "2", "合成乙", "0000000000", "用途", "历史说明"),
+            ],
+            include_packing=False,
+        )
+        extraction = extract_declarations(self.build(package))
+        self.assertIn("legacy_approval_values_ignored:F", extraction.layout.warnings)
+        self.assertEqual([item["value"] for item in extraction.records[0].unmapped], [])
+        self.assertEqual([item["value"] for item in extraction.records[1].unmapped], ["历史说明"])
+
+    def test_labelled_opinion_column_keeps_original_text(self):
+        # 有明确表头的“历史意见”属于 D2 历史上下文，原文保留（含 OK 字样），不按旧 OK 列丢弃。
+        package = build_package(
+            declaration_rows=[("SYN-C", "1", "合成甲", "0000000000", "用途", "0.13", None, "OK")],
+            include_packing=False,
+        )
+        extraction = extract_declarations(self.build(package))
+        self.assertEqual(extraction.records[0].facts["existing_opinion"].value, "OK")
+
     def test_missing_optional_columns_are_warnings(self):
         extraction = extract_declarations(
             self.build(
