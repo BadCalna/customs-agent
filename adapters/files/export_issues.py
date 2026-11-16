@@ -29,7 +29,7 @@ def export_issues(source: bytes, selection: ExportSelection) -> ExportArtifact:
         record = records[(line.sheet, line.row)]
         common = [record.value("contract"), record.value("item"), record.value("name"),
                   f"{line.sheet}!第{line.row}行"]
-        for issue in line.issues:
+        for issue in line.issues if line.status == "succeeded" else ():
             rows.append(common + [issue.message, issue.missing or "",
                                   ROLES.get(issue.suggested_role, issue.suggested_role or "待人工指定"), ""])
         if line.status == "failed":

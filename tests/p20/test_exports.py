@@ -213,6 +213,15 @@ class ExportTests(unittest.TestCase):
         self.assertEqual(sheet.cell("F5").value, "")
         self.assertEqual(sheet.cell("G5").value, "物流/专家")
 
+    def test_failed_execution_does_not_export_stale_supplement_requests(self):
+        chosen = selection(self.source, issues=(IssueEntry(code="OLD", message="旧问题", missing="旧待补字段"),))
+        chosen = replace(chosen, lines=(replace(chosen.lines[0], status="failed", error_message="本轮超时"),))
+        artifact = export_issues(self.source, chosen)
+        sheet = Workbook(artifact.content).sheet("补料清单")
+        self.assertEqual(artifact.manifest["issue_count"], 1)
+        self.assertIn("技术执行失败", sheet.cell("E5").value)
+        self.assertNotIn("旧待补字段", sheet.cell("F5").value)
+
     def test_empty_issue_list_not_labelled_approved(self):
         artifact = export_issues(self.source, self.selection)
         self.assertEqual(artifact.manifest["issue_count"], 0)
