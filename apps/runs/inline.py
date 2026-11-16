@@ -22,7 +22,7 @@ from adapters.engines.protocols import (
     get_engine,
 )
 from apps.api.schemas import ResultMode
-from apps.reviews.models import Item, Submission
+from apps.reviews.models import Item, Submission, Task
 
 from .models import Run, RunItem
 
@@ -174,6 +174,36 @@ def execute_precheck(version, scenarios: dict[str, str] | None = None, triggered
     return _finish_run(run)
 
 
+def _claim_preregistered_run(run) -> Run | None:
+    """在 Task → Submission → Run 的锁顺序内重查并激活预登记执行。
+
+    与 P09 撤回、P10 处置共用同一把任务锁，因此"检查通过"之后不可能再插入
+    撤回/重新提交；拿不到锁就等，不会读到旧状态。返回 None 表示本轮作废。
+    调用方（``execute_expert_check``）本身在 ``transaction.atomic`` 内，
+    锁会一直持有到本轮行结果写完，避免激活后又被撤回穿插。
+    """
+    Task.objects.select_for_update().get(pk=run.task_id)
+    submission = Submission.objects.select_for_update().get(pk=run.submission_id)
+    run = Run.objects.select_for_update().get(pk=run.pk)
+    if run.status != Run.Status.QUEUED:
+        return None
+    newer_exists = Run.objects.filter(
+        version_id=run.version_id, kind=run.kind, created_at__gt=run.created_at,
+    ).exists()
+    if submission.status != Submission.Status.PENDING or newer_exists:
+        run.status = Run.Status.SUPERSEDED
+        run.is_current = False
+        run.finished_at = timezone.now()
+        run.save(update_fields=["status", "is_current", "finished_at"])
+        return None
+    Run.objects.filter(version=run.version, kind=run.kind, is_current=True).exclude(pk=run.pk).update(is_current=False)
+    run.status = Run.Status.RUNNING
+    run.is_current = True
+    run.started_at = timezone.now()
+    run.save(update_fields=["status", "is_current", "started_at"])
+    return run
+
+
 @transaction.atomic
 def execute_expert_check(submission, scenarios: dict[str, str] | None = None, triggered_by=None, run=None) -> Run:
     """对提交快照执行 mock 专家核查；核查对象固定为快照中的提交码。
@@ -190,23 +220,12 @@ def execute_expert_check(submission, scenarios: dict[str, str] | None = None, tr
             submission=submission, triggered_by=triggered_by,
         )
     else:
-        # 迟到执行（P13 队列延后启动）不得抢占当前：
-        # 提交已被撤回/处置，或同版本已有更新的执行时，本轮直接作废，不写任何行结果。
-        submission.refresh_from_db(fields=["status"])
-        newer_exists = Run.objects.filter(
-            version_id=run.version_id, kind=run.kind, created_at__gt=run.created_at,
-        ).exists()
-        if submission.status != Submission.Status.PENDING or newer_exists:
-            run.status = Run.Status.SUPERSEDED
-            run.is_current = False
-            run.finished_at = timezone.now()
-            run.save(update_fields=["status", "is_current", "finished_at"])
-            return run
-        Run.objects.filter(version=run.version, kind=run.kind, is_current=True).exclude(pk=run.pk).update(is_current=False)
-        run.status = Run.Status.RUNNING
-        run.is_current = True
-        run.started_at = timezone.now()
-        run.save(update_fields=["status", "is_current", "started_at"])
+        # 迟到执行（P13 队列延后启动）不得抢占当前。重查与激活必须在**同一把任务锁**内：
+        # 先查后激活之间若允许撤回/改码/重新提交插入，旧执行仍会拿到"检查通过"的结论。
+        claimed = _claim_preregistered_run(run)
+        if claimed is None:
+            return run  # 已置 superseded，本轮不写任何行结果
+        run = claimed
     for line in submission.items.select_related("item"):
         item = line.item
         scenario = _scenario_for(scenarios, item)

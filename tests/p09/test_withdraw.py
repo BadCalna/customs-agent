@@ -214,3 +214,19 @@ class LateExpertRunTests(WithdrawSubmissionTests):
         self.assertFalse(self.run.is_current)
         self.assertEqual(self.run.items.count(), 0)
         self.assertTrue(new_run.is_current)  # 新提交的执行没有被挤掉
+
+
+class ClaimLockOrderTest(TestCase):
+    """激活前必须在同一把锁内重查：源码级守卫，防止有人把检查挪出锁外。"""
+
+    def test_claim_locks_task_and_submission_before_activation(self):
+        from pathlib import Path
+
+        from django.conf import settings
+
+        source = (Path(settings.BASE_DIR) / "apps" / "runs" / "inline.py").read_text(encoding="utf-8")
+        claim = source[source.index("def _claim_preregistered_run"):]
+        activate = claim.index("is_current = True")
+        self.assertLess(claim.index("Task.objects.select_for_update"), activate)
+        self.assertLess(claim.index("Submission.objects.select_for_update"), activate)
+        self.assertIn("Run.objects.select_for_update", claim)
