@@ -837,8 +837,55 @@ def _read_existing(path: Path) -> dict[str, Any] | None:
     return payload
 
 
-def _payload_fingerprint(payload: Mapping[str, Any]) -> str:
-    return json.dumps(payload, ensure_ascii=False, sort_keys=True)
+#: 判断“同一来源位置是否变化”时只看业务字段；文件哈希、批次号、输出路径属于
+#: 采集/运行痕迹，文件被重新保存但业务内容没变时不应把所有记录都算成 changed。
+BUSINESS_RECORD_KEYS = (
+    "record_id",
+    "historical_hs",
+    "historical_name",
+    "elements",
+    "material",
+    "spec",
+    "recorded_at",
+    "outcome",
+    "hs_version",
+    "applicable_scope",
+    "valid_until",
+    "source",
+)
+BUSINESS_ATTRIBUTE_KEYS = (
+    "source_key",
+    "source_file_id",
+    "source_filename",
+    "source_sheet",
+    "source_row",
+    "source_cells",
+    "contract_no",
+    "item_no",
+    "quantity",
+    "unit",
+    "refund_rate",
+    "elements_raw",
+    "image_status",
+    "image_cell",
+    "image_sha256",
+    "image_size",
+    "image_format",
+    "recorded_at_cell",
+    "recorded_at_missing",
+    "success_basis",
+    "dataset_kind",
+    "import_issue_codes",
+)
+
+
+def _business_fingerprint(payload: Mapping[str, Any]) -> str:
+    attributes = payload.get("attributes") or {}
+    business = {key: payload.get(key) for key in BUSINESS_RECORD_KEYS}
+    business["attributes"] = {
+        key: attributes.get(key) for key in BUSINESS_ATTRIBUTE_KEYS if key in attributes
+    }
+    return json.dumps(business, ensure_ascii=False, sort_keys=True)
 
 
 def _merge_records(
@@ -895,7 +942,7 @@ def _merge_records(
 
         if record_id in by_id:
             current = by_id[record_id]
-            same = _payload_fingerprint(current) == _payload_fingerprint(payload)
+            same = _business_fingerprint(current) == _business_fingerprint(payload)
             kind = "duplicate" if same else "changed"
             if same:
                 duplicates.append(duplicate | {"kind": kind, "action": "kept"})
@@ -912,7 +959,7 @@ def _merge_records(
             continue
         if source_key and source_key in by_source:
             current = by_source[source_key]
-            same = _payload_fingerprint(current) == _payload_fingerprint(payload)
+            same = _business_fingerprint(current) == _business_fingerprint(payload)
             kind = "duplicate" if same else "changed"
             if not replace_changed:
                 duplicates.append(duplicate | {"kind": kind, "action": "kept_existing"})
@@ -1241,7 +1288,11 @@ def import_history_templates(request: ImportRequest) -> ImportOutcome:
                 "valid_until",
             ],
             "missing_date_sentinel": MISSING_DATE,
-            "duplicate_policy": "same record_id+same content -> duplicate/skip; changed -> changed/keep existing unless --replace-changed",
+            "duplicate_policy": (
+                "same record_id + same business fields -> duplicate/skip; business fields changed -> "
+                "changed/keep existing unless --replace-changed; file hash and batch id are provenance, "
+                "not business fields, so re-saving the same template does not create a new case"
+            ),
             "database": "not_connected; output is a P15-compatible JSON snapshot for later DB/HistoryRecordStore integration",
         },
     }

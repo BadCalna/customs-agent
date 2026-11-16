@@ -204,6 +204,30 @@ class SyntheticImportTest(SimpleTestCase):
             self.assertTrue(failed["error"]["code"])
             self.assertGreater(outcome.report["totals"]["records_total_in_output"], 0)
 
+    def test_changed_file_is_reported_and_can_be_replaced(self):
+        with tempfile.TemporaryDirectory() as raw_tmp:
+            tmp = Path(raw_tmp)
+            workbook = build_synthetic_workbook(tmp / "one.xlsx")
+            first = import_history_templates(self._request(tmp, [workbook]))
+            self.assertEqual(first.report["totals"]["records_imported_this_run"], 3)
+
+            # 同一个文件路径、同一个来源位置，但品名变化：应报 changed，默认保留旧记录。
+            build_synthetic_workbook(tmp / "one.xlsx", name="合成法兰盘改")
+            changed = import_history_templates(self._request(tmp, [workbook]))
+            self.assertEqual(changed.report["totals"]["records_changed"], 2)
+            self.assertEqual(changed.report["totals"]["records_imported_this_run"], 0)
+            records = json.loads(changed.records_path.read_text(encoding="utf-8"))["records"]
+            self.assertIn("合成法兰盘", {record["historical_name"] for record in records})
+            self.assertNotIn("合成法兰盘改", {record["historical_name"] for record in records})
+
+            # 显式替换后才更新。
+            request = self._request(tmp, [workbook])
+            request.replace_changed = True
+            replaced = import_history_templates(request)
+            self.assertEqual(replaced.report["totals"]["records_changed"], 2)
+            records = json.loads(replaced.records_path.read_text(encoding="utf-8"))["records"]
+            self.assertIn("合成法兰盘改", {record["historical_name"] for record in records})
+
     def test_copy_images_writes_unique_files(self):
         with tempfile.TemporaryDirectory() as raw_tmp:
             tmp = Path(raw_tmp)

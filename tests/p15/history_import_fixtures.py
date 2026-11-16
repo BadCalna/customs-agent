@@ -14,7 +14,7 @@ DECLARATION_SHEET = "申报要素"
 PACKING_SHEET = "装箱明细"
 
 
-def _declaration(package: Package, *, with_image_column: bool = True) -> None:
+def _declaration(package: Package, *, with_image_column: bool = True, name: str = "合成法兰盘") -> None:
     sheet = package.sheet(DECLARATION_SHEET)
     headers = [
         "采购合同号",
@@ -32,7 +32,7 @@ def _declaration(package: Package, *, with_image_column: bool = True) -> None:
         (
             "SYN-CONTRACT-A",
             "1",
-            "合成法兰盘",
+            name,
             "7307210000",
             "材质：不锈钢|用途：管道连接|型号：DN50",
             "0.13",
@@ -42,7 +42,7 @@ def _declaration(package: Package, *, with_image_column: bool = True) -> None:
         (
             "SYN-CONTRACT-A",
             "2",
-            "合成法兰盘",
+            name,
             "7307990000",
             "材质：碳钢|用途：管道连接|型号：DN80",
             "0.13",
@@ -99,9 +99,9 @@ def _packing(package: Package) -> None:
             sheet.text(f"{chr(64 + column_index)}{row_index}", value)
 
 
-def build_synthetic_workbook(path: Path, *, with_image_column: bool = True) -> Path:
+def build_synthetic_workbook(path: Path, *, with_image_column: bool = True, name: str = "合成法兰盘") -> Path:
     package = Package()
-    _declaration(package, with_image_column=with_image_column)
+    _declaration(package, with_image_column=with_image_column, name=name)
     _packing(package)
     if with_image_column:
         package.cell_image("ID_A", "xl/media/a.png")
