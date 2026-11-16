@@ -68,7 +68,7 @@ IMAGE_ROW_MISSING = "row_missing"
 
 SUCCESS_OUTCOME = "approved"
 SUCCESS_BASIS_REAL = (
-    "Jay 人工声明（2026-11-17 批次）：第一批试点历史模板可暂视为已通过、"
+    "Jay 人工声明（导入批次）：第一批试点历史模板可暂视为已通过、"
     "准确的历史案例；未独立核验海关放行凭证，仅作参考。"
 )
 SUCCESS_BASIS_SYNTHETIC = "合成样本：仅用于验证导入与检索链路，不是真实历史库。"
@@ -410,10 +410,26 @@ def build_source_meta(path: Path, entry: Mapping[str, Any] | None, *, verify_has
 
 
 def batch_id_for(source_metas: Sequence[SourceMeta], dataset_kind: str) -> str:
+    """批次 ID：包含文件哈希，用于报告/声明追溯。"""
+
     digest = hashlib.sha256()
     digest.update(dataset_kind.encode("utf-8"))
     for meta in sorted(source_metas, key=lambda item: (item.source_id, item.original_filename)):
         digest.update(f"|{meta.source_id}|{meta.sha256}".encode("utf-8"))
+    return f"historical-{dataset_kind}-{digest.hexdigest()[:12]}"
+
+
+def storage_key_for(source_metas: Sequence[SourceMeta], dataset_kind: str) -> str:
+    """默认输出目录键：只含来源身份，不含文件哈希。
+
+    同一模板重新保存（业务内容不变）后仍落到同一目录，重复导入保护才能默认生效；
+    文件哈希变化由 changed/duplicate 报告表达，而不是换一个目录重来。
+    """
+
+    digest = hashlib.sha256()
+    digest.update(dataset_kind.encode("utf-8"))
+    for meta in sorted(source_metas, key=lambda item: (item.source_id, item.original_filename)):
+        digest.update(f"|{meta.source_id}|{meta.original_filename}".encode("utf-8"))
     return f"historical-{dataset_kind}-{digest.hexdigest()[:12]}"
 
 
@@ -430,6 +446,7 @@ class ImportRequest:
     declared_at: str | None = None
     copy_images: bool = False
     replace_changed: bool = False
+    keep_business_duplicates: bool = False
     fresh: bool = False
     skip_validation: bool = False
     declaration_label: str = "申报要素"
@@ -485,7 +502,27 @@ def _build_image_index(
     extraction: Any,
     rows: Sequence[int],
 ) -> tuple[dict[int, Any], dict[str, Any], list[dict[str, Any]]]:
+    rows = tuple(rows)
     layout = extraction.layout
+    if not rows:
+        # 空申报页签（有表头但没有数据行）不是解析失败：0 条记录，图片列无需逐行判定。
+        return (
+            {},
+            {"column": layout.column("image") or "", "column_status": "no_rows", "counts": {}},
+            [
+                {
+                    "code": "no_declaration_rows",
+                    "message": "申报页签没有可导入的数据行；按 0 条记录处理，不判为解析失败",
+                    "sheet": layout.sheet,
+                    "cell": "",
+                    "row": None,
+                    "field": "image",
+                    "severity": "info",
+                    "blocking": False,
+                    "details": {},
+                }
+            ],
+        )
     column = layout.column("image")
     if not column:
         return (
@@ -732,6 +769,16 @@ def _build_record(
     issue_codes = sorted({str(issue.get("code", "")) for issue in issues if issue.get("code")})
     if issue_codes:
         attributes["import_issue_codes"] = ",".join(issue_codes)
+    blocking_codes = sorted(
+        {
+            str(issue.get("code", ""))
+            for issue in issues
+            if issue.get("blocking") or issue.get("severity") == "error"
+        }
+    )
+    if blocking_codes:
+        attributes["blocking_issue_codes"] = ",".join(blocking_codes)
+    attributes["needs_review"] = "true" if (blocking_codes or record.status != "identified") else "false"
 
     notes_parts = [
         "历史模板导入；仅作参考线索，不直接作为当前归类结论。",
@@ -822,7 +869,6 @@ def _build_record(
     payload = history_record.model_dump()
     row_report["status"] = "imported"
     row_report["reason"] = ""
-    row_report["payload"] = payload
     return payload, row_report, issues
 
 
@@ -876,6 +922,8 @@ BUSINESS_ATTRIBUTE_KEYS = (
     "success_basis",
     "dataset_kind",
     "import_issue_codes",
+    "blocking_issue_codes",
+    "needs_review",
 )
 
 
@@ -888,16 +936,39 @@ def _business_fingerprint(payload: Mapping[str, Any]) -> str:
     return json.dumps(business, ensure_ascii=False, sort_keys=True)
 
 
+def _business_dedup_key(payload: Mapping[str, Any]) -> str:
+    """跨来源位置的业务去重键：同名同码同要素同合同项视为同一条业务案例。
+
+    这比 ``record_id`` 更严格：它能发现“同一模板被复制/改名后再次导入”造成的
+    业务重复，而 record_id/source_key 只覆盖“同一来源位置”的重复。
+    """
+
+    attributes = payload.get("attributes") or {}
+    parts = [
+        _compact(payload.get("historical_hs", "")),
+        _compact(payload.get("historical_name", "")),
+        json.dumps(payload.get("elements") or {}, ensure_ascii=False, sort_keys=True),
+        _compact(attributes.get("contract_no", "")),
+        _compact(attributes.get("item_no", "")),
+        _compact(payload.get("material", "")),
+        _compact(payload.get("spec", "")),
+    ]
+    return "|".join(parts)
+
+
 def _merge_records(
     existing: Mapping[str, Any] | None,
     new_records: Sequence[dict[str, Any]],
     *,
     replace_changed: bool,
+    keep_business_duplicates: bool = False,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
     """合并已有输出与本次记录；返回 (最终 records, 重复报告, 本次新写入报告)。
 
-    同 record_id 同内容 -> duplicate；同 source_key 不同内容 -> changed；
-    批内重复 -> duplicate_within_batch。任何分支都不静默。
+    同 record_id 同业务内容 -> duplicate；同 source_key 不同业务内容 -> changed；
+    批内重复 -> duplicate_within_batch；不同来源位置但业务内容相同 ->
+    duplicate_business_content（默认跳过，除非 keep_business_duplicates）。任何分支
+    都写入报告，不静默。
     """
 
     final: list[dict[str, Any]] = []
@@ -906,6 +977,7 @@ def _merge_records(
     existing_records = list(existing.get("records", [])) if existing else []
     by_id: dict[str, dict[str, Any]] = {}
     by_source: dict[str, dict[str, Any]] = {}
+    by_business: dict[str, dict[str, Any]] = {}
     for record in existing_records:
         if not isinstance(record, dict):
             continue
@@ -915,14 +987,19 @@ def _merge_records(
         source_key = str((record.get("attributes") or {}).get("source_key", ""))
         if source_key:
             by_source[source_key] = record
+        business_key = _business_dedup_key(record)
+        if business_key and business_key not in by_business:
+            by_business[business_key] = record
         final.append(record)
 
     seen_new_ids: set[str] = set()
     seen_new_sources: set[str] = set()
+    seen_new_business: set[str] = set()
     for payload in new_records:
         record_id = str(payload.get("record_id", ""))
         attributes = payload.get("attributes") or {}
         source_key = str(attributes.get("source_key", ""))
+        business_key = _business_dedup_key(payload)
         duplicate = {
             "record_id": record_id,
             "source_key": source_key,
@@ -939,7 +1016,6 @@ def _merge_records(
         seen_new_ids.add(record_id)
         if source_key:
             seen_new_sources.add(source_key)
-
         if record_id in by_id:
             current = by_id[record_id]
             same = _business_fingerprint(current) == _business_fingerprint(payload)
@@ -972,6 +1048,35 @@ def _merge_records(
             duplicates.append(duplicate | {"kind": kind, "action": "replaced"})
             writes.append(payload)
             continue
+        if business_key and business_key in seen_new_business:
+            if not keep_business_duplicates:
+                duplicates.append(
+                    duplicate
+                    | {"kind": "duplicate_business_content", "action": "skipped", "business_key": business_key}
+                )
+                continue
+            duplicates.append(
+                duplicate
+                | {"kind": "duplicate_business_content", "action": "kept", "business_key": business_key}
+            )
+        if business_key and business_key in by_business:
+            # 不同来源位置但业务内容完全一致（复制/改名）：默认跳过并报告，
+            # 只有显式允许时才保留多份来源。
+            if not keep_business_duplicates:
+                duplicates.append(
+                    duplicate
+                    | {
+                        "kind": "duplicate_business_content",
+                        "action": "skipped",
+                        "existing_record_id": str(by_business[business_key].get("record_id", "")),
+                    }
+                )
+                continue
+            duplicates.append(
+                duplicate | {"kind": "duplicate_business_content", "action": "kept"}
+            )
+        if business_key:
+            seen_new_business.add(business_key)
         final.append(payload)
         by_id[record_id] = payload
         if source_key:
@@ -1117,6 +1222,13 @@ def import_history_templates(request: ImportRequest) -> ImportOutcome:
                     file_report["task_issues"].append(_issue_dict(issue))
             records = extraction.records
             file_report["source_record_count"] = len(records)
+            if source.declaration_rows and tuple(source.declaration_rows) != tuple(
+                record.row for record in records
+            ):
+                file_report["layout_warnings"].append(
+                    f"manifest 声明源行 {len(source.declaration_rows)} 条，"
+                    f"P04 实际提取 {len(records)} 条，数量不一致，请核对"
+                )
             rows = [record.row for record in records]
             image_by_row, image_info, image_issues = _build_image_index(
                 workbook, extraction, rows
@@ -1127,7 +1239,15 @@ def import_history_templates(request: ImportRequest) -> ImportOutcome:
                 link = mapped.link(record.row) if mapped is not None else None
                 row_image = image_by_row.get(record.row)
                 image_output_path = ""
-                if row_image is not None and row_image.status == STATUS_AVAILABLE and request.copy_images:
+                has_required_identity = bool(
+                    _normalize(record.value("name")) and _normalize(record.value("hs"))
+                )
+                if (
+                    has_required_identity
+                    and row_image is not None
+                    and row_image.status == STATUS_AVAILABLE
+                    and request.copy_images
+                ):
                     record_id = _record_id(
                         source.source_id,
                         record.sheet,
@@ -1136,14 +1256,14 @@ def import_history_templates(request: ImportRequest) -> ImportOutcome:
                         _normalize(record.value("item")),
                     )
                     suffix = row_image.image_format or "bin"
-                    target = image_dir / f"{record_id}.{suffix}"
+                    target = image_dir / f"{record_id}.{row_image.sha256[:8]}.{suffix}"
                     try:
                         if target.exists() and target.read_bytes() != row_image.data:
                             raise ValueError("同名图片已存在且内容不同，拒绝覆盖")
                         if not target.exists():
                             target.write_bytes(row_image.data)
                         image_output_path = str(target.relative_to(request.out_dir))
-                    except OSError as image_error:
+                    except (OSError, ValueError) as image_error:
                         image_copy_failures.append(
                             {
                                 "record_id": record_id,
@@ -1197,7 +1317,10 @@ def import_history_templates(request: ImportRequest) -> ImportOutcome:
             )
 
     final_records, duplicates, writes = _merge_records(
-        existing_payload, all_new_records, replace_changed=request.replace_changed
+        existing_payload,
+        all_new_records,
+        replace_changed=request.replace_changed,
+        keep_business_duplicates=request.keep_business_duplicates,
     )
     # 行报告状态同步为真实处理结果；重复记录不重复写 payload。
     duplicate_by_id = {
@@ -1218,9 +1341,18 @@ def import_history_templates(request: ImportRequest) -> ImportOutcome:
             row_report["status"] = "replaced"
         elif action in {"kept", "kept_existing"}:
             row_report["status"] = "duplicate"
+        elif duplicate.get("kind") == "duplicate_business_content":
+            row_report["status"] = "duplicate_business_content"
         elif duplicate.get("kind") == "changed":
             row_report["status"] = "changed_skipped"
-        row_report.pop("payload", None)
+    written_ids = {str(payload.get("record_id", "")) for payload in writes}
+    for file_report in file_reports:
+        file_report["importable_count"] = file_report["imported_count"]
+        file_report["written_count"] = sum(
+            1
+            for row in file_report["row_reports"]
+            if str(row.get("record_id", "")) in written_ids
+        )
 
     dataset = _dataset_payload(
         batch_id=batch_id,
@@ -1271,6 +1403,9 @@ def import_history_templates(request: ImportRequest) -> ImportOutcome:
             "records_duplicate": sum(1 for item in duplicates if item.get("kind") == "duplicate"),
             "records_changed": sum(1 for item in duplicates if item.get("kind") == "changed"),
             "records_duplicate_within_batch": len(duplicate_in_batch),
+            "records_duplicate_business_content": sum(
+                1 for item in duplicates if item.get("kind") == "duplicate_business_content"
+            ),
             "records_total_in_output": len(final_records),
             "image_status": image_totals,
             "image_copy_failures": len(image_copy_failures),
@@ -1290,8 +1425,9 @@ def import_history_templates(request: ImportRequest) -> ImportOutcome:
             "missing_date_sentinel": MISSING_DATE,
             "duplicate_policy": (
                 "same record_id + same business fields -> duplicate/skip; business fields changed -> "
-                "changed/keep existing unless --replace-changed; file hash and batch id are provenance, "
-                "not business fields, so re-saving the same template does not create a new case"
+                "changed/keep existing unless --replace-changed; same business content across different "
+                "sources (renamed/copied) -> duplicate_business_content/skip unless --keep-business-duplicates; "
+                "file hash and batch id are provenance, not business fields"
             ),
             "database": "not_connected; output is a P15-compatible JSON snapshot for later DB/HistoryRecordStore integration",
         },
@@ -1434,7 +1570,6 @@ def validate_history_queries(
             checks[case_id] = False
             continue
         result = source.search(query)
-        top = result.candidates[0] if result.candidates else None
         passed = result.outcome.value == expected.get("outcome")
         if expected.get("record_id") and result.outcome.value == "matched":
             passed = passed and any(
@@ -1476,6 +1611,9 @@ def validate_history_queries(
         )
         checks[case_id] = passed
 
+    required_case_kinds = ("hit", "no_match", "key_attribute_diff")
+    present_kinds = {str(case.get("kind", "")) for case in cases}
+    missing_required_cases = sorted(set(required_case_kinds) - present_kinds)
     validation = {
         "schema_version": "p15.history-import.validation.1",
         "generated_at": _utc_now(),
@@ -1483,7 +1621,11 @@ def validate_history_queries(
         "dataset": payload.get("dataset") if isinstance(payload, dict) else None,
         "cases": results,
         "checks": checks,
-        "all_passed": all(checks.values()) if checks else False,
+        "required_case_kinds": list(required_case_kinds),
+        "missing_required_cases": missing_required_cases,
+        "all_passed": (
+            bool(checks) and all(checks.values()) and not missing_required_cases
+        ),
     }
     if out_dir is not None:
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -1552,7 +1694,7 @@ def render_markdown_report(report: Mapping[str, Any]) -> str:
             "## 文件与图片",
             "",
             _md_table(
-                ["source_id", "文件", "状态", "源记录", "导入", "跳过", "图片状态"],
+                ["source_id", "文件", "状态", "源记录", "可导入", "本次写入", "跳过", "图片状态"],
                 [
                     (
                         item.get("source_id"),
@@ -1560,6 +1702,7 @@ def render_markdown_report(report: Mapping[str, Any]) -> str:
                         item.get("status"),
                         item.get("source_record_count"),
                         item.get("imported_count"),
+                        item.get("written_count", 0),
                         item.get("skipped_count"),
                         item.get("image", {}).get("counts", {}),
                     )
@@ -1594,17 +1737,32 @@ def render_markdown_report(report: Mapping[str, Any]) -> str:
     for file_report in report.get("files", []):
         for row in file_report.get("row_reports", []):
             if row.get("issues") or row.get("status") != "imported":
+                issues = row.get("issues", [])
+                if any(issue.get("blocking") for issue in issues):
+                    severity, rank = "error", 0
+                elif any(issue.get("severity") in {"error", "warning"} for issue in issues):
+                    severity, rank = "warning", 1
+                else:
+                    severity, rank = "info", 2
                 issue_rows.append(
                     (
-                        row.get("record_id"),
-                        f"{row.get('source', {}).get('filename')}!{row.get('source', {}).get('sheet')}@{row.get('source', {}).get('row')}",
-                        row.get("status"),
-                        "; ".join(str(issue.get("code")) for issue in row.get("issues", [])),
-                        ",".join(row.get("missing_fields", [])),
+                        rank,
+                        (
+                            row.get("record_id"),
+                            f"{row.get('source', {}).get('filename')}!{row.get('source', {}).get('sheet')}@{row.get('source', {}).get('row')}",
+                            row.get("status"),
+                            severity,
+                            "; ".join(str(issue.get("code")) for issue in issues),
+                            ",".join(row.get("missing_fields", [])),
+                        ),
                     )
                 )
+    issue_rows.sort(key=lambda item: item[0])
+    issue_rows = [row for _, row in issue_rows]
     if issue_rows:
-        lines.append(_md_table(["record_id", "来源", "状态", "问题", "缺字段"], issue_rows[:80]))
+        lines.append(
+            _md_table(["record_id", "来源", "状态", "严重度", "问题", "缺字段"], issue_rows[:80])
+        )
         if len(issue_rows) > 80:
             lines.append(f"\n（仅显示前 80 条，完整见 `{report.get('records_path')}` 同目录的 import_report.json）")
     else:
@@ -1617,7 +1775,7 @@ def render_markdown_report(report: Mapping[str, Any]) -> str:
             "- 历史成功记录只作参考，不直接作为当前归类结论。",
             "- 原模板缺失日期/税则版本/适用范围/有效期时保留为空或“未提供”，不推断。",
             "- 图片按“页签+行号+图片列”精确关联；列缺失 ≠ 无图，读取失败 ≠ 无图。",
-            "- 重复导入按稳定 record_id/source_key 识别；重复、变化和批内重复均写入本报告。",
+            "- 重复导入按稳定 record_id/source_key 与业务指纹识别；重复、变化、批内重复和跨来源业务重复均写入本报告。",
         ]
     )
     return "\n".join(lines) + "\n"
@@ -1630,6 +1788,7 @@ def render_validation_markdown(validation: Mapping[str, Any]) -> str:
         f"- 记录文件：`{validation.get('records_path')}`",
         f"- 生成时间：{validation.get('generated_at')}",
         f"- 全部通过：{validation.get('all_passed')}",
+        f"- 缺失必需用例：{validation.get('missing_required_cases') or '无'}",
         "",
         _md_table(
             ["case", "类型", "结果", "候选数", "通过", "说明"],
@@ -1669,6 +1828,7 @@ def _parser() -> argparse.ArgumentParser:
     imp.add_argument("--declared-at", help="声明时间；默认当前 UTC")
     imp.add_argument("--copy-images", action="store_true", help="把可用图片写到输出目录 images/（不提交 Git）")
     imp.add_argument("--replace-changed", action="store_true", help="同 source_key 内容变化时替换旧记录")
+    imp.add_argument("--keep-business-duplicates", action="store_true", help="不同来源文件业务内容相同时仍保留多份来源")
     imp.add_argument("--fresh", action="store_true", help="忽略已有输出，重新开始")
     imp.add_argument("--skip-validation", action="store_true", help="不执行命中/无命中/关键差异查询验证")
     imp.add_argument("--declaration-label", default="申报要素")
@@ -1691,6 +1851,7 @@ def _print_summary(outcome: ImportOutcome) -> None:
     print(
         "summary: files={files} parsed={parsed_files} source_records={source_records} "
         "written={records_imported_this_run} duplicate={records_duplicate} "
+        "business_duplicate={records_duplicate_business_content} "
         "changed={records_changed} skipped={records_skipped} total={records_total_in_output}".format(
             **totals
         )
@@ -1730,7 +1891,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
             for item in files
         ]
-        requested_out = Path("data/private/p15-import") / batch_id_for(metas, args.dataset_kind)
+        requested_out = Path("data/private/p15-import") / storage_key_for(metas, args.dataset_kind)
     request = ImportRequest(
         files=files,
         out_dir=requested_out,
@@ -1742,6 +1903,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         declared_at=args.declared_at,
         copy_images=args.copy_images,
         replace_changed=args.replace_changed,
+        keep_business_duplicates=args.keep_business_duplicates,
         fresh=args.fresh,
         skip_validation=args.skip_validation,
         declaration_label=args.declaration_label,

@@ -18,13 +18,22 @@ from adapters.sources.history_import import (
     _record_id,
     import_history_templates,
     parse_element_pairs,
+    validate_history_queries,
 )
-from tests.p15.history_import_fixtures import build_synthetic_workbook
+from tests.p15.history_import_fixtures import build_empty_workbook, build_synthetic_workbook
 
 BASE_DIR = Path(settings.BASE_DIR)
 REAL_DIR = BASE_DIR / "data" / "import-basis" / "2026-11-17"
 REAL_MANIFEST = REAL_DIR / "manifest.json"
-REAL_FILES = sorted((REAL_DIR / "historical-success").glob("*.xlsx"))
+if REAL_MANIFEST.is_file():
+    _manifest = json.loads(REAL_MANIFEST.read_text(encoding="utf-8"))
+    REAL_FILES = [
+        BASE_DIR / entry["repository_path"]
+        for entry in _manifest.get("files", [])
+        if entry.get("source_id") in {"H01", "H02", "H03"}
+    ]
+else:
+    REAL_FILES = []
 
 
 class ElementParsingTest(SimpleTestCase):
@@ -101,7 +110,15 @@ class DuplicateMergeTest(SimpleTestCase):
 
 
 class SyntheticImportTest(SimpleTestCase):
-    def _request(self, tmp: Path, files, *, copy_images=False, declared_success=False):
+    def _request(
+        self,
+        tmp: Path,
+        files,
+        *,
+        copy_images=False,
+        declared_success=False,
+        keep_business_duplicates=False,
+    ):
         return ImportRequest(
             files=files,
             out_dir=tmp / "out",
@@ -110,6 +127,7 @@ class SyntheticImportTest(SimpleTestCase):
             declared_by="测试",
             declaration_note="合成样本声明",
             copy_images=copy_images,
+            keep_business_duplicates=keep_business_duplicates,
             skip_validation=False,
         )
 
@@ -118,7 +136,14 @@ class SyntheticImportTest(SimpleTestCase):
             tmp = Path(raw_tmp)
             with_image = build_synthetic_workbook(tmp / "with-image.xlsx")
             without_image = build_synthetic_workbook(tmp / "without-image.xlsx", with_image_column=False)
-            outcome = import_history_templates(self._request(tmp, [with_image, without_image]))
+            outcome = import_history_templates(
+                self._request(
+                    tmp,
+                    [with_image, without_image],
+                    # 两份样本业务内容相同、图片列不同；保留两份以验证 column_missing 与图片四态。
+                    keep_business_duplicates=True,
+                )
+            )
 
             records = json.loads(outcome.records_path.read_text(encoding="utf-8"))
             self.assertEqual(records["schema_version"], "p15.history.1")
@@ -149,11 +174,6 @@ class SyntheticImportTest(SimpleTestCase):
             self.assertIn("absent", image_statuses)
             self.assertIn("read_failed", image_statuses)
             self.assertIn(IMAGE_COLUMN_MISSING, image_statuses)
-            self.assertNotIn("read_failed", {
-                record["attributes"]["image_status"]
-                for record in records["records"]
-                if record["attributes"]["image_status"] == "available"
-            })
 
             missing_date = [
                 record for record in records["records"] if record["recorded_at"] == MISSING_DATE
@@ -190,6 +210,34 @@ class SyntheticImportTest(SimpleTestCase):
             self.assertEqual(second.report["totals"]["records_duplicate"], first_count)
             self.assertEqual(second.report["totals"]["records_changed"], 0)
             self.assertTrue(all(item["action"] == "kept" for item in second.report["duplicates"]))
+
+    def test_same_business_content_from_renamed_copy_is_reported_not_duplicated(self):
+        with tempfile.TemporaryDirectory() as raw_tmp:
+            tmp = Path(raw_tmp)
+            first = build_synthetic_workbook(tmp / "original.xlsx")
+            copy = build_synthetic_workbook(tmp / "copy.xlsx")
+            outcome = import_history_templates(self._request(tmp, [first, copy]))
+            self.assertEqual(outcome.report["totals"]["records_imported_this_run"], 3)
+            self.assertEqual(outcome.report["totals"]["records_total_in_output"], 3)
+            self.assertEqual(outcome.report["totals"]["records_duplicate_business_content"], 3)
+            self.assertTrue(
+                all(
+                    item["kind"] == "duplicate_business_content"
+                    for item in outcome.report["duplicates"]
+                )
+            )
+
+    def test_empty_template_is_zero_records_not_parse_failure(self):
+        with tempfile.TemporaryDirectory() as raw_tmp:
+            tmp = Path(raw_tmp)
+            empty = build_empty_workbook(tmp / "empty.xlsx")
+            outcome = import_history_templates(self._request(tmp, [empty]))
+            self.assertEqual(outcome.report["totals"]["parse_failed_files"], 0)
+            self.assertEqual(outcome.report["totals"]["source_records"], 0)
+            self.assertEqual(outcome.report["totals"]["records_total_in_output"], 0)
+            codes = [issue["code"] for issue in outcome.report["files"][0]["task_issues"]]
+            self.assertIn("no_declaration_rows", codes)
+            self.assertIsNone(outcome.report["files"][0]["error"])
 
     def test_parse_failure_is_reported_and_does_not_hide_good_file(self):
         with tempfile.TemporaryDirectory() as raw_tmp:
@@ -256,8 +304,37 @@ class DeclarationRequiredTest(SimpleTestCase):
                 import_history_templates(request)
 
 
+class ValidationRequirementTest(SimpleTestCase):
+    def test_key_attribute_diff_case_is_required_for_all_passed(self):
+        with tempfile.TemporaryDirectory() as raw_tmp:
+            tmp = Path(raw_tmp)
+            records = {
+                "schema_version": "p15.history.1",
+                "dataset": {"dataset_id": "test", "synthetic": True},
+                "records": [
+                    {
+                        "record_id": "HIST-ONLY-NAME",
+                        "historical_hs": "0000000000",
+                        "historical_name": "仅品名样本",
+                        "recorded_at": MISSING_DATE,
+                        "outcome": "approved",
+                        "elements": {},
+                        "material": "",
+                        "spec": "",
+                        "attributes": {},
+                        "source": {"document": "synthetic", "locator": "第 1 项"},
+                    }
+                ],
+            }
+            path = tmp / "records.json"
+            path.write_text(json.dumps(records, ensure_ascii=False), encoding="utf-8")
+            validation = validate_history_queries(path)
+            self.assertIn("key_attribute_diff", validation["missing_required_cases"])
+            self.assertFalse(validation["all_passed"])
+
+
 @unittest.skipUnless(
-    REAL_MANIFEST.is_file() and len(REAL_FILES) == 3,
+    REAL_MANIFEST.is_file() and len(REAL_FILES) == 3 and all(path.is_file() for path in REAL_FILES),
     "未找到已归档的三份真实历史模板（应位于 data/import-basis/2026-11-17/）",
 )
 class RealTemplateImportTest(SimpleTestCase):

@@ -110,3 +110,19 @@ def build_synthetic_workbook(path: Path, *, with_image_column: bool = True, name
         package.image("xl/media/corrupt.png", b"not a png")
     package.build(path)
     return path
+
+def build_empty_workbook(path: Path) -> Path:
+    """只有表头、没有数据行的合成模板：用于验证“0 条记录”不等于“解析失败”。"""
+
+    package = Package()
+    declaration = package.sheet(DECLARATION_SHEET)
+    for index, header in enumerate(
+        ("采购合同号", "合同项号", "品名", "海关编码", "申报要素", "退税率", "附图", "申报日期"),
+        start=1,
+    ):
+        declaration.text(f"{chr(64 + index)}1", header)
+    packing = package.sheet(PACKING_SHEET)
+    for index, header in enumerate(("合同号", "合同项号", "合同第一条品名"), start=1):
+        packing.text(f"{chr(64 + index)}1", header)
+    package.build(path)
+    return path
