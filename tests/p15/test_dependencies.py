@@ -12,7 +12,10 @@ from django.conf import settings
 from django.test import SimpleTestCase
 
 BASE_DIR = Path(settings.BASE_DIR)
-MODULE_PATH = BASE_DIR / "adapters" / "sources" / "history_search.py"
+MODULE_PATHS = (
+    BASE_DIR / "adapters" / "sources" / "history_search.py",
+    BASE_DIR / "adapters" / "sources" / "history_import.py",
+)
 
 #: 标准库 + 仓库已有依赖（Django / django-ninja / pydantic 由 ninja 带入）+ 本项目包。
 ALLOWED_TOP_LEVEL = {
@@ -27,6 +30,12 @@ ALLOWED_TOP_LEVEL = {
     "re",
     "typing",
     "unicodedata",
+    "argparse",
+    "hashlib",
+    "sys",
+    "traceback",
+    "adapters",
+    "django",
     "ninja",
     "pydantic",
     "apps",
@@ -66,14 +75,16 @@ def imported_top_level(path: Path) -> set[str]:
 
 class NoExtraDependencyTest(SimpleTestCase):
     def test_imports_are_stdlib_or_existing_project_dependencies(self):
-        modules = imported_top_level(MODULE_PATH)
-        self.assertTrue(modules, "AST 未解析到任何 import，检查测试本身")
-        self.assertLessEqual(
-            modules,
-            ALLOWED_TOP_LEVEL,
-            f"出现允许清单外的 import：{sorted(modules - ALLOWED_TOP_LEVEL)}",
-        )
-        self.assertFalse(modules & FORBIDDEN_TOP_LEVEL)
+        for path in MODULE_PATHS:
+            with self.subTest(module=path.name):
+                modules = imported_top_level(path)
+                self.assertTrue(modules, "AST 未解析到任何 import，检查测试本身")
+                self.assertLessEqual(
+                    modules,
+                    ALLOWED_TOP_LEVEL,
+                    f"出现允许清单外的 import：{sorted(modules - ALLOWED_TOP_LEVEL)}",
+                )
+                self.assertFalse(modules & FORBIDDEN_TOP_LEVEL)
 
     def test_baseline_project_dependencies_still_present(self):
         """只锁 P15 自己的足迹，不要求整份依赖清单不变。
@@ -93,7 +104,8 @@ class NoExtraDependencyTest(SimpleTestCase):
         )
 
     def test_no_vector_store_or_network_client_in_source(self):
-        source = MODULE_PATH.read_text(encoding="utf-8").lower()
-        for forbidden in ("chromadb", "faiss", "qdrant", "pinecone", "requests.get", "httpx."):
-            with self.subTest(forbidden=forbidden):
-                self.assertNotIn(forbidden, source)
+        for path in MODULE_PATHS:
+            source = path.read_text(encoding="utf-8").lower()
+            for forbidden in ("chromadb", "faiss", "qdrant", "pinecone", "requests.get", "httpx."):
+                with self.subTest(module=path.name, forbidden=forbidden):
+                    self.assertNotIn(forbidden, source)
