@@ -74,7 +74,7 @@ def _strip_invisible(value: str | None) -> str:
         code = ord(char)
         if char.isspace() or char in "\u115f\u1160\u3164\uffa0":
             continue
-        if unicodedata.category(char) in {"Cf", "Cc", "Zs", "Zl", "Zp", "Mn", "Mc", "Me"}:
+        if unicodedata.category(char) in {"Cf", "Cc", "Cs", "Cn", "Zs", "Zl", "Zp", "Mn", "Mc", "Me"}:
             continue
         if 0xE0000 <= code <= 0xE0FFF:  # tags / variation selectors supplement
             continue
