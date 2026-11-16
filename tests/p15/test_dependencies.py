@@ -75,26 +75,21 @@ class NoExtraDependencyTest(SimpleTestCase):
         )
         self.assertFalse(modules & FORBIDDEN_TOP_LEVEL)
 
-    def test_project_dependencies_are_unchanged(self):
-        """P15 不得加依赖；其它任务包的基础设施依赖（如 P12 的 psycopg）不算本包加料。
+    def test_baseline_project_dependencies_still_present(self):
+        """只锁 P15 自己的足迹，不要求整份依赖清单不变。
 
-        基线依赖必须仍在；只允许出现明确登记过的基础设施依赖。
+        依赖清单是主控维护的全局文件，别的包（P12 的 psycopg、P03 的 pillow）
+        合法增加依赖时不应让 P15 的测试失败；P15 是否"偷偷加料"由上面的
+        import 白名单与本文件末尾的禁用库检查负责。
         """
         project = tomllib.loads((BASE_DIR / "pyproject.toml").read_text(encoding="utf-8"))["project"]
         names = {
             re.split(r"[\[<>=!~ ]", dependency, maxsplit=1)[0].lower()
             for dependency in project["dependencies"]
         }
-        baseline = {"django", "django-ninja", "python-dotenv"}
-        infrastructure = {
-            "psycopg", "psycopg-binary", "psycopg2", "psycopg2-binary",
-            "redis", "django-rq",
-        }
-        self.assertLessEqual(baseline, names, f"基线依赖被移除：{sorted(baseline - names)}")
         self.assertLessEqual(
-            names - baseline,
-            infrastructure,
-            f"出现未登记的依赖：{sorted(names - baseline - infrastructure)}",
+            {"django", "django-ninja", "python-dotenv"}, names,
+            f"基线依赖被移除：{sorted({'django', 'django-ninja', 'python-dotenv'} - names)}",
         )
 
     def test_no_vector_store_or_network_client_in_source(self):
