@@ -68,10 +68,39 @@ TEMPLATES = [{
     ]},
 }]
 WSGI_APPLICATION = "config.wsgi.application"
-DATABASES = {"default": {
-    "ENGINE": "django.db.backends.sqlite3",
-    "NAME": BASE_DIR / os.environ.get("CUSTOMS_SQLITE_PATH", ".local/db.sqlite3"),
-}}
+DB_BACKEND = mode("CUSTOMS_DB_BACKEND", "sqlite", ("sqlite", "postgres"))
+
+
+def _postgres_database():
+    """PostgreSQL 连接配置：缺变量时明确失败，不回退到 SQLite 或默认账号（D6 第 3 节）。"""
+    required = {"CUSTOMS_PG_NAME": "数据库名", "CUSTOMS_PG_USER": "登录角色"}
+    missing = [name for name in required if not os.environ.get(name)]
+    if missing:
+        raise ImproperlyConfigured(
+            "CUSTOMS_DB_BACKEND=postgres 需要设置 "
+            + "、".join(f"{name}（{required[name]}）" for name in missing)
+            + "；本机初始化见 scripts/database/README.md。"
+        )
+    return {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": os.environ["CUSTOMS_PG_NAME"],
+        "USER": os.environ["CUSTOMS_PG_USER"],
+        "PASSWORD": os.environ.get("CUSTOMS_PG_PASSWORD", ""),
+        "HOST": os.environ.get("CUSTOMS_PG_HOST", "127.0.0.1"),
+        "PORT": os.environ.get("CUSTOMS_PG_PORT", "5432"),
+        # 连不上时尽快失败，不要让 make check-postgres 卡在默认超时。
+        "OPTIONS": {"connect_timeout": 5},
+        "CONN_MAX_AGE": 0,
+    }
+
+
+if DB_BACKEND == "postgres":
+    DATABASES = {"default": _postgres_database()}
+else:
+    DATABASES = {"default": {
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": BASE_DIR / os.environ.get("CUSTOMS_SQLITE_PATH", ".local/db.sqlite3"),
+    }}
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": f"django.contrib.auth.password_validation.{name}"}
     for name in ("UserAttributeSimilarityValidator", "MinimumLengthValidator",
