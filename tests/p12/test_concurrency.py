@@ -5,7 +5,6 @@ SQLite 只有单写者，行锁是空操作，跑出来的结论不能用于生�
 """
 import threading
 import unittest
-from types import SimpleNamespace
 
 from django.db import IntegrityError, connection, connections
 from django.db.models import F
@@ -14,6 +13,7 @@ from django.test import TransactionTestCase, override_settings
 from apps.accounts.errors import ApiError
 from apps.accounts.models import Role
 from apps.reviews.models import Confirmation, Submission, Task
+from apps.reviews.schemas import ConfirmationIn, SubmissionIn, SubmissionLineIn
 from apps.reviews.services import confirmations, idempotency, submissions
 from tests.p01.factories import assign, make_item, make_task, make_user, make_version
 
@@ -72,18 +72,20 @@ class ConcurrencyTests(TransactionTestCase):
         )
 
     def submission_payload(self):
-        return SimpleNamespace(
+        # 用真实契约 DTO，而不是 SimpleNamespace：服务层依赖 model_dump()，
+        # 测试桩必须和线上请求形状一致，否则测的是不存在的调用方式。
+        return SubmissionIn(
             version_id=str(self.version.pk),
             revision=self.task.revision,
             items=[
-                SimpleNamespace(item_id=str(self.item_a.pk), confirmation_id=str(self.confirm_a.pk)),
-                SimpleNamespace(item_id=str(self.item_b.pk), confirmation_id=str(self.confirm_b.pk)),
+                SubmissionLineIn(item_id=str(self.item_a.pk), confirmation_id=str(self.confirm_a.pk)),
+                SubmissionLineIn(item_id=str(self.item_b.pk), confirmation_id=str(self.confirm_b.pk)),
             ],
         )
 
     def test_confirmations_same_revision_only_one_wins(self):
         """两个并发确认都带 expected_revision=1：一个成功，另一个 409，不产生重复修订。"""
-        payload = SimpleNamespace(expected_revision=1, confirmed_hs="8544422000", reason="并发改码")
+        payload = ConfirmationIn(expected_revision=1, confirmed_hs="8544422000", reason="并发改码")
 
         def confirm():
             try:

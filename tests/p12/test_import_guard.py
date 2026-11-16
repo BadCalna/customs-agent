@@ -20,10 +20,11 @@ class ImportGuardTest(SimpleTestCase):
         load = self.source.index("loaddata --ignorenonexistent")
         self.assertLess(guard, load)
 
-    def test_guard_only_counts_business_apps(self):
-        """框架表（auth/contenttypes/迁移记录）不算业务数据，否则空库会被误拒。"""
-        self.assertIn("BUSINESS_APPS", self.source)
-        self.assertIn('"accounts", "reviews", "runs", "notifications"', self.source)
+    def test_guard_checks_the_actual_import_model_list(self):
+        """按实际导入清单检查：auth.Group 要算（会被覆盖），迁移自动生成的框架行不算。"""
+        self.assertIn('for label in sys.argv[1:]', self.source)
+        self.assertIn('"${MODELS[@]}"', self.source)
+        self.assertNotIn("BUSINESS_APPS", self.source)
 
     def test_guard_is_explained_as_overwrite_not_error(self):
         self.assertIn("覆盖", self.source)

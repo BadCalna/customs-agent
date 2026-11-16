@@ -108,22 +108,20 @@ if [ "$fresh" = 1 ]; then
 else
   echo "4/5 检查目标库为空（loaddata 对相同主键是覆盖，不是报错）"
   # loaddata 遇到相同主键会更新已有记录，单靠唯一约束不会拦住覆盖，所以必须先显式拒绝非空库。
-  nonempty="$("$python_bin" - <<'PY'
+  # 按**实际导入的模型清单**检查，而不是按 app：auth.Group 会随用户组一起导入，
+  # 必须算进来；migrate 自动生成的 auth.Permission / contenttypes 不在清单里，不算。
+  nonempty="$("$python_bin" - "${MODELS[@]}" <<'PY'
 import os
+import sys
 import django
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 django.setup()
 from django.apps import apps
 
-# 只看业务库：migrate 会写入 django_migrations、auth.Permission、contenttypes 等框架行，
-# 把它们算进来会让"刚初始化、还没业务数据"的库被误判为非空。
-BUSINESS_APPS = {"accounts", "reviews", "runs", "notifications"}
 total = 0
-for model in apps.get_models():
-    meta = model._meta
-    if meta.auto_created or meta.app_label not in BUSINESS_APPS:
-        continue
-    total += model._default_manager.count()
+for label in sys.argv[1:]:
+    app_label, model_name = label.split(".", 1)
+    total += apps.get_model(app_label, model_name)._default_manager.count()
     if total:
         break
 print(total)
