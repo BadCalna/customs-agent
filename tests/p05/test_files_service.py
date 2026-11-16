@@ -58,9 +58,9 @@ class FileServiceTestCase(TestCase):
             data=self.workbook_bytes if data is None else data,
         )
 
-    def extract(self, *, user=None, version=None, **kwargs):
-        return files.extract_version_images(
-            user or self.supplier, (version or self.version).pk,
+    def extract(self, *, version=None, **kwargs):
+        return files.extract_version_images_for_version(
+            (version or self.version).pk,
             sheet_name=DECLARATION_SHEET, **kwargs,
         )
 
@@ -241,25 +241,6 @@ class ExtractImagesTests(FileServiceTestCase):
         with self.assertRaises(AuthenticationRequired):
             files.read_item_image(AnonymousUser(), record.pk)
 
-    def test_user_entry_requires_upload_version_action(self):
-        """用户入口是系统派生写动作：只读角色不能触发图片入库。"""
-        for user in (self.operator, self.expert):
-            with self.subTest(role=user.role):
-                with self.assertRaises(PermissionDenied):
-                    files.extract_version_images(
-                        user, self.version.pk, sheet_name=DECLARATION_SHEET,
-                    )
-        with self.assertRaises(AuthenticationRequired):
-            files.extract_version_images(
-                AnonymousUser(), self.version.pk, sheet_name=DECLARATION_SHEET,
-            )
-        with self.assertRaises(files.Http404):
-            files.extract_version_images(
-                self.other_supplier, self.version.pk, sheet_name=DECLARATION_SHEET,
-            )
-        # 拒绝发生在写库之前：图片记录没有被改动。
-        self.assertEqual(ItemImage.objects.filter(item__version=self.version).count(), 15)
-
     def test_unavailable_images_are_not_downloadable(self):
         absent = ItemImage.objects.get(item=self.items[5])
         failed = ItemImage.objects.get(item=self.items[7])
@@ -273,6 +254,25 @@ class ExtractImagesTests(FileServiceTestCase):
                 )
         with self.assertRaises(files.Http404):
             files.read_item_image(self.supplier, uuid.uuid4())
+
+    def test_repeat_extraction_keeps_item_image_primary_keys(self):
+        """Jay 复现：同版本连续提取两次，ItemImage 主键与旧 ID 下载都必须保持。"""
+        before = {
+            (image.item_id, image.source_cell): (image.pk, image.storage_path)
+            for image in ItemImage.objects.filter(item__version=self.version)
+        }
+        self.extract()
+        after = {
+            (image.item_id, image.source_cell): (image.pk, image.storage_path)
+            for image in ItemImage.objects.filter(item__version=self.version)
+        }
+        self.assertEqual(set(after), set(before))
+        self.assertEqual(after, before)
+
+        image_id, storage_path = before[(self.items[2].pk, "E2")]
+        download = files.read_item_image(self.supplier, image_id)
+        self.assertEqual(download.relative_path, storage_path)
+        self.assertTrue(download.content)
 
     def test_repeat_extraction_is_idempotent_and_replaces_records(self):
         first = ItemImage.objects.get(item=self.items[2])
@@ -320,8 +320,8 @@ class VersionIsolationTests(FileServiceTestCase):
             self.supplier, new_version.pk, filename="合成模板V2.xlsx",
             data=package_bytes(mixed_package()),
         )
-        new_report = files.extract_version_images(
-            self.supplier, new_version.pk, sheet_name=DECLARATION_SHEET,
+        new_report = files.extract_version_images_for_version(
+            new_version.pk, sheet_name=DECLARATION_SHEET,
         )
         self.assertEqual(new_report["counts"]["available"], 3)
 
@@ -340,20 +340,20 @@ class VersionIsolationTests(FileServiceTestCase):
 class ErrorAndLimitTests(FileServiceTestCase):
     def test_missing_image_column_is_an_error_not_all_absent(self):
         version = self.stored_version(workbook=package_bytes(no_image_column_package()))
-        self.assert_api_error(422, "image_column_missing", files.extract_version_images, self.supplier,
+        self.assert_api_error(422, "image_column_missing", files.extract_version_images_for_version,
                               version.pk, sheet_name=DECLARATION_SHEET)
         self.assertEqual(ItemImage.objects.filter(item__version=version).count(), 0)
 
     def test_ambiguous_image_column_is_an_error(self):
         version = self.stored_version(workbook=package_bytes(ambiguous_image_column_package()))
-        self.assert_api_error(422, "image_column_ambiguous", files.extract_version_images, self.supplier,
+        self.assert_api_error(422, "image_column_ambiguous", files.extract_version_images_for_version,
                               version.pk, sheet_name=DECLARATION_SHEET)
         self.assertEqual(ItemImage.objects.filter(item__version=version).count(), 0)
 
     def test_unreadable_workbook_maps_to_422(self):
         version = self.stored_version(workbook=b"PK\x03\x04not-a-workbook")
         error = self.assert_api_error(
-            422, None, files.extract_version_images, self.supplier, version.pk,
+            422, None, files.extract_version_images_for_version, version.pk,
             sheet_name=DECLARATION_SHEET,
         )
         self.assertTrue(error.code.startswith("workbook_"), error.code)
@@ -364,7 +364,7 @@ class ErrorAndLimitTests(FileServiceTestCase):
             self.supplier, empty_version.pk, filename="合成模板V2.xlsx",
             data=package_bytes(mixed_package()),
         )
-        self.assert_api_error(422, "no_items", files.extract_version_images, self.supplier,
+        self.assert_api_error(422, "no_items", files.extract_version_images_for_version,
                               empty_version.pk, sheet_name=DECLARATION_SHEET)
 
     def test_rejects_non_bytes_content(self):

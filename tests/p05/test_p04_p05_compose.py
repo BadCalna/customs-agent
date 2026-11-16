@@ -93,13 +93,13 @@ class P04P05ComposeTests(TestCase):
     def test_repeat_extraction_is_idempotent(self):
         self.extract()
         first = sorted(ItemImage.objects.filter(item__version=self.version).values_list(
-            "item__source_row", "status", "storage_path"))
+            "pk", "item__source_row", "status", "storage_path"))
         second = self.extract()
         self.assertEqual(second["counts"]["available"], 4)
         self.assertEqual(ItemImage.objects.filter(item__version=self.version).count(), 5)
         self.assertEqual(
             sorted(ItemImage.objects.filter(item__version=self.version).values_list(
-                "item__source_row", "status", "storage_path")),
+                "pk", "item__source_row", "status", "storage_path")),
             first,
         )
 

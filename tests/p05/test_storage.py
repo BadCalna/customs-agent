@@ -198,6 +198,173 @@ class PathSafetyTests(StorageTestCase):
         self.assertEqual(caught.exception.code, "file_too_large")
 
 
+class StagingTests(StorageTestCase):
+    def stage(self, data=None, *, suffix=".xlsx", max_bytes=storage.DEFAULT_MAX_BYTES):
+        return storage.stage_bytes(
+            self.root, self.data if data is None else data,
+            suffix=suffix, max_bytes=max_bytes,
+        )
+
+    def test_stage_writes_uuid_file_in_incoming(self):
+        staged = self.stage()
+        self.assertTrue(staged.relative_path.startswith("incoming/"))
+        self.assertTrue(staged.relative_path.endswith(".xlsx"))
+        self.assertEqual(staged.sha256, storage.sha256(self.data))
+        self.assertEqual(staged.size, len(self.data))
+        self.assertEqual(storage.read_bytes(self.root, staged.relative_path), self.data)
+        # 暂存阶段不写正式版本目录。
+        self.assertFalse((self.root / "tasks").exists())
+
+    def test_stage_enforces_size_suffix_and_token_rules(self):
+        with self.assertRaises(StorageError) as caught:
+            self.stage(max_bytes=1)
+        self.assertEqual(caught.exception.code, "file_too_large")
+        for suffix in (".exe", ".bin", ""):
+            with self.subTest(suffix=suffix):
+                with self.assertRaises(StorageError) as caught:
+                    self.stage(suffix=suffix)
+                self.assertIn(caught.exception.code, ("unsupported_file_type", "unsafe_path"))
+        with self.assertRaises(StorageError) as caught:
+            storage.discard_staged(self.root, "../../tasks/x")
+        self.assertEqual(caught.exception.code, "invalid_stage_token")
+
+    def test_publish_moves_to_version_original_and_is_idempotent(self):
+        staged = self.stage()
+        stored = storage.publish_staged_original(
+            self.root, staged.token, task_id=self.task_id, version_id=self.version_id,
+            filename="合成模板.xlsx",
+        )
+        self.assertTrue(stored.created)
+        self.assertEqual(stored.relative_path, storage.version_original_relative_path(
+            self.task_id, self.version_id, staged.sha256, ".xlsx",
+        ))
+        self.assertEqual(storage.read_bytes(self.root, stored.relative_path), self.data)
+        self.assertEqual(list((self.root / "incoming").glob("*.xlsx")), [])
+        self.assertTrue(storage.exists(self.root, stored.relative_path))
+
+        again = storage.publish_staged_original(
+            self.root, staged.token, task_id=self.task_id, version_id=self.version_id,
+            filename="合成模板.xlsx",
+        )
+        self.assertFalse(again.created)
+        self.assertEqual(again.relative_path, stored.relative_path)
+        self.assertEqual(storage.read_bytes(self.root, again.relative_path), self.data)
+
+    def test_same_content_different_token_publishes_once(self):
+        first = self.stage()
+        second = self.stage()
+        one = storage.publish_staged_original(
+            self.root, first.token, task_id=self.task_id, version_id=self.version_id,
+            filename="合成模板.xlsx",
+        )
+        two = storage.publish_staged_original(
+            self.root, second.token, task_id=self.task_id, version_id=self.version_id,
+            filename="合成模板.xlsx",
+        )
+        self.assertTrue(one.created)
+        self.assertFalse(two.created)
+        self.assertEqual(one.relative_path, two.relative_path)
+
+    def test_discard_removes_only_staged_files(self):
+        staged = self.stage()
+        storage.discard_staged(self.root, staged.token)
+        self.assertEqual(list((self.root / "incoming").iterdir()), [])
+        with self.assertRaises(StorageError) as caught:
+            storage.discard_staged(self.root, staged.token)
+        self.assertEqual(caught.exception.code, "stage_not_found")
+        with self.assertRaises(StorageError) as caught:
+            storage.publish_staged_original(
+                self.root, staged.token, task_id=self.task_id, version_id=self.version_id,
+                filename="合成模板.xlsx",
+            )
+        self.assertEqual(caught.exception.code, "stage_not_found")
+
+    def test_publish_never_overwrites_existing_original(self):
+        staged = self.stage()
+        stored = storage.publish_staged_original(
+            self.root, staged.token, task_id=self.task_id, version_id=self.version_id,
+            filename="合成模板.xlsx",
+        )
+        target = storage.resolve_path(self.root, stored.relative_path)
+        target.write_bytes(b"tampered")
+        retry = self.stage()
+        with self.assertRaises(StorageError) as caught:
+            storage.publish_staged_original(
+                self.root, retry.token, task_id=self.task_id, version_id=self.version_id,
+                filename="合成模板.xlsx",
+            )
+        self.assertEqual(caught.exception.code, "storage_content_conflict")
+        self.assertEqual(target.read_bytes(), b"tampered")
+        self.assertTrue(storage.read_bytes(self.root, retry.relative_path))
+
+    def test_published_token_cannot_be_replayed_into_other_version(self):
+        staged = self.stage()
+        storage.publish_staged_original(
+            self.root, staged.token, task_id=self.task_id, version_id=self.version_id,
+            filename="合成模板.xlsx",
+        )
+        with self.assertRaises(StorageError) as caught:
+            storage.publish_staged_original(
+                self.root, staged.token, task_id=self.task_id,
+                version_id="33333333-3333-4333-8333-333333333333",
+                filename="合成模板.xlsx",
+            )
+        self.assertEqual(caught.exception.code, "stage_publish_conflict")
+
+
+class ExportStorageTests(StorageTestCase):
+    def save(self, *, kind="precheck", filename="预审结果.xlsx", data=None):
+        return storage.save_export(
+            self.root, task_id=self.task_id, version_id=self.version_id, kind=kind,
+            filename=filename, data=self.data if data is None else data,
+        )
+
+    def test_saves_export_under_version_exports_directory(self):
+        stored = self.save()
+        self.assertTrue(stored.relative_path.startswith(
+            f"tasks/{self.task_id}/versions/{self.version_id}/exports/precheck/"))
+        self.assertTrue(stored.relative_path.endswith(f"{stored.sha256}.xlsx"))
+        self.assertEqual(storage.read_export(self.root, stored.relative_path), self.data)
+        self.assertTrue(storage.export_exists(self.root, stored.relative_path))
+        # 导出与原件/图片目录互不混用。
+        self.assertNotIn("/original/", stored.relative_path)
+        self.assertNotIn("/images/", stored.relative_path)
+
+    def test_same_content_and_kind_is_idempotent(self):
+        first = self.save()
+        second = self.save(filename="另一份.xlsx")
+        self.assertFalse(second.created)
+        self.assertEqual(first.relative_path, second.relative_path)
+
+    def test_supports_allowed_suffixes_and_rejects_others(self):
+        for filename, suffix in (("结果.csv", ".csv"), ("结果.pdf", ".pdf"),
+                                 ("打包.zip", ".zip"), ("宏表.xlsm", ".xlsm")):
+            with self.subTest(filename=filename):
+                stored = self.save(kind=f"kind{suffix[1:]}", filename=filename)
+                self.assertTrue(stored.relative_path.endswith(suffix))
+        with self.assertRaises(StorageError) as caught:
+            self.save(filename="跑起来.exe")
+        self.assertEqual(caught.exception.code, "unsafe_filename")
+        with self.assertRaises(StorageError) as caught:
+            self.save(filename="说明.txt")
+        self.assertEqual(caught.exception.code, "unsupported_file_type")
+
+    def test_read_export_rejects_non_export_paths(self):
+        original = self.save_original()
+        for relative in (original.relative_path, "../secret.pdf", "tasks/only/two"):
+            with self.subTest(relative=relative):
+                with self.assertRaises(StorageError) as caught:
+                    storage.read_export(self.root, relative)
+                self.assertEqual(caught.exception.code, "unsafe_path")
+
+    def test_export_kind_must_be_safe_identifier(self):
+        for kind in ("../evil", "a/b", ""):
+            with self.subTest(kind=kind):
+                with self.assertRaises(StorageError) as caught:
+                    self.save(kind=kind)
+                self.assertEqual(caught.exception.code, "unsafe_path")
+
+
 class FilenameTests(unittest.TestCase):
     def test_strips_paths_control_characters_and_normalizes_unicode(self):
         self.assertEqual(storage.sanitize_filename("../../etc/passwd"), "passwd")
