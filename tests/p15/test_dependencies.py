@@ -17,8 +17,8 @@ MODULE_PATHS = (
     BASE_DIR / "adapters" / "sources" / "history_import.py",
 )
 
-#: 标准库 + 仓库已有依赖（Django / django-ninja / pydantic 由 ninja 带入）+ 本项目包。
-ALLOWED_TOP_LEVEL = {
+#: history_search.py 的允许清单（保持严格：不因导入模块而放松）。
+SEARCH_ALLOWED_TOP_LEVEL = {
     "__future__",
     "collections",
     "dataclasses",
@@ -30,15 +30,24 @@ ALLOWED_TOP_LEVEL = {
     "re",
     "typing",
     "unicodedata",
+    "ninja",
+    "pydantic",
+    "apps",
+}
+
+#: history_import.py 的允许清单（标准库 + 本项目包 + Django 延迟配置）。
+IMPORT_ALLOWED_TOP_LEVEL = SEARCH_ALLOWED_TOP_LEVEL | {
     "argparse",
     "hashlib",
     "sys",
     "traceback",
     "adapters",
     "django",
-    "ninja",
-    "pydantic",
-    "apps",
+}
+
+MODULE_ALLOWED = {
+    BASE_DIR / "adapters" / "sources" / "history_search.py": SEARCH_ALLOWED_TOP_LEVEL,
+    BASE_DIR / "adapters" / "sources" / "history_import.py": IMPORT_ALLOWED_TOP_LEVEL,
 }
 
 #: 明确不允许出现的能力：向量库、网络客户端、模型 SDK、科学计算栈。
@@ -75,14 +84,14 @@ def imported_top_level(path: Path) -> set[str]:
 
 class NoExtraDependencyTest(SimpleTestCase):
     def test_imports_are_stdlib_or_existing_project_dependencies(self):
-        for path in MODULE_PATHS:
+        for path, allowed in MODULE_ALLOWED.items():
             with self.subTest(module=path.name):
                 modules = imported_top_level(path)
                 self.assertTrue(modules, "AST 未解析到任何 import，检查测试本身")
                 self.assertLessEqual(
                     modules,
-                    ALLOWED_TOP_LEVEL,
-                    f"出现允许清单外的 import：{sorted(modules - ALLOWED_TOP_LEVEL)}",
+                    allowed,
+                    f"出现允许清单外的 import：{sorted(modules - allowed)}",
                 )
                 self.assertFalse(modules & FORBIDDEN_TOP_LEVEL)
 

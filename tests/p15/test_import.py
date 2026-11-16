@@ -20,7 +20,11 @@ from adapters.sources.history_import import (
     parse_element_pairs,
     validate_history_queries,
 )
-from tests.p15.history_import_fixtures import build_empty_workbook, build_synthetic_workbook
+from tests.p15.history_import_fixtures import (
+    build_empty_workbook,
+    build_missing_contract_workbook,
+    build_synthetic_workbook,
+)
 
 BASE_DIR = Path(settings.BASE_DIR)
 REAL_DIR = BASE_DIR / "data" / "import-basis" / "2026-11-17"
@@ -238,6 +242,29 @@ class SyntheticImportTest(SimpleTestCase):
             codes = [issue["code"] for issue in outcome.report["files"][0]["task_issues"]]
             self.assertIn("no_declaration_rows", codes)
             self.assertIsNone(outcome.report["files"][0]["error"])
+
+    def test_missing_contract_rows_are_reported_not_fatal_and_not_business_deduped(self):
+        with tempfile.TemporaryDirectory() as raw_tmp:
+            tmp = Path(raw_tmp)
+            workbook = build_missing_contract_workbook(tmp / "missing.xlsx", rows=2)
+            outcome = import_history_templates(self._request(tmp, [workbook]))
+            self.assertEqual(outcome.report["totals"]["parse_failed_files"], 0)
+            self.assertEqual(outcome.report["totals"]["source_records"], 2)
+            self.assertEqual(outcome.report["totals"]["records_total_in_output"], 2)
+            self.assertEqual(outcome.report["totals"]["records_duplicate_business_content"], 0)
+            row_reports = outcome.report["files"][0]["row_reports"]
+            self.assertTrue(all(row["status"] == "imported" for row in row_reports))
+            blocking = {
+                code
+                for row in row_reports
+                for code in row.get("issues", []) and [i.get("code", "") for i in row.get("issues", [])]
+            }
+            self.assertIn("missing_contract", blocking)
+            records = json.loads(outcome.records_path.read_text(encoding="utf-8"))["records"]
+            self.assertTrue(all(record["attributes"]["needs_review"] == "true" for record in records))
+            self.assertTrue(
+                all("missing_contract" in record["attributes"]["blocking_issue_codes"] for record in records)
+            )
 
     def test_parse_failure_is_reported_and_does_not_hide_good_file(self):
         with tempfile.TemporaryDirectory() as raw_tmp:

@@ -815,7 +815,7 @@ def _build_record(
         "missing_fields": missing_fields,
         "issues": issues,
         "p04_status": record.status,
-        "p04_issue_codes": [str(issue.get("code", "")) for issue in record.issues],
+        "p04_issue_codes": [_issue_dict(issue).get("code", "") for issue in record.issues],
     }
 
     if not name or not hs:
@@ -940,16 +940,21 @@ def _business_dedup_key(payload: Mapping[str, Any]) -> str:
     """跨来源位置的业务去重键：同名同码同要素同合同项视为同一条业务案例。
 
     这比 ``record_id`` 更严格：它能发现“同一模板被复制/改名后再次导入”造成的
-    业务重复，而 record_id/source_key 只覆盖“同一来源位置”的重复。
+    业务重复，而 record_id/source_key 只覆盖“同一来源位置”的重复。合同号与项号
+    都为空时返回空串，表示身份不足以做跨来源业务去重，退回 record_id/source_key。
     """
 
     attributes = payload.get("attributes") or {}
+    contract = _compact(attributes.get("contract_no", ""))
+    item = _compact(attributes.get("item_no", ""))
+    if not contract and not item:
+        return ""
     parts = [
         _compact(payload.get("historical_hs", "")),
         _compact(payload.get("historical_name", "")),
         json.dumps(payload.get("elements") or {}, ensure_ascii=False, sort_keys=True),
-        _compact(attributes.get("contract_no", "")),
-        _compact(attributes.get("item_no", "")),
+        contract,
+        item,
         _compact(payload.get("material", "")),
         _compact(payload.get("spec", "")),
     ]
@@ -1684,6 +1689,7 @@ def render_markdown_report(report: Mapping[str, Any]) -> str:
                     ("本次新写入", totals.get("records_imported_this_run", 0)),
                     ("跳过", totals.get("records_skipped", 0)),
                     ("重复", totals.get("records_duplicate", 0)),
+                    ("跨来源业务重复", totals.get("records_duplicate_business_content", 0)),
                     ("变化", totals.get("records_changed", 0)),
                     ("批内重复", totals.get("records_duplicate_within_batch", 0)),
                     ("输出总记录", totals.get("records_total_in_output", 0)),
@@ -1732,6 +1738,22 @@ def render_markdown_report(report: Mapping[str, Any]) -> str:
         )
     else:
         lines.append("无重复或变化记录。")
+    lines.extend(["", "## 文件级问题", ""])
+    file_issue_rows = []
+    for file_report in report.get("files", []):
+        for issue in file_report.get("task_issues", []):
+            file_issue_rows.append(
+                (
+                    file_report.get("source_id"),
+                    issue.get("code"),
+                    issue.get("severity", ""),
+                    issue.get("message", ""),
+                )
+            )
+    if file_issue_rows:
+        lines.append(_md_table(["source_id", "问题", "严重度", "说明"], file_issue_rows))
+    else:
+        lines.append("无。")
     lines.extend(["", "## 逐行异常/缺失（节选）", ""])
     issue_rows = []
     for file_report in report.get("files", []):
