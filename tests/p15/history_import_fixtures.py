@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from tests.p04.fixtures import Package, formula, png
+from tests.p04.fixtures import Package, png
 
 DECLARATION_SHEET = "申报要素"
 PACKING_SHEET = "装箱明细"
