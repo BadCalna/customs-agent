@@ -397,8 +397,14 @@ def publish_staged_original(
     task_id: str,
     version_id: str,
     filename: str,
+    max_bytes: int = DEFAULT_MAX_BYTES,
 ) -> StoredFile:
-    """把暂存原件原子发布到版本原件路径；成功后清理暂存，重复发布幂等。"""
+    """把暂存原件原子发布到版本原件路径；成功后清理暂存，重复发布幂等。
+
+    ``max_bytes`` 必须与 :func:`stage_bytes` 使用同一上限（P06 不应在发布阶段换一个更小的
+    默认值）；正式发布仍执行一次上限校验，避免暂存后绕过。并发发布同一 token 时，先完成者
+    写回执并清理暂存，后到者按回执返回同一正式路径，不把“暂存已被清理”当失败。
+    """
     canonical = _canonical_stage_token(token)
     receipt_relative = f"{STAGE_DIR}/{canonical}.json"
     receipt = _read_receipt(root, receipt_relative)
@@ -407,8 +413,29 @@ def publish_staged_original(
             root, receipt, task_id=task_id, version_id=version_id,
         )
 
-    staged_relative = _staged_relative_path(root, canonical)
-    payload = read_bytes(root, staged_relative, max_bytes=DEFAULT_MAX_READ_BYTES)
+    try:
+        staged_relative = _staged_relative_path(root, canonical)
+    except StorageError as exc:
+        if exc.code != "stage_not_found":
+            raise
+        # 另一发布调用可能刚写完回执并清掉暂存：回查回执，命中即按同一路径成功返回。
+        receipt = _read_receipt(root, receipt_relative)
+        if receipt is not None:
+            return _stored_from_receipt(
+                root, receipt, task_id=task_id, version_id=version_id,
+            )
+        raise
+    try:
+        payload = read_bytes(root, staged_relative, max_bytes=DEFAULT_MAX_READ_BYTES)
+    except StorageError as exc:
+        if exc.code != "file_not_found":
+            raise
+        receipt = _read_receipt(root, receipt_relative)
+        if receipt is not None:
+            return _stored_from_receipt(
+                root, receipt, task_id=task_id, version_id=version_id,
+            )
+        raise
     suffix = PurePosixPath(staged_relative).suffix.lower()
     suffix = _content_suffix(suffix, ORIGINAL_SUFFIXES, "暂存原件")
     stored = _store(
@@ -416,7 +443,7 @@ def publish_staged_original(
         relative_path=version_original_relative_path(
             task_id, version_id, sha256(payload), suffix,
         ),
-        suffix=suffix, display_name=filename, max_bytes=DEFAULT_MAX_BYTES,
+        suffix=suffix, display_name=filename, max_bytes=max_bytes,
     )
     _write_receipt(root, receipt_relative, {
         "token": canonical,
@@ -430,6 +457,9 @@ def publish_staged_original(
     })
     try:
         resolve_path(root, staged_relative).unlink()
+    except FileNotFoundError:
+        # 并发发布时另一个调用已清理暂存；回执与正式文件都已就绪，不算失败。
+        pass
     except OSError as exc:
         raise StorageError("storage_unwritable", f"清理暂存文件失败：{exc}") from exc
     return stored

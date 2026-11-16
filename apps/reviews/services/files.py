@@ -3,7 +3,9 @@
 职责边界（P05 交接给 P06 的编排入口）：
 
 1. P06 在自己的事务里创建 ``Task`` / ``FileVersion`` 与商品行 ``Item``；
-2. 调用 :func:`store_version_original` 把上传字节落到该版本目录并写 ``FileVersion.storage_path``；
+2. 推荐用 :func:`stage_version_original` 先落暂存，事务提交后用
+   :func:`publish_staged_version_original` 发布并写 ``FileVersion.storage_path``；
+   也可调用 :func:`store_version_original` 直接落盘（事务回滚会留下不可删除的文件）；
 3. 商品行建立后调用 :func:`extract_version_images_for_version`，按 ``(页签, 行号集合, 图片列)``
    解析原件并按 ``(item, source_cell)`` upsert 该版本、该批商品行的 ``ItemImage`` 记录；
 4. 页面/端点需要下载时调用 :func:`read_version_original` / :func:`read_item_image`
@@ -199,6 +201,58 @@ def store_version_original(user, version_id, *, filename: str, data: bytes) -> F
             raise ApiError(
                 409, "storage_conflict",
                 "该版本原件已被另一个请求登记为不同内容，请刷新后重试；原件不可覆盖",
+            )
+    version.refresh_from_db()
+    return version
+
+
+# --------------------------------------------------------------------- 暂存系统入口
+def stage_version_original(data: bytes, *, filename: str):
+    """系统入口：按 settings 的 ``CUSTOMS_FILE_MAX_BYTES`` 暂存上传原件。
+
+    **不接收 user，也不做权限校验**：P06 必须已在上传流程完成权限与归属校验。
+    返回 :class:`adapters.files.storage.StagedFile`（token/sha256/size）；此时还没有正式原件，
+    事务失败时用 ``storage.discard_staged(root, token)`` 清理。
+    """
+    try:
+        display_name = storage.sanitize_filename(
+            filename or "", fallback="原件.xlsx", allowed_suffixes=storage.ORIGINAL_SUFFIXES,
+        )
+        suffix = Path(display_name).suffix.lower()
+        return storage.stage_bytes(
+            storage_root(), data, suffix=suffix, max_bytes=max_original_bytes(),
+        )
+    except storage.StorageError as exc:
+        _raise_storage_error(exc)
+
+
+def publish_staged_version_original(version, token: str, *, filename: str) -> FileVersion:
+    """系统入口：把暂存原件发布到版本目录并写 ``FileVersion.storage_path``。
+
+    **不接收 user，也不做权限校验**：调用方必须已在上传/解析流程完成授权与版本归属校验。
+    发布使用与暂存相同的 ``CUSTOMS_FILE_MAX_BYTES`` 上限，避免“暂存成功、发布却超限”。
+    同一内容重复发布幂等；已登记不同 ``storage_path`` 的版本返回 409，绝不覆盖原件。
+    """
+    version = _get_version(version.pk if isinstance(version, FileVersion) else version)
+    try:
+        stored = storage.publish_staged_original(
+            storage_root(), token,
+            task_id=str(version.task_id), version_id=str(version.pk),
+            filename=filename, max_bytes=max_original_bytes(),
+        )
+    except storage.StorageError as exc:
+        _raise_storage_error(exc)
+
+    updated = FileVersion.objects.filter(pk=version.pk, storage_path="").update(
+        storage_path=stored.relative_path,
+    )
+    if not updated:
+        version.refresh_from_db()
+        if version.storage_path != stored.relative_path:
+            raise ApiError(
+                409, "storage_conflict",
+                "该版本已登记为另一份原件，拒绝覆盖；补料请创建新版本",
+                {"storage_path": version.storage_path},
             )
     version.refresh_from_db()
     return version
@@ -453,9 +507,11 @@ __all__ = [
     "max_image_bytes",
     "max_original_bytes",
     "max_read_bytes",
+    "publish_staged_version_original",
     "read_item_image",
     "read_item_image_path",
     "read_version_original",
+    "stage_version_original",
     "storage_root",
     "store_version_original",
 ]
