@@ -1,0 +1,98 @@
+{
+  "schema_version": "p14.tariff.1",
+  "dataset": {
+    "dataset_id": "synthetic-p14-tariff-2026",
+    "source_type": "synthetic",
+    "authority": "synthetic",
+    "synthetic": true,
+    "description": "P14 合成税则样本，仅用于验证接口、版本窗口与四态；不是真实税则，禁止作为申报依据",
+    "document": "SYN-P14-TARIFF",
+    "url": null,
+    "retrieved_at": "2026-11-16T00:00:00+08:00",
+    "review_status": "unreviewed",
+    "notes": "编码与描述均为合成或通用占位，未复制官方税则数据"
+  },
+  "versions": [
+    {
+      "version": "2025",
+      "effective_from": "2025-01-01",
+      "effective_to": "2025-12-31",
+      "label": "合成 2025 版"
+    },
+    {
+      "version": "2026",
+      "effective_from": "2026-01-01",
+      "effective_to": "2026-12-31",
+      "label": "合成 2026 版"
+    }
+  ],
+  "codes": [
+    {
+      "version": "2026",
+      "code": "8544422900",
+      "description": "合成样本：其他电导体（非真实归类结论）",
+      "chapter": "85",
+      "heading": "8544",
+      "subheading": "854442",
+      "state": "active",
+      "source": {
+        "system": "synthetic-p14",
+        "document": "SYN-P14-TARIFF",
+        "locator": "合成数据行 2026/8544422900",
+        "publisher": "P14 合成样本",
+        "retrieved_at": "2026-11-16T00:00:00+08:00"
+      }
+    },
+    {
+      "version": "2026",
+      "code": "8536490090",
+      "description": "合成样本：其他继电器（非真实归类结论）",
+      "chapter": "85",
+      "heading": "8536",
+      "subheading": "853649",
+      "state": "active",
+      "source": {
+        "system": "synthetic-p14",
+        "document": "SYN-P14-TARIFF",
+        "locator": "合成数据行 2026/8536490090",
+        "publisher": "P14 合成样本",
+        "retrieved_at": "2026-11-16T00:00:00+08:00"
+      }
+    },
+    {
+      "version": "2026",
+      "code": "8544429900",
+      "description": "合成样本：已并码的旧编码（非真实公告）",
+      "chapter": "85",
+      "heading": "8544",
+      "subheading": "854442",
+      "state": "merged",
+      "merged_to": "8544422900",
+      "source": {
+        "system": "synthetic-p14",
+        "document": "SYN-P14-TARIFF",
+        "locator": "合成数据行 2026/8544429900",
+        "publisher": "P14 合成样本",
+        "retrieved_at": "2026-11-16T00:00:00+08:00"
+      }
+    },
+    {
+      "version": "2025",
+      "code": "8544421900",
+      "description": "合成样本：仅在 2025 版存在的旧编码",
+      "chapter": "85",
+      "heading": "8544",
+      "subheading": "854442",
+      "state": "expired",
+      "effective_from": "2025-01-01",
+      "effective_to": "2025-12-31",
+      "source": {
+        "system": "synthetic-p14",
+        "document": "SYN-P14-TARIFF",
+        "locator": "合成数据行 2025/8544421900",
+        "publisher": "P14 合成样本",
+        "retrieved_at": "2026-11-16T00:00:00+08:00"
+      }
+    }
+  ]
+}

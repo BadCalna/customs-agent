@@ -1,0 +1,213 @@
+{
+  "schema_version": "p14.elements.1",
+  "dataset": {
+    "dataset_id": "synthetic-p14-elements-2026",
+    "source_type": "synthetic",
+    "authority": "synthetic",
+    "synthetic": true,
+    "description": "P14 合成申报要素样本，仅用于验证接口、解析与充分性判定；不是真实规范申报目录",
+    "document": "SYN-P14-ELEMENTS",
+    "url": null,
+    "retrieved_at": "2026-11-16T00:00:00+08:00",
+    "review_status": "unreviewed",
+    "notes": "字段形状参考公开页面，具体要素清单为合成，不得作为申报依据"
+  },
+  "versions": [
+    {
+      "version": "2025",
+      "effective_from": "2025-01-01",
+      "effective_to": "2025-12-31",
+      "label": "合成 2025 版"
+    },
+    {
+      "version": "2026",
+      "effective_from": "2026-01-01",
+      "effective_to": "2026-12-31",
+      "label": "合成 2026 版"
+    }
+  ],
+  "schemas": [
+    {
+      "hs_code": "8544422900",
+      "description": "合成样本：其他电导体（非真实归类结论）",
+      "version": "2026",
+      "source": {
+        "system": "synthetic-p14",
+        "document": "SYN-P14-ELEMENTS",
+        "locator": "合成清单 2026/8544422900",
+        "publisher": "P14 合成样本",
+        "retrieved_at": "2026-11-16T00:00:00+08:00"
+      },
+      "elements": [
+        {
+          "key": "brand_type",
+          "label": "品牌类型",
+          "order": 1,
+          "role": "classification",
+          "requirement": "required",
+          "value_type": "enum",
+          "enum_values": ["无品牌", "境内自主品牌", "境外品牌（其它）"],
+          "example": "无品牌"
+        },
+        {
+          "key": "export_benefit",
+          "label": "出口享惠情况",
+          "order": 2,
+          "role": "classification",
+          "requirement": "required",
+          "value_type": "enum",
+          "enum_values": ["不享受优惠关税", "享受优惠关税"],
+          "example": "不享受优惠关税"
+        },
+        {
+          "key": "usage",
+          "label": "用途",
+          "order": 3,
+          "role": "classification",
+          "requirement": "required",
+          "aliases": ["使用用途"],
+          "example": "工业设备连接"
+        },
+        {
+          "key": "conductor_material",
+          "label": "导体材质",
+          "order": 4,
+          "role": "classification",
+          "requirement": "required",
+          "example": "铜"
+        },
+        {
+          "key": "brand",
+          "label": "品牌（中文或外文名称）",
+          "order": 5,
+          "role": "price",
+          "requirement": "conditional",
+          "condition": "品牌类型不是无品牌时",
+          "aliases": ["品牌"],
+          "example": "ACME"
+        },
+        {
+          "key": "model",
+          "label": "型号",
+          "order": 6,
+          "role": "price",
+          "requirement": "required",
+          "example": "X-100"
+        },
+        {
+          "key": "gtin",
+          "label": "GTIN",
+          "order": 7,
+          "role": "customs",
+          "requirement": "optional",
+          "example": "无"
+        },
+        {
+          "key": "cas",
+          "label": "CAS",
+          "order": 8,
+          "role": "customs",
+          "requirement": "optional",
+          "example": "无"
+        },
+        {
+          "key": "other",
+          "label": "其他",
+          "order": 9,
+          "role": "other",
+          "requirement": "optional",
+          "example": "无"
+        }
+      ]
+    },
+    {
+      "hs_code": "8544422900",
+      "description": "合成样本：2025 版要素清单（用于验证版本差异）",
+      "version": "2025",
+      "source": {
+        "system": "synthetic-p14",
+        "document": "SYN-P14-ELEMENTS",
+        "locator": "合成清单 2025/8544422900",
+        "publisher": "P14 合成样本",
+        "retrieved_at": "2026-11-16T00:00:00+08:00"
+      },
+      "elements": [
+        {
+          "key": "brand_type",
+          "label": "品牌类型",
+          "order": 1,
+          "role": "classification",
+          "requirement": "required",
+          "value_type": "enum",
+          "enum_values": ["无品牌", "境外品牌（其它）"],
+          "example": "无品牌"
+        },
+        {
+          "key": "usage",
+          "label": "用途",
+          "order": 2,
+          "role": "classification",
+          "requirement": "required",
+          "example": "工业设备连接"
+        },
+        {
+          "key": "model",
+          "label": "型号",
+          "order": 3,
+          "role": "price",
+          "requirement": "required",
+          "example": "X-100"
+        }
+      ]
+    },
+    {
+      "hs_code": "8536490090",
+      "description": "合成样本：其他继电器（非真实归类结论）",
+      "version": "2026",
+      "source": {
+        "system": "synthetic-p14",
+        "document": "SYN-P14-ELEMENTS",
+        "locator": "合成清单 2026/8536490090",
+        "publisher": "P14 合成样本",
+        "retrieved_at": "2026-11-16T00:00:00+08:00"
+      },
+      "elements": [
+        {
+          "key": "brand_type",
+          "label": "品牌类型",
+          "order": 1,
+          "role": "classification",
+          "requirement": "required",
+          "value_type": "enum",
+          "enum_values": ["无品牌", "境内自主品牌", "境外品牌（其它）"],
+          "example": "无品牌"
+        },
+        {
+          "key": "usage",
+          "label": "用途",
+          "order": 2,
+          "role": "classification",
+          "requirement": "required",
+          "example": "控制电路"
+        },
+        {
+          "key": "voltage",
+          "label": "电压",
+          "order": 3,
+          "role": "classification",
+          "requirement": "required",
+          "value_type": "number",
+          "example": "220"
+        },
+        {
+          "key": "model",
+          "label": "型号",
+          "order": 4,
+          "role": "price",
+          "requirement": "required",
+          "example": "LRD12C"
+        }
+      ]
+    }
+  ]
+}
