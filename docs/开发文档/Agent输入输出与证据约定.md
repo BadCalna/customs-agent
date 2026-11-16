@@ -119,6 +119,8 @@ P14 是**事实来源**，不是归类引擎。它只回答两件事：
 - 8 位数字是税目/子目（`subheading_only`），不是错码；仅当来源收录 8 位记录时可查该记录，不按 10 位前缀外推层级，也不能确认 10 位申报编码，`declaration_ready=false`。
 - `expired`、`merged` 只按来源记录声明，不按“查不到”推断，也不按本机日期推断。
 - 查到但来源非权威（合成、第三方、官方但未复核）时，`evidence_status` 仍可 `obtained`，但 `authoritative=false`、`usable_as_basis=false`，证据必须显著标注来源类型与“仅作线索”。
+- 编码记录的有效期单独用 `effective_status` 表达：`effective / not_yet_effective / expired / unknown`。即使来源声明 `active`，只要申报日期早于记录的 `effective_from`、晚于 `effective_to`，或没有业务申报日期可核对，`declaration_ready` 与 `usable_as_basis` 都必须为 false，并给出 `HS_RECORD_NOT_EFFECTIVE`、`HS_EFFECTIVE_DATE_UNKNOWN` 或 `HS_RECORD_EFFECTIVE_UNVERIFIED`。
+- 编码状态（来源是否声明 active/expired/merged）与“在某个申报日期是否适用”是两件事：不能因为记录属于某税则版本就跳过记录自身的生效/失效日期。
 
 ### 6.3 来源权威与复核
 
@@ -153,6 +155,8 @@ P14 是**事实来源**，不是归类引擎。它只回答两件事：
 支持位置式（`4|1|深沟球轴承|…`）、编号式（`1:品牌类型:无品牌;…`）、键值式（`品牌类型:无品牌;…`）与结构化映射。解析保守：
 
 - 位置数量与清单不一致、编号有缺口、名称歧义、结构化值与原文冲突，一律 `partial`，`sufficiency=unverified`，先人工核对原文；
+- 原文先做 NFKC 归一化再检查长度；归一化后超过上限时**不截断**，整体标 `unparsed` 转人工，避免膨胀字符把尾部冲突截掉；
+- 编号段超过 6 位数字不转整数、不按序号解释，直接记为未识别并转人工；
 - `品牌类型|用途|型号` 这类竖线模板按 `template_only` 处理，不会把要素名当成已填值；`名称:值|名称:值` 按键值式解析，不按位置硬塞；
 - 编号式只接受可识别的 `名称[:值]`；`1:无品牌` 这类无法区分“未知名称/纯值”的写法不按编号猜值，标 `partial`（纯值请用位置式或结构化输入）；
 - 同一要素名重复出现（含两个别名指向同一要素）标 `partial`，保留首个值并转人工，不允许后值静默覆盖前值；

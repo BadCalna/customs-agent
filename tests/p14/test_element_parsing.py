@@ -222,3 +222,19 @@ class ParseTest(SimpleTestCase):
         self.assertIs(result.sufficiency.value, "not_checked")
         self.assertIn("超过", result.reason)
         self.assertEqual(result.supplement_items, [])
+
+    def test_nfkc_expansion_over_limit_is_unverified_not_truncated(self):
+        # ﬃ 归一化为 ffi 后长度膨胀；原串在限制内，但归一化后超过上限。
+        raw = "品牌类型:无品牌;" + ("ﬃ" * 3500) + ";型号:X-100"
+        result = self.check(declared_raw=raw)
+        self.assertIs(result.parse.status, ParseStatus.UNPARSED)
+        self.assertIs(result.sufficiency.value, "unverified")
+        self.assertIn("超过上限", result.parse.note)
+        self.assertEqual(result.supplement_items, [])
+
+    def test_absurdly_long_numbered_prefix_does_not_raise(self):
+        result = self.check(declared_raw=("9" * 5000) + ":品牌类型")
+        self.assertIs(result.parse.status, ParseStatus.PARTIAL)
+        self.assertIs(result.sufficiency.value, "unverified")
+        self.assertIn("未识别", result.parse.note)
+        self.assertEqual(result.supplement_items, [])

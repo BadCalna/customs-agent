@@ -682,7 +682,14 @@ def _parse_raw(raw: str, schema: ElementSchema) -> tuple[dict[str, str], dict[st
     if not text:
         return {}, {}, ElementParseReport(mode=ParseMode.NONE, status=ParseStatus.EMPTY)
     if len(text) > MAX_RAW_LENGTH:
-        text = text[:MAX_RAW_LENGTH]
+        # 不能先截断再解析：NFKC 可能把 ﬃ 扩成 ffi，截断会漏掉尾部冲突。
+        return {}, {}, ElementParseReport(
+            status=ParseStatus.UNPARSED,
+            note=(
+                f"原文归一化后长度为 {len(text)}，超过上限 {MAX_RAW_LENGTH}；"
+                "未解析，避免截断后漏掉冲突，需人工核对原文"
+            ),
+        )
 
     index = _build_index(schema)
     values: dict[str, str] = {}
@@ -769,7 +776,12 @@ def _parse_raw(raw: str, schema: ElementSchema) -> tuple[dict[str, str], dict[st
         order: int | None = None
         rest = segment
         if number_match:
-            order = int(number_match.group(1))
+            raw_order = number_match.group(1)
+            if len(raw_order) > 6:
+                # 超长“编号”不可能是要素序号；直接 int() 会抛 ValueError 并把整次核对变成 500。
+                unrecognized.append(segment[:80])
+                continue
+            order = int(raw_order)
             rest = number_match.group(2).strip()
             mode = ParseMode.NUMBERED
             if order in numbered_seen:

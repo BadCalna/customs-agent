@@ -6,6 +6,7 @@ from pydantic import ValidationError
 
 from adapters.sources.hs_lookup import (
     CodeState,
+    EffectiveStatus,
     EnvTariffStore,
     EvidenceStatus,
     HsLookupResult,
@@ -133,6 +134,42 @@ class HsLookupTest(SimpleTestCase):
         self.assertIs(result.code_state, CodeState.EXPIRED)
         self.assertFalse(result.declaration_ready)
         self.assertIn("HS_CODE_EXPIRED", [item.code for item in result.issues])
+
+    def test_record_not_yet_effective_cannot_be_usable(self):
+        store = tariff_store(codes=[tariff_code(effective_from="2026-07-01")])
+        result = self.lookup(store=store, basis=QueryBasis(declaration_date="2026-05-20"))
+        self.assertIs(result.effective_status, EffectiveStatus.NOT_YET_EFFECTIVE)
+        self.assertFalse(result.declaration_ready)
+        self.assertFalse(result.usable_as_basis)
+        self.assertIn("HS_RECORD_NOT_EFFECTIVE", [item.code for item in result.issues])
+        self.assertIn("晚于申报日期", result.reason)
+
+    def test_record_expired_before_query_date_cannot_be_usable(self):
+        store = tariff_store(codes=[tariff_code(effective_to="2026-03-31")])
+        result = self.lookup(store=store, basis=QueryBasis(declaration_date="2026-05-20"))
+        self.assertIs(result.effective_status, EffectiveStatus.EXPIRED)
+        self.assertFalse(result.declaration_ready)
+        self.assertIn("HS_RECORD_NOT_EFFECTIVE", [item.code for item in result.issues])
+        self.assertIn("早于申报日期", result.reason)
+
+    def test_record_effective_on_query_date_is_usable(self):
+        store = tariff_store(codes=[tariff_code(effective_from="2026-05-20", effective_to="2026-05-20")])
+        result = self.lookup(store=store, basis=QueryBasis(declaration_date="2026-05-20"))
+        self.assertIs(result.effective_status, EffectiveStatus.EFFECTIVE)
+        self.assertTrue(result.declaration_ready)
+
+    def test_missing_business_date_is_not_declaration_ready(self):
+        result = self.lookup(basis=QueryBasis(tariff_version="2026"))
+        self.assertIs(result.effective_status, EffectiveStatus.UNKNOWN)
+        self.assertFalse(result.declaration_ready)
+        self.assertIn("HS_EFFECTIVE_DATE_UNKNOWN", [item.code for item in result.issues])
+
+    def test_partial_record_validity_is_not_treated_as_effective(self):
+        store = tariff_store(codes=[tariff_code(effective_from="2026-01-01")])
+        result = self.lookup(store=store, basis=QueryBasis(declaration_date="2026-05-20"))
+        self.assertIs(result.effective_status, EffectiveStatus.UNKNOWN)
+        self.assertFalse(result.declaration_ready)
+        self.assertIn("HS_RECORD_EFFECTIVE_UNVERIFIED", [item.code for item in result.issues])
 
     def test_merged_code_keeps_replacement_as_source_fact(self):
         store = tariff_store(codes=[tariff_code(state="merged", merged_to="8544422900")])
