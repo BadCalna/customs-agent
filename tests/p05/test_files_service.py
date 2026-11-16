@@ -337,6 +337,102 @@ class VersionIsolationTests(FileServiceTestCase):
             self.assertIn(str(self.version.pk), image.storage_path)
 
 
+class StagingServiceTests(FileServiceTestCase):
+    """系统暂存/发布入口：暂存与发布使用同一 settings 上限，写库不覆盖。"""
+
+    payload = b"PK\x03\x04" + b"x" * 146  # 150 字节
+
+    def test_stage_and_publish_use_same_configured_limit(self):
+        with self.settings(CUSTOMS_FILE_MAX_BYTES=200):
+            staged = files.stage_version_original(self.payload, filename="合成模板.xlsx")
+            self.assertEqual(staged.size, len(self.payload))
+            version = files.publish_staged_version_original(
+                self.version, staged.token, filename="合成模板.xlsx",
+            )
+        version.refresh_from_db()
+        self.assertTrue(version.storage_path)
+        self.assertEqual(
+            files.read_version_original(self.supplier, version.pk).content, self.payload,
+        )
+        files_in_storage = [
+            path for path in (self.root / "tasks").rglob("*") if path.is_file()
+        ]
+        self.assertEqual(len(files_in_storage), 1)
+
+    def test_stage_rejects_configured_size_and_bad_filename(self):
+        with self.settings(CUSTOMS_FILE_MAX_BYTES=100):
+            self.assert_api_error(
+                422, "file_too_large", files.stage_version_original,
+                self.payload, filename="合成模板.xlsx",
+            )
+        for filename, code in (("payload.exe", "unsafe_filename"),
+                               ("说明.pdf", "unsupported_file_type")):
+            with self.subTest(filename=filename):
+                self.assert_api_error(
+                    422, code, files.stage_version_original,
+                    self.payload, filename=filename,
+                )
+
+    def test_publish_applies_the_same_limit_as_stage(self):
+        with self.settings(CUSTOMS_FILE_MAX_BYTES=200):
+            staged = files.stage_version_original(self.payload, filename="合成模板.xlsx")
+        # 暂存后把配置调小：发布必须再次校验并拒绝，而不是悄悄按旧值落盘。
+        with self.settings(CUSTOMS_FILE_MAX_BYTES=100):
+            self.assert_api_error(
+                422, "file_too_large", files.publish_staged_version_original,
+                self.version, staged.token, filename="合成模板.xlsx",
+            )
+        self.assertEqual(FileVersion.objects.get(pk=self.version.pk).storage_path, "")
+        with self.settings(CUSTOMS_FILE_MAX_BYTES=200):
+            version = files.publish_staged_version_original(
+                self.version, staged.token, filename="合成模板.xlsx",
+            )
+        self.assertTrue(version.storage_path)
+
+    def test_publish_writes_storage_path_and_is_idempotent(self):
+        with self.settings(CUSTOMS_FILE_MAX_BYTES=200):
+            staged = files.stage_version_original(self.payload, filename="合成模板.xlsx")
+            first = files.publish_staged_version_original(
+                self.version, staged.token, filename="合成模板.xlsx",
+            )
+            second = files.publish_staged_version_original(
+                self.version.pk, staged.token, filename="合成模板.xlsx",
+            )
+        self.assertEqual(first.storage_path, second.storage_path)
+        self.assertEqual(first.storage_path, FileVersion.objects.get(pk=self.version.pk).storage_path)
+        self.assertEqual(
+            len([path for path in (self.root / "tasks").rglob("*") if path.is_file()]), 1,
+        )
+
+    def test_publish_refuses_to_overwrite_a_different_recorded_original(self):
+        other_path = (
+            f"tasks/{self.task.pk}/versions/{self.version.pk}/original/"
+            + "0" * 64 + ".xlsx"
+        )
+        FileVersion.objects.filter(pk=self.version.pk).update(storage_path=other_path)
+        with self.settings(CUSTOMS_FILE_MAX_BYTES=200):
+            staged = files.stage_version_original(self.payload, filename="合成模板.xlsx")
+            self.assert_api_error(
+                409, "storage_conflict", files.publish_staged_version_original,
+                self.version, staged.token, filename="合成模板.xlsx",
+            )
+        self.assertEqual(
+            FileVersion.objects.get(pk=self.version.pk).storage_path, other_path,
+        )
+
+    def test_publish_accepts_already_recorded_same_path_idempotently(self):
+        with self.settings(CUSTOMS_FILE_MAX_BYTES=200):
+            staged = files.stage_version_original(self.payload, filename="合成模板.xlsx")
+            expected = storage.version_original_relative_path(
+                str(self.task.pk), str(self.version.pk), staged.sha256, ".xlsx",
+            )
+            FileVersion.objects.filter(pk=self.version.pk).update(storage_path=expected)
+            version = files.publish_staged_version_original(
+                self.version, staged.token, filename="合成模板.xlsx",
+            )
+        self.assertEqual(version.storage_path, expected)
+
+
 class ErrorAndLimitTests(FileServiceTestCase):
     def test_missing_image_column_is_an_error_not_all_absent(self):
         version = self.stored_version(workbook=package_bytes(no_image_column_package()))

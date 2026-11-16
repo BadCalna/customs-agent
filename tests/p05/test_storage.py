@@ -2,6 +2,7 @@
 
 import errno
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -310,6 +311,76 @@ class StagingTests(StorageTestCase):
                 filename="合成模板.xlsx",
             )
         self.assertEqual(caught.exception.code, "stage_publish_conflict")
+
+
+    def test_publish_honours_max_bytes(self):
+        payload = b"PK\x03\x04" + b"x" * 146  # 150 字节
+        staged = self.stage(data=payload, max_bytes=200)
+        with self.assertRaises(StorageError) as caught:
+            storage.publish_staged_original(
+                self.root, staged.token, task_id=self.task_id, version_id=self.version_id,
+                filename="合成模板.xlsx", max_bytes=100,
+            )
+        self.assertEqual(caught.exception.code, "file_too_large")
+        self.assertFalse((self.root / "tasks").exists())
+        stored = storage.publish_staged_original(
+            self.root, staged.token, task_id=self.task_id, version_id=self.version_id,
+            filename="合成模板.xlsx", max_bytes=200,
+        )
+        self.assertEqual(stored.size, 150)
+        self.assertEqual(storage.read_bytes(self.root, stored.relative_path), payload)
+
+    def test_concurrent_publish_same_token_returns_same_file(self):
+        staged = self.stage()
+        barrier = threading.Barrier(2)
+        results, errors = [], []
+
+        def worker():
+            barrier.wait()
+            try:
+                results.append(storage.publish_staged_original(
+                    self.root, staged.token, task_id=self.task_id,
+                    version_id=self.version_id, filename="合成模板.xlsx",
+                ))
+            except BaseException as exc:  # noqa: BLE001 - 测试需要收集线程异常
+                errors.append(exc)
+
+        threads = [threading.Thread(target=worker) for _ in range(2)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=10)
+        self.assertEqual(errors, [])
+        self.assertEqual(len(results), 2)
+        self.assertEqual(len({item.relative_path for item in results}), 1)
+        self.assertEqual({item.sha256 for item in results}, {staged.sha256})
+        files = [path for path in (self.root / "tasks").rglob("*") if path.is_file()]
+        self.assertEqual(len(files), 1)
+        self.assertEqual(storage.file_sha256(self.root, results[0].relative_path), staged.sha256)
+
+        again = storage.publish_staged_original(
+            self.root, staged.token, task_id=self.task_id, version_id=self.version_id,
+            filename="合成模板.xlsx",
+        )
+        self.assertEqual(again.relative_path, results[0].relative_path)
+
+    def test_publish_tolerates_staged_cleanup_by_other_publisher(self):
+        staged = self.stage()
+        real_write_receipt = storage._write_receipt
+
+        def racing_write_receipt(root, relative_path, payload):
+            real_write_receipt(root, relative_path, payload)
+            # 模拟另一发布调用已写回执并清理暂存文件。
+            staged_relative = storage._staged_relative_path(root, staged.token)
+            storage.resolve_path(root, staged_relative).unlink()
+
+        with patch.object(storage, "_write_receipt", side_effect=racing_write_receipt):
+            stored = storage.publish_staged_original(
+                self.root, staged.token, task_id=self.task_id,
+                version_id=self.version_id, filename="合成模板.xlsx",
+            )
+        self.assertEqual(stored.sha256, staged.sha256)
+        self.assertTrue(storage.exists(self.root, stored.relative_path))
 
 
 class ExportStorageTests(StorageTestCase):
