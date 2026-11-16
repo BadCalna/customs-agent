@@ -121,6 +121,40 @@ class ParseTest(SimpleTestCase):
         self.assertIs(result.parse.status, ParseStatus.PARTIAL)
         self.assertTrue(any("重复" in item for item in result.parse.ambiguous_keys))
 
+    def test_duplicate_element_name_is_partial_and_first_value_is_kept(self):
+        result = self.check(
+            declared_raw=(
+                "1:品牌类型:无品牌;2:品牌类型:境外品牌（其它）;"
+                "3:用途:工业;4:型号:X-100;5:品牌:ACME"
+            )
+        )
+        self.assertIs(result.parse.status, ParseStatus.PARTIAL)
+        self.assertIs(result.sufficiency.value, "unverified")
+        self.assertEqual(result.supplement_items, [])
+        brand_type = next(item for item in result.checks if item.key == "brand_type")
+        self.assertEqual(brand_type.declared_value, "无品牌")
+        self.assertTrue(any("重复" in item for item in result.parse.ambiguous_keys))
+
+    def test_duplicate_keyed_element_name_is_partial(self):
+        result = self.check(
+            declared_raw="品牌类型:无品牌;品牌类型:境外品牌（其它）;用途:工业;型号:X-100;品牌:ACME"
+        )
+        self.assertIs(result.parse.status, ParseStatus.PARTIAL)
+        self.assertIs(result.sufficiency.value, "unverified")
+
+    def test_duplicate_structured_alias_is_partial(self):
+        result = self.check(
+            declared={
+                "品牌": "ACME",
+                "品牌（中文或外文名称）": "OTHER",
+                "品牌类型": "无品牌",
+                "用途": "工业",
+                "型号": "X-100",
+            }
+        )
+        self.assertIs(result.parse.status, ParseStatus.PARTIAL)
+        self.assertIs(result.sufficiency.value, "unverified")
+
     def test_ambiguous_element_name_is_not_guessed(self):
         specs = [
             element_spec("tungsten", "成分含量（钨的含量）", 1),

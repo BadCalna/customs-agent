@@ -762,6 +762,7 @@ def _parse_raw(raw: str, schema: ElementSchema) -> tuple[dict[str, str], dict[st
     unrecognized: list[str] = []
     missing_orders: set[int] = set()
     numbered_seen: set[int] = set()
+    matched_specs_seen: set[str] = set()
 
     for segment in segments:
         number_match = _NUMBERED.match(segment)
@@ -785,6 +786,11 @@ def _parse_raw(raw: str, schema: ElementSchema) -> tuple[dict[str, str], dict[st
         label_match = _match_name(label_part, index)
         if label_match.spec is not None:
             spec = label_match.spec
+            if spec.key in matched_specs_seen:
+                # 同名重复不能后值覆盖前值；两份都可能被业务当作有效事实。
+                ambiguous.append(f"要素名重复：{label_part.strip()}")
+                continue
+            matched_specs_seen.add(spec.key)
             if value_part is None:
                 # “1:品牌类型”只有名称没有值：可能是模板，也可能是空值。
                 label_only += 1
@@ -856,12 +862,17 @@ def _merge_mapping(
     conflicts: list[str] = []
     unrecognized: list[str] = []
     ambiguous: list[str] = []
+    seen: set[str] = set()
     for name, value in declared.items():
         match = _match_name(str(name), index)
         if match.spec is None:
             (ambiguous if match.ambiguous else unrecognized).append(str(name))
             continue
         spec = match.spec
+        if spec.key in seen:
+            ambiguous.append(f"要素名重复：{str(name).strip()}")
+            continue
+        seen.add(spec.key)
         cleaned = _norm_text(value)
         if spec.key in values and _norm_text(values[spec.key]) and _norm_text(values[spec.key]) != cleaned:
             conflicts.append(spec.label)
