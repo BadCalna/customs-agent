@@ -185,7 +185,7 @@ class PackingExtractionTest(WorkbookTestCase):
     def test_missing_packing_sheet(self):
         with self.assertRaises(SemanticLayoutError) as caught:
             extract_packing(self.build(build_package(include_packing=False)))
-        self.assertEqual(caught.exception.code, "sheet_ambiguous")
+        self.assertEqual(caught.exception.code, "sheet_not_found")
         self.assertIn("装箱明细", str(caught.exception))
 
 

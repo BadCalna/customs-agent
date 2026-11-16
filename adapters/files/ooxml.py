@@ -482,8 +482,10 @@ class Workbook:
     def find_sheet(self, label: str) -> Sheet:
         """按页签名包含 ``label`` 匹配；真实模板的页签常带“节点①”等前缀。"""
         matches = [sheet for sheet in self.sheets if label in sheet.name]
-        if len(matches) != 1:
-            found = "、".join(sheet.name for sheet in matches) or "无"
+        if not matches:
+            raise OoxmlError("sheet_not_found", f"找不到页签：{label!r}")
+        if len(matches) > 1:
+            found = "、".join(sheet.name for sheet in matches)
             raise OoxmlError(
                 "sheet_ambiguous", f"页签“{label}”应唯一匹配，实际匹配：{found}"
             )

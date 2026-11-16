@@ -194,7 +194,7 @@ class LayoutTest(WorkbookTestCase):
         package = build_package(include_declaration=False)
         with self.assertRaises(SemanticLayoutError) as caught:
             extract_declarations(self.build(package))
-        self.assertEqual(caught.exception.code, "sheet_ambiguous")
+        self.assertEqual(caught.exception.code, "sheet_not_found")
         self.assertEqual(caught.exception.sheet, "申报要素")
         self.assertIn("申报要素", str(caught.exception))
 

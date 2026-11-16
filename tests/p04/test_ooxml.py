@@ -156,7 +156,7 @@ class PackageTest(unittest.TestCase):
         self.assertEqual(caught.exception.code, "sheet_ambiguous")
         with self.assertRaises(OoxmlError) as caught:
             workbook.find_sheet("不存在的页签")
-        self.assertEqual(caught.exception.code, "sheet_ambiguous")
+        self.assertEqual(caught.exception.code, "sheet_not_found")
 
     def test_non_xlsx_zip_is_rejected(self):
         path = self.root / "wrong.xlsx"
