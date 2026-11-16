@@ -43,6 +43,8 @@ _TASK_PATH = {
     "DecisionItem": "decision.submission.task",
     "Issue": "task",
     "AuditEvent": "task",
+    "ImportJob": "version.task",
+    "TaskClaim": "task",
     "Run": "task",
     "RunItem": "run.task",
 }

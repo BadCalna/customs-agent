@@ -1,0 +1,24 @@
+{
+  "properties": {
+    "assignment_status": {
+      "const": "unclaimed",
+      "default": "unclaimed",
+      "title": "Assignment Status",
+      "type": "string"
+    },
+    "created_at": {
+      "title": "Created At",
+      "type": "string"
+    },
+    "task_id": {
+      "title": "Task Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "task_id",
+    "created_at"
+  ],
+  "title": "ClaimableEntry",
+  "type": "object"
+}

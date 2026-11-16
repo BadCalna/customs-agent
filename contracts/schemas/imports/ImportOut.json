@@ -1,0 +1,102 @@
+{
+  "properties": {
+    "assignment_status": {
+      "enum": [
+        "claimed",
+        "unclaimed"
+      ],
+      "title": "Assignment Status",
+      "type": "string"
+    },
+    "executor_mode": {
+      "const": "inline",
+      "title": "Executor Mode",
+      "type": "string"
+    },
+    "idempotent_replay": {
+      "default": false,
+      "title": "Idempotent Replay",
+      "type": "boolean"
+    },
+    "image_counts": {
+      "additionalProperties": {
+        "type": "integer"
+      },
+      "title": "Image Counts",
+      "type": "object"
+    },
+    "import_id": {
+      "title": "Import Id",
+      "type": "string"
+    },
+    "item_count": {
+      "title": "Item Count",
+      "type": "integer"
+    },
+    "member_count": {
+      "title": "Member Count",
+      "type": "integer"
+    },
+    "original_download_url": {
+      "title": "Original Download Url",
+      "type": "string"
+    },
+    "parse_status": {
+      "enum": [
+        "staged",
+        "succeeded",
+        "failed"
+      ],
+      "title": "Parse Status",
+      "type": "string"
+    },
+    "precheck_run_id": {
+      "title": "Precheck Run Id",
+      "type": "string"
+    },
+    "precheck_status": {
+      "title": "Precheck Status",
+      "type": "string"
+    },
+    "result_mode": {
+      "const": "mock",
+      "title": "Result Mode",
+      "type": "string"
+    },
+    "sha256": {
+      "title": "Sha256",
+      "type": "string"
+    },
+    "task_id": {
+      "title": "Task Id",
+      "type": "string"
+    },
+    "version_id": {
+      "title": "Version Id",
+      "type": "string"
+    },
+    "version_number": {
+      "title": "Version Number",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "import_id",
+    "task_id",
+    "version_id",
+    "version_number",
+    "parse_status",
+    "sha256",
+    "item_count",
+    "member_count",
+    "image_counts",
+    "precheck_run_id",
+    "precheck_status",
+    "result_mode",
+    "executor_mode",
+    "assignment_status",
+    "original_download_url"
+  ],
+  "title": "ImportOut",
+  "type": "object"
+}

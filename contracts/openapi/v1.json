@@ -14,6 +14,91 @@
         "title": "Action",
         "type": "string"
       },
+      "ClaimOut": {
+        "properties": {
+          "assignment_status": {
+            "const": "claimed",
+            "title": "Assignment Status",
+            "type": "string"
+          },
+          "claimed_at": {
+            "title": "Claimed At",
+            "type": "string"
+          },
+          "idempotent_replay": {
+            "default": false,
+            "title": "Idempotent Replay",
+            "type": "boolean"
+          },
+          "operator_id": {
+            "title": "Operator Id",
+            "type": "string"
+          },
+          "task_id": {
+            "title": "Task Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id",
+          "operator_id",
+          "claimed_at",
+          "assignment_status"
+        ],
+        "title": "ClaimOut",
+        "type": "object"
+      },
+      "ClaimableEntry": {
+        "properties": {
+          "assignment_status": {
+            "const": "unclaimed",
+            "default": "unclaimed",
+            "title": "Assignment Status",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "task_id": {
+            "title": "Task Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id",
+          "created_at"
+        ],
+        "title": "ClaimableEntry",
+        "type": "object"
+      },
+      "ClaimablePage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ClaimableEntry"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "ClaimablePage",
+        "type": "object"
+      },
       "ComparisonStatus": {
         "description": "D4 第 2 节六类比较结论，优先级按声明顺序递减。",
         "enum": [
@@ -987,6 +1072,220 @@
         ],
         "title": "ImageStatus",
         "type": "string"
+      },
+      "ImportDetail": {
+        "properties": {
+          "assignment_status": {
+            "enum": [
+              "claimed",
+              "unclaimed"
+            ],
+            "title": "Assignment Status",
+            "type": "string"
+          },
+          "error": {
+            "additionalProperties": true,
+            "title": "Error",
+            "type": "object"
+          },
+          "executor_mode": {
+            "const": "inline",
+            "title": "Executor Mode",
+            "type": "string"
+          },
+          "idempotent_replay": {
+            "default": false,
+            "title": "Idempotent Replay",
+            "type": "boolean"
+          },
+          "image_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Image Counts",
+            "type": "object"
+          },
+          "import_id": {
+            "title": "Import Id",
+            "type": "string"
+          },
+          "item_count": {
+            "title": "Item Count",
+            "type": "integer"
+          },
+          "member_count": {
+            "title": "Member Count",
+            "type": "integer"
+          },
+          "original_download_url": {
+            "title": "Original Download Url",
+            "type": "string"
+          },
+          "parse_status": {
+            "enum": [
+              "staged",
+              "succeeded",
+              "failed"
+            ],
+            "title": "Parse Status",
+            "type": "string"
+          },
+          "precheck_run_id": {
+            "title": "Precheck Run Id",
+            "type": "string"
+          },
+          "precheck_status": {
+            "title": "Precheck Status",
+            "type": "string"
+          },
+          "report": {
+            "additionalProperties": true,
+            "title": "Report",
+            "type": "object"
+          },
+          "result_mode": {
+            "const": "mock",
+            "title": "Result Mode",
+            "type": "string"
+          },
+          "sha256": {
+            "title": "Sha256",
+            "type": "string"
+          },
+          "task_id": {
+            "title": "Task Id",
+            "type": "string"
+          },
+          "version_id": {
+            "title": "Version Id",
+            "type": "string"
+          },
+          "version_number": {
+            "title": "Version Number",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "import_id",
+          "task_id",
+          "version_id",
+          "version_number",
+          "parse_status",
+          "sha256",
+          "item_count",
+          "member_count",
+          "image_counts",
+          "precheck_run_id",
+          "precheck_status",
+          "result_mode",
+          "executor_mode",
+          "assignment_status",
+          "original_download_url"
+        ],
+        "title": "ImportDetail",
+        "type": "object"
+      },
+      "ImportOut": {
+        "properties": {
+          "assignment_status": {
+            "enum": [
+              "claimed",
+              "unclaimed"
+            ],
+            "title": "Assignment Status",
+            "type": "string"
+          },
+          "executor_mode": {
+            "const": "inline",
+            "title": "Executor Mode",
+            "type": "string"
+          },
+          "idempotent_replay": {
+            "default": false,
+            "title": "Idempotent Replay",
+            "type": "boolean"
+          },
+          "image_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Image Counts",
+            "type": "object"
+          },
+          "import_id": {
+            "title": "Import Id",
+            "type": "string"
+          },
+          "item_count": {
+            "title": "Item Count",
+            "type": "integer"
+          },
+          "member_count": {
+            "title": "Member Count",
+            "type": "integer"
+          },
+          "original_download_url": {
+            "title": "Original Download Url",
+            "type": "string"
+          },
+          "parse_status": {
+            "enum": [
+              "staged",
+              "succeeded",
+              "failed"
+            ],
+            "title": "Parse Status",
+            "type": "string"
+          },
+          "precheck_run_id": {
+            "title": "Precheck Run Id",
+            "type": "string"
+          },
+          "precheck_status": {
+            "title": "Precheck Status",
+            "type": "string"
+          },
+          "result_mode": {
+            "const": "mock",
+            "title": "Result Mode",
+            "type": "string"
+          },
+          "sha256": {
+            "title": "Sha256",
+            "type": "string"
+          },
+          "task_id": {
+            "title": "Task Id",
+            "type": "string"
+          },
+          "version_id": {
+            "title": "Version Id",
+            "type": "string"
+          },
+          "version_number": {
+            "title": "Version Number",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "import_id",
+          "task_id",
+          "version_id",
+          "version_number",
+          "parse_status",
+          "sha256",
+          "item_count",
+          "member_count",
+          "image_counts",
+          "precheck_run_id",
+          "precheck_status",
+          "result_mode",
+          "executor_mode",
+          "assignment_status",
+          "original_download_url"
+        ],
+        "title": "ImportOut",
+        "type": "object"
       },
       "IssueEntry": {
         "description": "补料或异常问题，定位到具体商品与字段。",
@@ -2498,7 +2797,7 @@
     },
     "/api/v1/files/{file_id}": {
       "get": {
-        "operationId": "apps_api_not_implemented_pending_GET__files_file_id",
+        "operationId": "apps_reviews_api_imports_download",
         "parameters": [
           {
             "in": "path",
@@ -2515,9 +2814,9 @@
             "description": "OK"
           }
         },
-        "summary": "Pending Get  Files File Id",
+        "summary": "Download",
         "tags": [
-          "未实现端点"
+          "上传与认领"
         ]
       }
     },
@@ -2785,16 +3084,99 @@
         ]
       },
       "post": {
-        "operationId": "apps_api_not_implemented_pending_POST__tasks",
+        "operationId": "apps_reviews_api_imports_create_task",
         "parameters": [],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "file": {
+                    "format": "binary",
+                    "title": "File",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "file"
+                ],
+                "title": "FileParams",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportOut"
+                }
+              }
+            },
             "description": "OK"
           }
         },
-        "summary": "Pending Post  Tasks",
+        "summary": "Create Task",
         "tags": [
           "审核查询"
+        ]
+      }
+    },
+    "/api/v1/tasks/claimable": {
+      "get": {
+        "operationId": "apps_reviews_api_imports_list_claimable",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimablePage"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "List Claimable",
+        "tags": [
+          "上传与认领"
         ]
       }
     },
@@ -2827,6 +3209,38 @@
         "summary": "Get Task",
         "tags": [
           "审核查询"
+        ]
+      }
+    },
+    "/api/v1/tasks/{task_id}/claim": {
+      "post": {
+        "operationId": "apps_reviews_api_imports_claim",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Claim",
+        "tags": [
+          "上传与认领"
         ]
       }
     },
@@ -2948,7 +3362,7 @@
     },
     "/api/v1/tasks/{task_id}/versions": {
       "post": {
-        "operationId": "apps_api_not_implemented_pending_POST__tasks_task_id_versions",
+        "operationId": "apps_reviews_api_imports_create_version",
         "parameters": [
           {
             "in": "path",
@@ -2960,14 +3374,52 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "confirm_duplicate": {
+                    "default": false,
+                    "title": "Confirm Duplicate",
+                    "type": "boolean"
+                  },
+                  "expected_current_version_id": {
+                    "title": "Expected Current Version Id",
+                    "type": "string"
+                  },
+                  "file": {
+                    "format": "binary",
+                    "title": "File",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "file",
+                  "expected_current_version_id"
+                ],
+                "title": "MultiPartBodyParams",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportOut"
+                }
+              }
+            },
             "description": "OK"
           }
         },
-        "summary": "Pending Post  Tasks Task Id Versions",
+        "summary": "Create Version",
         "tags": [
-          "未实现端点"
+          "上传与认领"
         ]
       }
     },
@@ -2993,6 +3445,38 @@
         "summary": "Pending Post  Versions Version Id Exports",
         "tags": [
           "未实现端点"
+        ]
+      }
+    },
+    "/api/v1/versions/{version_id}/import": {
+      "get": {
+        "operationId": "apps_reviews_api_imports_get_import",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "version_id",
+            "required": true,
+            "schema": {
+              "title": "Version Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportDetail"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Get Import",
+        "tags": [
+          "上传与认领"
         ]
       }
     },

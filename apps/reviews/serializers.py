@@ -117,7 +117,7 @@ def image_entries(item) -> list[ImageEntry]:
             source_sheet=image.source_sheet,
             source_cell=image.source_cell,
             dispimg_id=image.dispimg_id,
-            download_url=None,  # 受控下载路由由 P05 提供
+            download_url=f"/api/v1/files/{image.pk}" if image.status == "available" and image.storage_path else None,
             error_message=image.error_message,
         )
         for image in item.images.all()
@@ -252,7 +252,7 @@ def _version_entry(version, current_id) -> VersionEntry:
 
 def task_to_entry(user, task) -> TaskListEntry:
     current_version = task.versions.order_by("-number").first()
-    run = latest_run(task)
+    run = Run.objects.filter(version=current_version).order_by("-created_at").first() if current_version else None
     return TaskListEntry(
         task_id=str(task.pk),
         title=task.title,
@@ -274,7 +274,7 @@ def task_to_entry(user, task) -> TaskListEntry:
 def task_to_detail(user, task) -> TaskDetail:
     entry = task_to_entry(user, task)
     current_version = task.versions.order_by("-number").first()
-    submission = task.submissions.order_by("-created_at").first()
+    submission = task.submissions.filter(version=current_version).order_by("-created_at").first()
     return TaskDetail(
         **entry.model_dump(),
         versions=[_version_entry(v, current_version.pk if current_version else None) for v in task.versions.all()],

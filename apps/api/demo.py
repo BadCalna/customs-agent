@@ -69,3 +69,8 @@ def demo_asset(request, path: str):
 def demo_fixture(request, path: str):
     """fixture 模式读取的契约样例（DEMO-SET.json 等）。"""
     return _served_file(FIXTURE_ROOT, path)
+
+
+def upload_index(request):
+    """P06 开发验收入口，仅 live API。"""
+    return _served_file(WEB_ROOT, "pages/p06.html")

@@ -62,6 +62,8 @@ CUSTOMS_FILE_ROOT = path_setting("CUSTOMS_FILE_ROOT", LOCAL_DIR / "files")
 CUSTOMS_FILE_MAX_BYTES = byte_setting("CUSTOMS_FILE_MAX_BYTES", 100 * 1024 * 1024)
 CUSTOMS_IMAGE_MAX_BYTES = byte_setting("CUSTOMS_IMAGE_MAX_BYTES", 20 * 1024 * 1024)
 CUSTOMS_FILE_READ_MAX_BYTES = byte_setting("CUSTOMS_FILE_READ_MAX_BYTES", 200 * 1024 * 1024)
+# P06 认领池：空值表示试用空间全体业务员；策略接收 (user, queryset) 并返回收窄集合。
+CUSTOMS_CLAIM_SCOPE_POLICY = os.environ.get("CUSTOMS_CLAIM_SCOPE_POLICY", "")
 
 INSTALLED_APPS = [
     "django.contrib.admin",

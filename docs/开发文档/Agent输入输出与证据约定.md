@@ -189,3 +189,12 @@ P16 只能在以下条件同时满足时，把 P14 的结果当作“事实已�
 - 未出现 `version_unverified`/`query_failed`/`not_found` 被当作“无风险”的情况。
 
 其余情况保持 `needs_confirmation`，把 P14 的 `gaps` 按 `suggested_role` 分流：`supplier` 只在 `insufficient` 时进入补料；`expert`/`operator` 进入人工核查。P16 不得用模型补齐 P14 未取得的条款或要素值。
+
+## P06 inline mock 接线补充（2026-11-17）
+
+上传事务先预登记一个 `queued, is_current=false` Run，作为持久执行凭据；解析/图片成功后，系统用
+`execute_precheck(version, run=job.precheck)` 激活同一 Run，整表执行。未解析成功不激活，不产生有效预审结果。
+该编排是 P06 inline 模式，P13 后续接队列和后台恢复。失败/中断恢复复用 ImportJob、版本、Run，不追加第二轮。
+原有 P02 显式预审入口仍可不传 run，保持兼容。预审全部行失败时导入可以成功，但 `precheck_status=failed`，
+页面分别展示解析状态与预审失败，不能写成“预审通过”。
+P06 不读取 P10 候选对照，不使用旧版本确认/审批，不调用真实 AI、官方来源或后台队列。

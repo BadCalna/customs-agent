@@ -124,12 +124,24 @@ def _finish_run(run):
 
 
 @transaction.atomic
-def execute_precheck(version, scenarios: dict[str, str] | None = None, triggered_by=None) -> Run:
+def execute_precheck(version, scenarios: dict[str, str] | None = None, triggered_by=None, run=None) -> Run:
     """对指定版本的全部商品执行一次 mock 预审，旧执行转为历史。"""
 
     scenarios = scenarios or {}
     engine = get_engine()
-    run = _start_run(version.task, version, Run.Kind.PRECHECK, triggered_by=triggered_by)
+    if run is None:
+        run = _start_run(version.task, version, Run.Kind.PRECHECK, triggered_by=triggered_by)
+    else:
+        Task.objects.select_for_update().get(pk=version.task_id)
+        run = Run.objects.select_for_update().get(pk=run.pk)
+        if run.version_id != version.pk or run.kind != Run.Kind.PRECHECK or run.submission_id:
+            raise ValueError("预登记执行与预审版本不一致")
+        if run.status != Run.Status.QUEUED:
+            return run
+        Run.objects.filter(version=version, kind=run.kind, is_current=True).exclude(pk=run.pk).update(is_current=False)
+        run.status, run.is_current, run.started_at = Run.Status.RUNNING, True, timezone.now()
+        run.finished_at = None
+        run.save(update_fields=["status", "is_current", "started_at", "finished_at"])
     for item in Item.objects.filter(version=version).order_by("source_sheet", "source_row"):
         scenario = _scenario_for(scenarios, item)
         row = RunItem(run=run, item=item, status=RunItem.Status.RUNNING)
