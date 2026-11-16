@@ -33,6 +33,36 @@ PAGE_DATA_MODE = mode("CUSTOMS_PAGE_MODE", "live", ("live", "fixture"))
 ENGINE_MODE = mode("CUSTOMS_ENGINE_MODE", "mock", ("mock",))
 EXECUTOR_MODE = mode("CUSTOMS_EXECUTOR_MODE", "inline", ("inline",))
 
+
+def byte_setting(name: str, default: int) -> int:
+    """读取字节数配置；未设置用默认值，设置了但不是正整数时明确失败。"""
+    raw = os.environ.get(name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        value = int(raw)
+    except (TypeError, ValueError) as exc:
+        raise ImproperlyConfigured(f"{name}={raw!r} 必须是正整数（字节数）。") from exc
+    if value <= 0:
+        raise ImproperlyConfigured(f"{name}={raw!r} 必须是正整数（字节数），当前不是正数。")
+    return value
+
+
+def path_setting(name: str, default: Path) -> Path:
+    """读取路径配置；相对路径按仓库根目录解析，空值使用默认值。"""
+    raw = os.environ.get(name)
+    if raw is None or not raw.strip():
+        return default
+    path = Path(raw).expanduser()
+    return path if path.is_absolute() else BASE_DIR / path
+
+
+#: P05 受控存储根与上限；原件、图片、导出副本都按版本落在该目录下（D6）。
+CUSTOMS_FILE_ROOT = path_setting("CUSTOMS_FILE_ROOT", LOCAL_DIR / "files")
+CUSTOMS_FILE_MAX_BYTES = byte_setting("CUSTOMS_FILE_MAX_BYTES", 100 * 1024 * 1024)
+CUSTOMS_IMAGE_MAX_BYTES = byte_setting("CUSTOMS_IMAGE_MAX_BYTES", 20 * 1024 * 1024)
+CUSTOMS_FILE_READ_MAX_BYTES = byte_setting("CUSTOMS_FILE_READ_MAX_BYTES", 200 * 1024 * 1024)
+
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
