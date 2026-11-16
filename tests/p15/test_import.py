@@ -266,6 +266,21 @@ class SyntheticImportTest(SimpleTestCase):
                 all("missing_contract" in record["attributes"]["blocking_issue_codes"] for record in records)
             )
 
+    def test_missing_contract_rows_without_packing_sheet_keep_blocking_codes(self):
+        with tempfile.TemporaryDirectory() as raw_tmp:
+            tmp = Path(raw_tmp)
+            workbook = build_missing_contract_workbook(
+                tmp / "no-packing.xlsx", rows=1, include_packing=False
+            )
+            outcome = import_history_templates(self._request(tmp, [workbook]))
+            self.assertEqual(outcome.report["totals"]["parse_failed_files"], 0)
+            records = json.loads(outcome.records_path.read_text(encoding="utf-8"))["records"]
+            self.assertEqual(len(records), 1)
+            blocking = records[0]["attributes"]["blocking_issue_codes"]
+            self.assertIn("missing_contract", blocking)
+            self.assertIn("missing_item", blocking)
+            self.assertEqual(records[0]["attributes"]["needs_review"], "true")
+
     def test_parse_failure_is_reported_and_does_not_hide_good_file(self):
         with tempfile.TemporaryDirectory() as raw_tmp:
             tmp = Path(raw_tmp)

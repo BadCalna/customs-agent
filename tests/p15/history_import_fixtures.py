@@ -128,7 +128,7 @@ def build_empty_workbook(path: Path) -> Path:
     return path
 
 
-def build_missing_contract_workbook(path: Path, *, rows: int = 2) -> Path:
+def build_missing_contract_workbook(path: Path, *, rows: int = 2, include_packing: bool = True) -> Path:
     """两行同品名/同 HS，但合同号与项号都为空：验证缺身份逐行报告、不去重、不判解析失败。"""
 
     package = Package()
@@ -141,8 +141,9 @@ def build_missing_contract_workbook(path: Path, *, rows: int = 2) -> Path:
         declaration.text(f"D{row}", "9999999999")
         declaration.text(f"E{row}", "材质：塑料|用途：测试")
         declaration.text(f"F{row}", "0")
-    packing = package.sheet(PACKING_SHEET)
-    for index, header in enumerate(("合同号", "合同项号", "合同第一条品名"), start=1):
-        packing.text(f"{chr(64 + index)}1", header)
+    if include_packing:
+        packing = package.sheet(PACKING_SHEET)
+        for index, header in enumerate(("合同号", "合同项号", "合同第一条品名"), start=1):
+            packing.text(f"{chr(64 + index)}1", header)
     package.build(path)
     return path

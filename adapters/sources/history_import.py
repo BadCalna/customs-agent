@@ -605,6 +605,8 @@ def _build_record(
 
     HistoryRecord, HistorySourceRef = _history_dto()
     issues: list[dict[str, Any]] = []
+    for p04_issue in record.issues:
+        issues.append(_issue_dict(p04_issue))
     missing_fields: list[str] = []
 
     name = _normalize(record.value("name"))
