@@ -7,8 +7,8 @@ from ninja import Router
 
 from apps.accounts.auth import session_auth
 
-from ..schemas import SubmissionIn, SubmissionOut
-from ..services.submissions import create_submission
+from ..schemas import SubmissionIn, SubmissionOut, WithdrawalOut
+from ..services.submissions import create_submission, withdraw_submission
 
 router = Router(tags=["业务员提交"])
 
@@ -17,3 +17,8 @@ router = Router(tags=["业务员提交"])
 def submit_task(request, task_id: str, payload: SubmissionIn):
     key = request.headers.get("Idempotency-Key") or None
     return create_submission(request.auth, task_id, payload, key)
+
+
+@router.post("/submissions/{submission_id}/withdraw", response=WithdrawalOut, auth=session_auth)
+def withdraw_task_submission(request, submission_id: str):
+    return withdraw_submission(request.auth, submission_id, request.headers.get("Idempotency-Key") or None)

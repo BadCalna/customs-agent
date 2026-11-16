@@ -218,3 +218,46 @@ class DecisionApiTests(SubmissionFixture):
         response = self.post(self.approve_payload(reason="另一个决定"), key="d-2")
         self.assertEqual(response.status_code, 409)
         self.assertEqual(response.json()["error"]["code"], "idempotency_conflict")
+
+
+    def test_stale_read_cannot_decide_an_already_closed_submission(self):
+        from unittest import mock
+
+        stale = Submission.objects.get(pk=self.submission.pk)  # 读到的是 pending
+        Submission.objects.filter(pk=self.submission.pk).update(status=Submission.Status.APPROVED)
+        with mock.patch("apps.reviews.services.submissions._read_submission", return_value=stale):
+            response = self.post()
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json()["error"]["code"], "submission_closed")
+        self.assertEqual(Decision.objects.count(), 0)
+
+    def test_same_key_on_another_submission_returns_409(self):
+        self.post(key="d-cross")
+        from tests.p01.factories import assign, make_item, make_task, make_version
+        from apps.accounts.models import Role
+
+        task = make_task(self.supplier, title="第二个任务", stage=Task.Stage.SUBMITTED)
+        assign(task, self.operator, Role.OPERATOR)
+        assign(task, self.expert, Role.EXPERT)
+        version = make_version(task, self.supplier)
+        item = make_item(version, row=5, name="另一商品")
+        confirmation = Confirmation.objects.create(
+            item=item, revision=1, previous_hs="", confirmed_hs=HS_A,
+            reason="合成确认", created_by=self.operator,
+        )
+        submission = Submission.objects.create(
+            task=task, version=version, revision=task.revision, created_by=self.operator,
+        )
+        SubmissionItem.objects.create(
+            submission=submission, item=item, confirmation=confirmation,
+            submitted_hs=HS_A, item_revision=1,
+        )
+        body = {"action": "approve", "items": [{"item_id": str(item.pk), "final_hs": HS_A}]}
+        response = self.client.post(
+            f"/api/v1/submissions/{submission.pk}/decisions",
+            data=json.dumps(body), content_type="application/json", HTTP_IDEMPOTENCY_KEY="d-cross",
+        )
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json()["error"]["code"], "idempotency_conflict")
+        submission.refresh_from_db()
+        self.assertEqual(submission.status, Submission.Status.PENDING)

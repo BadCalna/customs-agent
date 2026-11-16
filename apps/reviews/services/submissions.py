@@ -17,11 +17,36 @@ from apps.accounts.permissions import SUBMIT, get_visible_task, require_action
 from apps.runs.models import Run
 
 from ..models import AuditEvent, Submission, SubmissionItem, Task
-from ..schemas import SubmissionLineOut, SubmissionOut
+from ..schemas import SubmissionLineOut, SubmissionOut, WithdrawalOut
 from . import idempotency
 from .confirmations import current_confirmation
 
 ACTION = "submission.create"
+
+
+def _read_submission(submission_id: str) -> Submission:
+    """首次读取只用于权限判断；写入前必须再走 ``lock_submission`` 拿锁后重读。"""
+    try:
+        submission = Submission.objects.select_related("task", "version").filter(pk=submission_id).first()
+    except (ValueError, TypeError) as exc:
+        raise Http404("提交不存在或不在可见范围") from exc
+    if submission is None:
+        raise Http404("提交不存在或不在可见范围")
+    return submission
+
+
+def lock_submission(user, submission_id: str, action: str) -> tuple[Task, Submission]:
+    """按 **Task → Submission** 的固定顺序加锁，并返回锁内重读的记录。
+
+    审批（P10）与撤回（P09）都改任务状态，必须先拿同一把任务锁再改提交状态；
+    否则会出现"批准发生在撤回读取与加锁之间"的交错：撤回看到的是旧状态，
+    把已批准的任务改回待确认，而批准记录仍然存在。
+    """
+    submission = _read_submission(submission_id)
+    require_action(user, action, submission)
+    task = Task.objects.select_for_update().get(pk=submission.task_id)
+    submission = Submission.objects.select_for_update().select_related("task", "version").get(pk=submission.pk)
+    return task, submission
 
 
 def _get_version(task, version_id):
@@ -132,7 +157,8 @@ def create_submission(user, task_id: str, payload, idempotency_key: str | None =
     require_action(user, SUBMIT, task)
     task = Task.objects.select_for_update().get(pk=task.pk)
 
-    replay = idempotency.begin(user, ACTION, idempotency_key, payload)
+    fingerprint = {"task_id": str(task.pk), **payload.model_dump(mode="json")}
+    replay = idempotency.begin(user, ACTION, idempotency_key, fingerprint)
     if replay is not None:
         return replay
 
@@ -189,7 +215,7 @@ def create_submission(user, task_id: str, payload, idempotency_key: str | None =
         },
     )
     response = submission_to_out(submission, run, task).model_dump(mode="json")
-    idempotency.store(user, ACTION, idempotency_key, payload, response)
+    idempotency.store(user, ACTION, idempotency_key, fingerprint, response)
 
     def _dispatch():
         from apps.runs.inline import execute_expert_check
@@ -197,4 +223,58 @@ def create_submission(user, task_id: str, payload, idempotency_key: str | None =
         execute_expert_check(submission, run=run)
 
     transaction.on_commit(_dispatch)
+    return response
+
+
+WITHDRAW_ACTION = "submission.withdraw"
+
+
+@transaction.atomic
+def withdraw_submission(user, submission_id: str, idempotency_key: str | None = None) -> dict:
+    """业务员撤回一份待审提交：提交置为 superseded，任务回到待确认，可再编辑与重新提交。
+
+    - 只允许撤回 pending 提交；已通过/已退回/已撤回返回 409；
+    - 撤回后该提交绑定的专家核查执行不再视为当前有效（结果原样保留）；
+    - 只允许撤回最新文件版本的提交，旧版本提交由补料重传自然失效。
+    """
+    task, submission = lock_submission(user, submission_id, SUBMIT)
+    fingerprint = {"submission_id": str(submission.pk)}
+
+    replay = idempotency.begin(user, WITHDRAW_ACTION, idempotency_key, fingerprint)
+    if replay is not None:
+        return replay
+
+    if submission.status != Submission.Status.PENDING:
+        raise ApiError(
+            409, "submission_closed",
+            "只能撤回待专家审核的提交；已通过/已退回/已撤回的提交原样保留",
+            {"submission_id": str(submission.pk), "status": submission.status},
+        )
+    latest = task.versions.order_by("-number").first()
+    if latest is not None and latest.pk != submission.version_id:
+        raise ApiError(
+            409, "stale_submission",
+            "该提交对应的是旧文件版本，已有新版本；旧提交不可撤回，请在新版本上重新处理",
+            {"current_version_id": str(latest.pk), "submission_version_id": str(submission.version_id)},
+        )
+
+    submission.status = Submission.Status.SUPERSEDED
+    submission.save(update_fields=["status"])
+    Run.objects.filter(submission=submission, kind=Run.Kind.EXPERT_CHECK, is_current=True).update(is_current=False)
+    task.stage = Task.Stage.AWAITING_CONFIRMATION
+    task.revision += 1
+    task.save(update_fields=["stage", "revision", "updated_at"])
+    AuditEvent.objects.create(
+        task=task, version=submission.version, actor=user,
+        action="submission.withdrawn", stage="business_submit",
+        previous_value=str(submission.pk),
+        details={"submission_id": str(submission.pk), "version_number": submission.version.number},
+    )
+
+    response = WithdrawalOut(
+        submission_id=str(submission.pk), task_id=str(task.pk), version_id=str(submission.version_id),
+        status=submission.status, task_stage=task.stage, task_revision=task.revision,
+        idempotent_replay=False,
+    ).model_dump(mode="json")
+    idempotency.store(user, WITHDRAW_ACTION, idempotency_key, fingerprint, response)
     return response

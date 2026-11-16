@@ -54,6 +54,7 @@ from apps.reviews.schemas import (
     TaskHistoryOut,
     TaskReturnIn,
     TaskReturnOut,
+    WithdrawalOut,
     TaskDetail,
     TaskListEntry,
     TaskPage,
@@ -71,7 +72,7 @@ SCHEMAS = {
     "items": [ItemListEntry, ItemPage, ItemFacts, ItemCard],
     "runs": [RunItemEntry, RunDetail],
     "confirmations": [ConfirmationIn, ConfirmationOut],
-    "submissions": [SubmissionIn, SubmissionLineIn, SubmissionLineOut, SubmissionOut],
+    "submissions": [SubmissionIn, SubmissionLineIn, SubmissionLineOut, SubmissionOut, WithdrawalOut],
     "decisions": [DecisionIn, DecisionLineIn, DecisionLineOut, DecisionOut, TaskReturnIn, TaskReturnOut],
     "history": [
         TaskHistoryOut,

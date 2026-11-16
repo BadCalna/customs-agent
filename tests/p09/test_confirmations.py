@@ -125,6 +125,22 @@ class ConfirmationApiTests(TestCase):
         self.assertEqual(self.item.supplier_hs_raw, "7304210000")
         self.assertEqual(Confirmation.objects.get(item=self.item).confirmed_hs, HS)
 
+    def test_submitted_task_is_locked_until_expert_returns(self):
+        from apps.reviews.models import Submission
+
+        self.task.stage = Task.Stage.SUBMITTED
+        self.task.save(update_fields=["stage"])
+        response = self.patch()
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json()["error"]["code"], "submission_pending")
+
+        # 专家退回后放开编辑
+        self.task.stage = Task.Stage.RETURNED
+        self.task.save(update_fields=["stage"])
+        response = self.patch()
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(Confirmation.objects.filter(item=self.item).count(), 1)
+
     def test_approved_task_is_closed_for_editing(self):
         self.task.stage = Task.Stage.APPROVED
         self.task.save(update_fields=["stage"])

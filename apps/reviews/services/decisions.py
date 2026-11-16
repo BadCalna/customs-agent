@@ -15,22 +15,12 @@ from ..models import AuditEvent, Decision, DecisionItem, Issue, Submission, Task
 from ..schemas import DecisionLineOut, DecisionOut
 from . import idempotency
 from .confirmations import normalize_hs
+from .submissions import lock_submission
 
 ACTION = "decision.resolve"
 
 
-def get_submission(user, submission_id):
-    try:
-        submission = Submission.objects.select_related("task", "version").filter(pk=submission_id).first()
-    except (ValueError, TypeError) as exc:
-        raise Http404("提交不存在或不在可见范围") from exc
-    if submission is None:
-        raise Http404("提交不存在或不在可见范围")
-    return submission
-
-
-def _require_active_submission(submission):
-    task = submission.task
+def _require_active_submission(submission, task):
     if submission.status != Submission.Status.PENDING:
         raise ApiError(
             409, "submission_closed",
@@ -106,14 +96,14 @@ def _return(user, submission, payload, decision):
 
 @transaction.atomic
 def decide(user, submission_id: str, payload, idempotency_key: str | None = None) -> dict:
-    submission = get_submission(user, submission_id)
-    task = require_action(user, DECIDE, submission)
+    task, submission = lock_submission(user, submission_id, DECIDE)
+    fingerprint = {"submission_id": str(submission.pk), "decision": payload.model_dump(mode="json")}
 
-    replay = idempotency.begin(user, ACTION, idempotency_key, payload)
+    replay = idempotency.begin(user, ACTION, idempotency_key, fingerprint)
     if replay is not None:
         return replay
 
-    task = _require_active_submission(submission)
+    _require_active_submission(submission, task)
     if payload.action == Decision.Action.APPROVE:
         if not payload.items:
             raise ApiError(422, "empty_decision", "整批通过必须逐行给出终值")
@@ -168,7 +158,7 @@ def decide(user, submission_id: str, payload, idempotency_key: str | None = None
     )
 
     response = decision_to_out(decision, submission, task).model_dump(mode="json")
-    idempotency.store(user, ACTION, idempotency_key, payload, response)
+    idempotency.store(user, ACTION, idempotency_key, fingerprint, response)
     return response
 
 
