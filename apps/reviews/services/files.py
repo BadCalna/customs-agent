@@ -273,7 +273,36 @@ def extract_version_images(
     keywords=dispimg.DEFAULT_IMAGE_HEADER_KEYWORDS,
     extracted_at=None,
 ) -> dict:
-    """解析版本原件里的附图并写入 ``ItemImage``（同版本重跑幂等替换）。
+    """用户入口：把版本原件的附图写入 ``ItemImage``。
+
+    这是系统派生写动作，只对“能为该任务创建版本”的角色开放（``UPLOAD_VERSION``，
+    当前为供应商本人任务）；业务员/专家的只读权限**不能**触发图片入库。
+    P06 在上传/解析流程内应改用 :func:`extract_version_images_for_version`，
+    那里不再重复权限校验，由上传/解析流程统一负责。
+    """
+    version = _get_version(version_id)
+    require_action(user, UPLOAD_VERSION, version)
+    return extract_version_images_for_version(
+        version, sheet_name=sheet_name, rows=rows, column=column,
+        header_row=header_row, keywords=keywords, extracted_at=extracted_at,
+    )
+
+
+def extract_version_images_for_version(
+    version,
+    *,
+    sheet_name: str,
+    rows=None,
+    column: str | None = None,
+    header_row: int = 1,
+    keywords=dispimg.DEFAULT_IMAGE_HEADER_KEYWORDS,
+    extracted_at=None,
+) -> dict:
+    """系统派生入口：解析版本原件里的附图并写入 ``ItemImage``（同版本重跑幂等替换）。
+
+    **不接收 user，也不做权限校验**：调用方必须已在上传/解析流程中完成权限校验，
+    并在自己的事务里完成 Task/FileVersion/Item 的归属校验。允许传 ``FileVersion``
+    实例或版本 ID。
 
     参数：
     - ``sheet_name``：申报要素页签名（与 ``Item.source_sheet`` 对应）；
@@ -284,8 +313,7 @@ def extract_version_images(
     返回可 JSON 序列化的报告（计数、逐行状态、跳过的行）；**不**创建 ``Item``，
     商品行由 P06 的解析流程负责。可用图片按 sha256 落到该版本的 ``images/`` 目录。
     """
-    version = _get_version(version_id)
-    require_action(user, READ, version)
+    version = _get_version(version.pk if isinstance(version, FileVersion) else version)
     if not version.storage_path:
         raise ApiError(404, "file_not_stored", "该版本原件尚未入库，无法提取附图")
 
@@ -423,6 +451,7 @@ def extract_version_images(
 __all__ = [
     "FileDownload",
     "extract_version_images",
+    "extract_version_images_for_version",
     "max_image_bytes",
     "max_original_bytes",
     "max_read_bytes",

@@ -47,6 +47,9 @@ CODE_DECODE_NOT_RUN = "dispimg_decode_not_run"
 CODE_EXPRESSION = "dispimg_expression_not_evaluated"
 CODE_MULTIPLE_REFERENCES = "dispimg_multiple_references"
 CODE_UNSUPPORTED_FORMULA = "dispimg_formula_unsupported"
+CODE_FLOATING_MULTIPLE = "floating_image_multiple"
+CODE_FLOATING_UNAVAILABLE = "floating_image_unavailable"
+ID_SOURCE_SINGLE_CELL_FLOATING = "single_cell_floating_anchor"
 
 #: 结构性错误（页签/列/行参数本身有问题），与逐行状态分开，避免把“列没识别出来”写成“无图片”。
 CODE_SHEET_MISSING = "sheet_missing"
@@ -259,8 +262,15 @@ def extract_images(
         header_cell = sheet.cell(f"{label}{header_row}")
         match_header = header_cell.value if header_cell is not None else ""
 
+    # 普通浮图只认“起止锚点都在本行图片列的同一单元格”；跨行/跨列/表外一律不就近归属。
+    floating_by_cell = _floating_images_by_cell(
+        workbook, sheet.name, col_number(label), header_row,
+    )
     images = tuple(
-        _resolve_row(workbook, sheet, row, column_label=label, max_image_bytes=max_image_bytes)
+        _resolve_row(
+            workbook, sheet, row, column_label=label, max_image_bytes=max_image_bytes,
+            floating_images=floating_by_cell.get(f"{label}{row}", ()),
+        )
         for row in row_numbers
     )
     return ImageExtraction(
@@ -324,12 +334,18 @@ def _row_numbers(rows: Iterable[int]) -> tuple[int, ...]:
 
 def _resolve_row(
     workbook: Workbook, sheet: Sheet, row: int, *, column_label: str, max_image_bytes: int,
+    floating_images=(),
 ) -> RowImage:
     cell_ref = f"{column_label}{row}"
     cell = sheet.cell(cell_ref)
     formula = sheet.formulas.get(cell_ref)
+    floating_notes = _floating_notes(floating_images)
 
     if formula is None:
+        if floating_images:
+            return _resolve_floating(
+                workbook, sheet.name, row, cell_ref, floating_images, max_image_bytes,
+            )
         return _absent_without_formula(sheet.name, row, cell_ref, cell)
 
     stripped = formula.strip()
@@ -339,17 +355,17 @@ def _resolve_row(
     if direct is not None:
         image_id = direct.group(1)
         id_source = "formula"
-        notes: tuple[str, ...] = ()
+        notes: tuple[str, ...] = floating_notes
         attributes = dict(cell.formula_attributes) if cell is not None else {}
         if attributes.get("t") == "shared" and not (cell.formula or "").strip():
             # 共享公式从属行：有效公式由主公式平移得到；WPS 可能在缓存值里保留本行 ID。
             cached_id = _cached_dispimg_id(cell.value) if cell is not None else ""
             if cached_id and cached_id != image_id:
                 image_id, id_source = cached_id, "shared_formula_cached"
-                notes = ("从属行缓存值与共享主公式不同，按本行缓存值取图；需在客户端核对",)
+                notes = ("从属行缓存值与共享主公式不同，按本行缓存值取图；需在客户端核对",) + floating_notes
             else:
                 id_source = "shared_formula"
-                notes = ("共享公式从属行，按主公式平移解析本行图片 ID",)
+                notes = ("共享公式从属行，按主公式平移解析本行图片 ID",) + floating_notes
         return _resolve_definition(
             workbook, sheet.name, row, cell_ref, image_id=image_id, formula=formula,
             formula_status="direct_image_call", id_source=id_source,
@@ -363,7 +379,11 @@ def _resolve_row(
             return _failed(
                 sheet.name, row, cell_ref, CODE_UNSUPPORTED_FORMULA,
                 "图片公式形态不受支持（DISPIMG 调用参数不完整或含动态内容），需人工核对",
-                formula=formula, formula_status="unsupported_formula",
+                formula=formula, formula_status="unsupported_formula", notes=floating_notes,
+            )
+        if floating_images:
+            return _resolve_floating(
+                workbook, sheet.name, row, cell_ref, floating_images, max_image_bytes,
             )
         return RowImage(
             sheet=sheet.name, row=row, cell=cell_ref, status=STATUS_ABSENT,
@@ -376,14 +396,83 @@ def _resolve_row(
             sheet.name, row, cell_ref, CODE_MULTIPLE_REFERENCES,
             f"一个单元格出现多个 DISPIMG 引用（{'、'.join(sorted(set(ids)))}），无法判断显示哪张图，需人工核对",
             formula=formula, formula_status="expression_display_not_evaluated",
-            notes=(f"候选图片 ID：{'、'.join(sorted(set(ids)))}",),
+            notes=(f"候选图片 ID：{'、'.join(sorted(set(ids)))}",) + floating_notes,
         )
     return _failed(
         sheet.name, row, cell_ref, CODE_EXPRESSION,
         "条件/表达式图片公式，离线解析不能确定实际显示哪张图，需在客户端核对",
         formula=formula, formula_status="expression_display_not_evaluated",
         dispimg_id=ids[0],
-        notes=(f"候选图片 ID：{ids[0]}，未按候选图片入库",),
+        notes=(f"候选图片 ID：{ids[0]}，未按候选图片入库",) + floating_notes,
+    )
+
+
+def _floating_images_by_cell(
+    workbook: Workbook, sheet_name: str, column_number: int, header_row: int,
+) -> dict[str, tuple]:
+    """收集精确单格浮图；只返回带图片资源的锚点，不处理跨行/跨列/表外图片。"""
+    result: dict[str, list] = {}
+    for anchor in workbook.picture_anchors():
+        if anchor.sheet != sheet_name or not anchor.images:
+            continue
+        row = anchor.exact_cell(column_number)
+        if row is None or row <= header_row:
+            continue
+        ref = f"{col_label(column_number)}{row}"
+        result.setdefault(ref, []).extend(anchor.images)
+    return {ref: tuple(images) for ref, images in result.items()}
+
+
+def _floating_notes(floating_images) -> tuple[str, ...]:
+    if not floating_images:
+        return ()
+    return (
+        f"该单元格另有 {len(floating_images)} 张精确单格浮图；本次以 DISPIMG 公式结果为准，浮图需人工核对",
+    )
+
+
+def _resolve_floating(
+    workbook: Workbook, sheet: str, row: int, cell_ref: str, images, max_image_bytes: int,
+) -> RowImage:
+    """解析没有 DISPIMG 公式的单格浮图；多张/不可用都不能猜。"""
+    if len(images) != 1:
+        return _failed(
+            sheet, row, cell_ref, CODE_FLOATING_MULTIPLE,
+            f"附图单元格精确锚定 {len(images)} 张浮图，无法确定应使用哪张，需人工核对",
+            formula_status=ID_SOURCE_SINGLE_CELL_FLOATING,
+        )
+    media = images[0].media
+    if not media.usable:
+        detail = media.error or f"{media.status}/{media.decode_status or '未解码'}"
+        return _failed(
+            sheet, row, cell_ref, CODE_FLOATING_UNAVAILABLE,
+            f"附图单元格内的普通浮图不可用（{detail}），需人工核对",
+            formula_status=ID_SOURCE_SINGLE_CELL_FLOATING,
+            media_part=media.part or "", sha256=media.sha256, size=media.size,
+        )
+    if media.size > max_image_bytes:
+        return _failed(
+            sheet, row, cell_ref, CODE_MEDIA_TOO_LARGE,
+            f"浮图体积 {media.size} 字节超过上限 {max_image_bytes} 字节；需人工确认是否放宽",
+            formula_status=ID_SOURCE_SINGLE_CELL_FLOATING,
+            media_part=media.part or "", sha256=media.sha256, size=media.size,
+        )
+    try:
+        data = workbook.media_bytes(media.part)
+    except OoxmlError as exc:
+        return _failed(
+            sheet, row, cell_ref, CODE_FLOATING_UNAVAILABLE,
+            f"读取单格浮图资源失败：{exc}",
+            formula_status=ID_SOURCE_SINGLE_CELL_FLOATING,
+            media_part=media.part or "", sha256=media.sha256, size=media.size,
+        )
+    return RowImage(
+        sheet=sheet, row=row, cell=cell_ref, status=STATUS_AVAILABLE, code=CODE_OK,
+        formula_status=ID_SOURCE_SINGLE_CELL_FLOATING,
+        id_source=ID_SOURCE_SINGLE_CELL_FLOATING,
+        media_part=media.part or "", sha256=media.sha256, size=media.size,
+        image_format=media.format or "", data=data,
+        notes=("图片为普通浮图，恰好锚定在该附图单元格；不是 DISPIMG 公式",),
     )
 
 
