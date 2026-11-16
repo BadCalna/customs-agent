@@ -1,0 +1,390 @@
+{
+  "schema_version": "1.0",
+  "batch_id": "customs-import-basis-2026-11-17",
+  "prepared_at": "2026-11-16T16:03:22.767535+00:00",
+  "purpose": "用户指定的历史成功案例与 HS/申报要素映射原件，供后续可追溯落库；本批不执行数据库导入。",
+  "authorization": "用户明确指定这四份本地文件并要求单独推送 main；不包含练习、待填、复制件、P20模拟结果。",
+  "files": [
+    {
+      "repository_path": "data/import-basis/2026-11-17/historical-success/H01-20251017-BJXFS-XBY.xlsx",
+      "original_filename": "okXMXS-20251017-BJXFS-XBY-发运资料(5)(1)(1)(2)(2)(1)(1)(1)(1)(2)(3)(3)(2)(3)(2)(1)(2)(1)(2)(1).xlsx",
+      "original_source_relative_path": "回归数据/okXMXS-20251017-BJXFS-XBY-发运资料(5)(1)(1)(2)(2)(1)(1)(1)(1)(2)(3)(3)(2)(3)(2)(1)(2)(1)(2)(1).xlsx",
+      "sha256": "6d3b088f58f5c00197a0eb736d89683be60a87ae37f10ef0081e40bc40a35359",
+      "bytes": 2725864,
+      "source_unchanged": true,
+      "sheets": [
+        {
+          "name": "箱件汇总",
+          "dimension": "A1:S32",
+          "nonempty_rows": 32
+        },
+        {
+          "name": "装箱明细",
+          "dimension": "A1:J20",
+          "nonempty_rows": 20
+        },
+        {
+          "name": "唛头格式",
+          "dimension": "A4:C208",
+          "nonempty_rows": 169
+        },
+        {
+          "name": "申报要素",
+          "dimension": "A1:AG18",
+          "nonempty_rows": 18
+        },
+        {
+          "name": "付款申请函格式",
+          "dimension": "A6:I23",
+          "nonempty_rows": 11
+        },
+        {
+          "name": "发票格式",
+          "dimension": "A1:I4",
+          "nonempty_rows": 1
+        }
+      ],
+      "source_id": "H01",
+      "kind": "historical_success_case",
+      "success_status": "user_confirmed_success",
+      "independently_verified": false,
+      "declaration_sheet": "申报要素",
+      "declaration_header_row": 1,
+      "declaration_rows": 14,
+      "declaration_source_rows": [
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15
+      ],
+      "effective_policy_version": null
+    },
+    {
+      "repository_path": "data/import-basis/2026-11-17/historical-success/H02-20260520-SZCX-ZW.xlsx",
+      "original_filename": "象盛镍业-苏州淳鑫科技发展有限公司XMXS-20260520-SZCX-ZW等ok.xlsx",
+      "original_source_relative_path": "回归数据/象盛镍业-苏州淳鑫科技发展有限公司XMXS-20260520-SZCX-ZW等ok.xlsx",
+      "sha256": "61261092d498fe6dc67eaa8d10dd9765dc6023da249a6ec3779327a8faa7ce8f",
+      "bytes": 18527675,
+      "source_unchanged": true,
+      "sheets": [
+        {
+          "name": "目录",
+          "dimension": "A1:B13",
+          "nonempty_rows": 13
+        },
+        {
+          "name": "节点①送货通知邮件模版(供应商发起）",
+          "dimension": "A1:I14",
+          "nonempty_rows": 3
+        },
+        {
+          "name": "节点①港口联系人",
+          "dimension": "A1:H29",
+          "nonempty_rows": 7
+        },
+        {
+          "name": "节点①常州新长江港口送货通知单",
+          "dimension": "A1:D15",
+          "nonempty_rows": 6
+        },
+        {
+          "name": "节点①箱件汇总",
+          "dimension": "A1:Q39",
+          "nonempty_rows": 38
+        },
+        {
+          "name": "节点①装箱明细",
+          "dimension": "A1:R69",
+          "nonempty_rows": 69
+        },
+        {
+          "name": "节点①申报要素",
+          "dimension": "A1:AA56",
+          "nonempty_rows": 55
+        },
+        {
+          "name": "节点①唛头格式",
+          "dimension": "A4:C466",
+          "nonempty_rows": 310
+        },
+        {
+          "name": "节点①结算明细",
+          "dimension": "A1:K20",
+          "nonempty_rows": 5
+        },
+        {
+          "name": "节点②付款通知邮件模版(供应商发起）",
+          "dimension": "A1:J12",
+          "nonempty_rows": 1
+        },
+        {
+          "name": "节点②付款通知函格式",
+          "dimension": "A1:T24",
+          "nonempty_rows": 13
+        },
+        {
+          "name": "节点②结算单模版-",
+          "dimension": "A1:G11",
+          "nonempty_rows": 11
+        },
+        {
+          "name": "节点②发票格式+开票资料",
+          "dimension": "A1:I4",
+          "nonempty_rows": 1
+        }
+      ],
+      "source_id": "H02",
+      "kind": "historical_success_case",
+      "success_status": "user_confirmed_success",
+      "independently_verified": false,
+      "declaration_sheet": "节点①申报要素",
+      "declaration_header_row": 1,
+      "declaration_rows": 47,
+      "declaration_source_rows": [
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39,
+        40,
+        41,
+        42,
+        43,
+        44,
+        45,
+        46,
+        47,
+        48
+      ],
+      "effective_policy_version": null
+    },
+    {
+      "repository_path": "data/import-basis/2026-11-17/historical-success/H03-SZCX-multi-contract.xlsx",
+      "original_filename": "象盛镍业-苏州淳鑫科技发展有限公司XMXS-20260527-SZCX-TZM、XMXS-20260618-SZCX-ZW、XMXS-20260717-SZCX-TZM、XMXS-20260819-SZCX-XBY、XMXS-20261012-S④(1).xlsx",
+      "original_source_relative_path": "回归数据/象盛镍业-苏州淳鑫科技发展有限公司XMXS-20260527-SZCX-TZM、XMXS-20260618-SZCX-ZW、XMXS-20260717-SZCX-TZM、XMXS-20260819-SZCX-XBY、XMXS-20261012-S④(1).xlsx",
+      "sha256": "6690c3fad7bf65f855a78025e6b8a37ae88d342d51c2e468435ee28f76f04413",
+      "bytes": 8337814,
+      "source_unchanged": true,
+      "sheets": [
+        {
+          "name": "目录",
+          "dimension": "A1:B13",
+          "nonempty_rows": 13
+        },
+        {
+          "name": "节点①送货通知邮件模版(供应商发起）",
+          "dimension": "A1:I14",
+          "nonempty_rows": 3
+        },
+        {
+          "name": "节点①港口联系人",
+          "dimension": "A1:H29",
+          "nonempty_rows": 7
+        },
+        {
+          "name": "节点①常州新长江港口送货通知单",
+          "dimension": "A1:D15",
+          "nonempty_rows": 6
+        },
+        {
+          "name": "节点①箱件汇总",
+          "dimension": "A1:P34",
+          "nonempty_rows": 33
+        },
+        {
+          "name": "节点①装箱明细",
+          "dimension": "A1:S53",
+          "nonempty_rows": 53
+        },
+        {
+          "name": "节点①唛头格式",
+          "dimension": "A4:C266",
+          "nonempty_rows": 190
+        },
+        {
+          "name": "节点①结算明细",
+          "dimension": "A1:K20",
+          "nonempty_rows": 5
+        },
+        {
+          "name": "节点①申报要素",
+          "dimension": "A1:AA32",
+          "nonempty_rows": 28
+        },
+        {
+          "name": "节点②付款通知邮件模版(供应商发起）",
+          "dimension": "A1:J12",
+          "nonempty_rows": 1
+        },
+        {
+          "name": "节点②付款通知函格式",
+          "dimension": "A1:T24",
+          "nonempty_rows": 13
+        },
+        {
+          "name": "节点②结算单模版-",
+          "dimension": "A1:G11",
+          "nonempty_rows": 11
+        },
+        {
+          "name": "节点②发票格式+开票资料",
+          "dimension": "A1:I4",
+          "nonempty_rows": 1
+        }
+      ],
+      "source_id": "H03",
+      "kind": "historical_success_case",
+      "success_status": "user_confirmed_success",
+      "independently_verified": false,
+      "declaration_sheet": "节点①申报要素",
+      "declaration_header_row": 1,
+      "declaration_rows": 25,
+      "declaration_source_rows": [
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26
+      ],
+      "effective_policy_version": null
+    },
+    {
+      "repository_path": "data/import-basis/2026-11-17/mappings/HS编码与申报要素映射_2026-11-16.xlsx",
+      "original_filename": "HS编码与申报要素映射_2026-11-16.xlsx",
+      "original_source_relative_path": "映射关系—落库/outputs/01a1dfc5-17d5-7253-a2ad-1e56012975ab/HS编码与申报要素映射_2026-11-16.xlsx",
+      "sha256": "58d0e7314dc87ac3e32b402ecf21f5e7409837c2cee7fbc99f3593d061b3ad92",
+      "bytes": 4072906,
+      "source_unchanged": true,
+      "sheets": [
+        {
+          "name": "HS编码索引",
+          "dimension": null,
+          "nonempty_rows": 12096
+        },
+        {
+          "name": "申报要素明细",
+          "dimension": null,
+          "nonempty_rows": 102793
+        },
+        {
+          "name": "未匹配编码",
+          "dimension": null,
+          "nonempty_rows": 9
+        }
+      ],
+      "source_id": "M01",
+      "kind": "hs_declaration_element_mapping",
+      "independently_verified": false,
+      "recorded_sources": {
+        "hs_url": "https://online.customs.gov.cn/ociswebserver/pages/cus/#/tgcs/info?paramCode=CusComplex",
+        "elements_url": "https://online.customs.gov.cn/ociswebserver/pages/cus/#/tgcs/info?paramCode=CusMerchElement",
+        "collection_timestamps_raw": "HS: 2026-11-15T16:40:44.265Z  要素: 2026-11-15T16:31:21.802Z"
+      },
+      "stats": {
+        "hs_count": 12089,
+        "matched_hs_count": 12083,
+        "unmatched_hs_count": 6,
+        "original_status_values": {
+          "已匹配": 12083,
+          "未匹配，需核验": 6
+        },
+        "mapping_row_count": 102792,
+        "unique_hs_prefix_element_keys": 102792,
+        "duplicate_hs_prefix_element_rows": 0,
+        "unmatched_codes": [
+          "9801001000",
+          "9801009000",
+          "9802001000",
+          "9802009000",
+          "9803004000",
+          "9803005000"
+        ]
+      },
+      "layouts": {
+        "HS编码索引": {
+          "header_row": 9,
+          "data_start_row": 10
+        },
+        "申报要素明细": {
+          "header_row": 1,
+          "data_start_row": 2
+        },
+        "未匹配编码": {
+          "header_row": 4,
+          "data_start_row": 5
+        }
+      },
+      "effective_policy_version": null,
+      "declaration_element_official_order_available": false
+    }
+  ],
+  "public_publication_authorization": {
+    "repository": "https://github.com/BadCalna/customs-agent",
+    "verified_visibility": "public",
+    "user_confirmation": "原件可以公开，按指定文件推送 main",
+    "scope": "本 manifest 所列四份原件，以及本批来源清单和落库说明。P20代码与模拟结果不在范围内。"
+  }
+}
