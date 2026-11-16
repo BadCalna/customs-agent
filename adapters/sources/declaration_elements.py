@@ -71,6 +71,8 @@ from .hs_lookup import (
     classify_hs_format,
     read_json_document,
     resolve_version,
+    _parse_date,
+    _strip_invisible,
 )
 
 #: 要素数据文件的结构版本。
@@ -356,8 +358,23 @@ class DeclarationElementsResult(Schema):
             raise ValueError(f"取到清单时 schema_status 必须是 {expected.value}")
         if self.dataset is not None and self.authoritative != self.dataset.authoritative:
             raise ValueError("authoritative 必须由 dataset 的来源/复核状态计算，不能手工覆盖")
+        if self.dataset is None:
+            raise ValueError("取到清单时必须携带 dataset，不能省略来源元数据")
         if len(self.evidence) != 1 or self.evidence[0].status is not self.schema_status:
             raise ValueError("取到清单时必须且只能携带一条同状态的可定位证据")
+        evidence = self.evidence[0]
+        if not _strip_invisible(evidence.document) or not _strip_invisible(evidence.locator):
+            raise ValueError("证据必须带非空 document 与 locator，否则无法回查")
+        for field in ("retrieved_at", "effective_from", "effective_to"):
+            value = getattr(evidence, field)
+            if value and _parse_date(value) is None:
+                raise ValueError(f"证据的 {field} 必须是 ISO 日期/时间")
+        if self.authoritative and not evidence.retrieved_at:
+            raise ValueError("权威来源的证据必须记录 retrieved_at（取得时间）")
+        if self.parse.status in (ParseStatus.PARTIAL, ParseStatus.UNPARSED) and (
+            self.sufficiency is not Sufficiency.UNVERIFIED
+        ):
+            raise ValueError("解析不确定时只能判 unverified，不能给充分/不足结论")
 
         schema_keys = [item.key for item in self.schema_record.ordered()]
         if [item.key for item in self.checks] != schema_keys:
@@ -403,6 +420,13 @@ class DeclarationElementsResult(Schema):
                 raise ValueError("sufficient 的每个要素都必须是 satisfied 或 not_applicable")
             if self.gaps:
                 raise ValueError("sufficient 不得仍携带待核/补料问题")
+            if (
+                self.parse.conflicts
+                or self.parse.ambiguous_keys
+                or self.parse.unrecognized_keys
+                or self.parse.missing_orders
+            ):
+                raise ValueError("sufficient 不得携带冲突/歧义/未识别/缺号")
         if self.sufficiency is Sufficiency.INSUFFICIENT:
             if not self.authoritative or not self.version.verified:
                 raise ValueError("insufficient 要求来源权威且版本已核")
@@ -414,12 +438,28 @@ class DeclarationElementsResult(Schema):
                 "版本/来源/解析不确定时不得对外发起补料"
             )
         expected_supplements = [
-            item.key
+            {
+                "key": item.key,
+                "label": item.label,
+                "requirement": item.requirement.value,
+                "role": item.role.value,
+                "suggested_role": "supplier",
+            }
             for item in self.checks
             if self.sufficiency is Sufficiency.INSUFFICIENT and item.blocking
         ]
-        if [item.key for item in self.supplement_items] != expected_supplements:
-            raise ValueError("supplement_items 必须由 insufficient 的缺失/非法项派生")
+        actual_supplements = [
+            {
+                "key": item.key,
+                "label": item.label,
+                "requirement": item.requirement.value,
+                "role": item.role.value,
+                "suggested_role": item.suggested_role,
+            }
+            for item in self.supplement_items
+        ]
+        if actual_supplements != expected_supplements:
+            raise ValueError("supplement_items 必须由 insufficient 的缺失/非法项派生且字段一致")
         return self
 
     def to_evidence_entries(self) -> list[EvidenceEntry]:
@@ -594,28 +634,41 @@ class InMemoryElementStore:
         self._dataset = dataset
 
     def load(self) -> ElementSnapshot:
-        versions: list[VersionWindow] = []
+        versions: list[dict[str, Any]] = []
         for index, item in enumerate(self._raw_versions):
             try:
-                versions.append(
-                    item if isinstance(item, VersionWindow) else VersionWindow.model_validate(item)
+                parsed = (
+                    item.model_dump(mode="json")
+                    if isinstance(item, VersionWindow)
+                    else VersionWindow.model_validate(item).model_dump(mode="json")
                 )
             except ValidationError as exc:
                 raise ElementStoreError(
                     f"第 {index + 1} 个税则版本不符合契约（{_summarize(exc)}）"
                 ) from exc
-        schemas: list[ElementSchema] = []
+            versions.append(parsed)
+        schemas: list[dict[str, Any]] = []
         for index, item in enumerate(self._raw_schemas):
             try:
-                schemas.append(
-                    item if isinstance(item, ElementSchema) else ElementSchema.model_validate(item)
+                parsed = (
+                    item.model_dump(mode="json")
+                    if isinstance(item, ElementSchema)
+                    else ElementSchema.model_validate(item).model_dump(mode="json")
                 )
             except ValidationError as exc:
                 raise ElementStoreError(
                     f"第 {index + 1} 份要素清单不符合契约（{_summarize(exc)}）"
                 ) from exc
-        return ElementSnapshot(
-            dataset=self._dataset, versions=tuple(versions), schemas=tuple(schemas)
+            schemas.append(parsed)
+        # 与 JSON 存储共用同一套结构校验：重复清单/版本引用/枚举缺失一律拒绝。
+        return _snapshot_from_payload(
+            {
+                "schema_version": SCHEMA_VERSION,
+                "dataset": self._dataset.model_dump(mode="json"),
+                "versions": versions,
+                "schemas": schemas,
+            },
+            source_name="in-memory",
         )
 
 
@@ -672,6 +725,37 @@ def _match_name(name: str, index: Mapping[str, list[ElementSpec]]) -> NameMatch:
     return NameMatch(problem="未识别的要素名")
 
 
+def _keyed_segments(text: str, schema: ElementSchema) -> list[str]:
+    """把键值式原文切成段：显式分隔符 + 后跟已知要素名的空白。"""
+
+    parts = re.split(r"[;；\r\n\t]", text)
+    terms = sorted(
+        {
+            re.escape(spec.label)
+            for spec in schema.elements
+        }
+        | {re.escape(spec.key) for spec in schema.elements}
+        | {
+            re.escape(alias)
+            for spec in schema.elements
+            for alias in spec.aliases
+            if alias.strip()
+        },
+        key=len,
+        reverse=True,
+    )
+    pattern = None
+    if terms:
+        # 只在“空白 + 已知要素名 + 冒号”处切，尾随无冒号的要素名不切，
+        # 否则会把必填值的一部分误当成独立空要素。
+        pattern = re.compile(r"\s+(?=(?:" + "|".join(terms) + r")\s*[:：])")
+    segments: list[str] = []
+    for part in parts:
+        pieces = pattern.split(part) if pattern is not None else [part]
+        segments.extend(piece.strip() for piece in pieces if piece.strip())
+    return segments
+
+
 def _parse_raw(raw: str, schema: ElementSchema) -> tuple[dict[str, str], dict[str, str], ElementParseReport]:
     """解析原文，返回 (key→值, key→原文名, 报告)。
 
@@ -696,7 +780,15 @@ def _parse_raw(raw: str, schema: ElementSchema) -> tuple[dict[str, str], dict[st
     labels: dict[str, str] = {}
     report = ElementParseReport(token_count=0)
 
-    if "|" in text and not re.search(r"[;；]", text):
+    has_pipe = "|" in text
+    has_semi = bool(re.search(r"[;；]", text))
+    has_hard_ws = bool(re.search(r"[\r\n\t]", text))
+    if has_pipe and (has_semi or has_hard_ws):
+        report.status = ParseStatus.PARTIAL
+        report.note = "原文混用了多种分隔符（| 与 ;/换行/制表），无法确定各段边界"
+        return values, labels, report
+
+    if has_pipe and not has_semi:
         report.mode = ParseMode.POSITIONAL
         tokens = [item.strip() for item in text.split("|")]
         report.token_count = len(tokens)
@@ -754,8 +846,8 @@ def _parse_raw(raw: str, schema: ElementSchema) -> tuple[dict[str, str], dict[st
                 )
             return values, labels, report
 
-    # 编号式 / 键值式：按分号切段，编号只用于定位顺序，名称匹配优先。
-    segments = [item.strip() for item in re.split(r"[;；]", text) if item.strip()]
+    # 编号式 / 键值式：显式分隔符 + 后跟已知要素名的空白切段，名称匹配优先。
+    segments = _keyed_segments(text, schema)
     report.token_count = len(segments)
     if not segments:
         report.status = ParseStatus.UNPARSED
@@ -798,6 +890,11 @@ def _parse_raw(raw: str, schema: ElementSchema) -> tuple[dict[str, str], dict[st
         label_match = _match_name(label_part, index)
         if label_match.spec is not None:
             spec = label_match.spec
+            if value_part is None and order is None:
+                # 键值式里只有名称、没有值且无编号：无法区分“空要素”与“值的一部分”，
+                # 转人工，不静默把必填值截断。
+                unrecognized.append(f"{label_part.strip()}（只有名称没有值）")
+                continue
             if spec.key in matched_specs_seen:
                 # 同名重复不能后值覆盖前值；两份都可能被业务当作有效事实。
                 ambiguous.append(f"要素名重复：{label_part.strip()}")
@@ -808,6 +905,10 @@ def _parse_raw(raw: str, schema: ElementSchema) -> tuple[dict[str, str], dict[st
                 label_only += 1
                 values.setdefault(spec.key, "")
             else:
+                if re.search(r"[:：]", value_part):
+                    # 值里再出现“名称:值”式冒号，多半是下一段被吞进来了，不洗成已填。
+                    unrecognized.append(f"{label_part.strip()}（值内出现冒号）")
+                    continue
                 value_segments += 1
                 values[spec.key] = value_part.strip()
             labels[spec.key] = label_part.strip()
@@ -1362,7 +1463,7 @@ class DeclarationElementsSource:
         snapshot: ElementSnapshot,
     ) -> EvidenceEntry:
         source = record.source
-        if source.retrieved_at is None and snapshot.dataset.retrieved_at:
+        if not source.retrieved_at and snapshot.dataset.retrieved_at:
             source = source.model_copy(update={"retrieved_at": snapshot.dataset.retrieved_at})
         labels = "；".join(f"{item.order}:{item.label}" for item in record.ordered())
         return EvidenceEntry(

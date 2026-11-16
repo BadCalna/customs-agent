@@ -317,6 +317,42 @@ class ElementSufficiencyTest(SimpleTestCase):
         with self.assertRaises(ValidationError):
             DeclarationElementsResult.model_validate(payload)
 
+    def test_result_validator_rejects_partial_parse_with_business_conclusion(self):
+        result = self.check(
+            declared={"brand_type": "无品牌", "usage": "工业", "brand": "无"}
+        )
+        payload = result.model_dump(mode="json")
+        payload["parse"]["status"] = "partial"
+        with self.assertRaises(ValidationError):
+            DeclarationElementsResult.model_validate(payload)
+
+    def test_result_validator_rejects_conflict_on_sufficient(self):
+        result = self.check(
+            declared={"brand_type": "无品牌", "usage": "工业", "model": "X", "brand": "无"}
+        )
+        payload = result.model_dump(mode="json")
+        payload["parse"]["conflicts"] = ["型号"]
+        with self.assertRaises(ValidationError):
+            DeclarationElementsResult.model_validate(payload)
+
+    def test_result_validator_rejects_spoofed_supplement_item_fields(self):
+        result = self.check(
+            declared={"brand_type": "无品牌", "usage": "工业", "brand": "无"}
+        )
+        payload = result.model_dump(mode="json")
+        payload["supplement_items"][0]["suggested_role"] = "expert"
+        with self.assertRaises(ValidationError):
+            DeclarationElementsResult.model_validate(payload)
+
+    def test_result_validator_requires_dataset_when_schema_present(self):
+        result = self.check(
+            declared={"brand_type": "无品牌", "usage": "工业", "model": "X", "brand": "无"}
+        )
+        payload = result.model_dump(mode="json")
+        payload["dataset"] = None
+        with self.assertRaises(ValidationError):
+            DeclarationElementsResult.model_validate(payload)
+
     def test_same_input_is_repeatable(self):
         first = self.check(declared_raw=numbered_declared()).model_dump(mode="json")
         second = self.check(declared_raw=numbered_declared()).model_dump(mode="json")

@@ -58,6 +58,12 @@ ENV_TARIFF_PATH = "CUSTOMS_TARIFF_PATH"
 #: 税则与申报要素数据共用同一套版本窗口；要素路径变量在 declaration_elements 中。
 
 _HSPACE = re.compile(r"[\s.\-‐‑–—_]+")
+#: 不可见/排版字符（含零宽空格、BOM、NBSP、各类空白），用于“去空白后非空”校验。
+_INVISIBLE = re.compile(r"[\u0000-\u0020\u00a0\u1680\u2000-\u200f\u2028\u2029\u202f\u205f\u3000\ufeff]+")
+
+
+def _strip_invisible(value: str | None) -> str:
+    return _INVISIBLE.sub("", "" if value is None else value)
 
 
 class SourceKind(str, Enum):
@@ -158,6 +164,14 @@ class SourceRef(Schema):
     publisher: str = Field(default="", description="发布方")
     retrieved_at: str | None = Field(default=None, description="取得数据的时间")
 
+    @model_validator(mode="after")
+    def _require_locatable(self) -> "SourceRef":
+        if not _strip_invisible(self.document):
+            raise ValueError("document 去除不可见字符后不能为空，否则无法定位来源")
+        if not _strip_invisible(self.locator):
+            raise ValueError("locator 去除不可见字符后不能为空，否则无法定位来源")
+        return self
+
 
 class DatasetInfo(Schema):
     """数据集说明。``synthetic``/``authority`` 是给下游的诚实标记。"""
@@ -185,16 +199,26 @@ class DatasetInfo(Schema):
 
     @model_validator(mode="after")
     def _authority_consistency(self) -> "DatasetInfo":
-        if self.review_status is ReviewStatus.REVIEWED:
-            if not self.reviewed_by.strip() or not self.reviewed_at:
-                raise ValueError("reviewed 数据必须记录 reviewed_by 与 reviewed_at")
         if self.source_type is SourceKind.SYNTHETIC:
             if self.synthetic is False:
                 raise ValueError("source_type=synthetic 时 synthetic 不能为 false")
             if self.authority is Authority.AUTHORITATIVE:
                 raise ValueError("合成数据不能声明 authoritative")
-        if self.source_type is SourceKind.THIRD_PARTY and self.authority is Authority.AUTHORITATIVE:
-            raise ValueError("第三方数据不能声明 authoritative；只能作初筛，须官方核验")
+        elif self.synthetic is True:
+            raise ValueError("synthetic=true 只能与 source_type=synthetic 一起使用")
+        if self.source_type in (SourceKind.OFFICIAL_TARIFF, SourceKind.OFFICIAL_DECLARATION):
+            if self.authority in (Authority.SYNTHETIC, Authority.UNVERIFIED_THIRD_PARTY):
+                raise ValueError("官方来源不能声明 synthetic / unverified_third_party")
+        if self.source_type is SourceKind.THIRD_PARTY:
+            if self.authority not in (Authority.UNVERIFIED_THIRD_PARTY, Authority.UNSPECIFIED):
+                raise ValueError("第三方来源只能声明 unverified_third_party 或 unspecified")
+        if self.review_status is ReviewStatus.REVIEWED:
+            if not _strip_invisible(self.reviewed_by) or not self.reviewed_at:
+                raise ValueError("reviewed 数据必须记录 reviewed_by 与 reviewed_at")
+            if _parse_date(self.reviewed_at) is None:
+                raise ValueError("reviewed_at 必须是 ISO 日期/时间")
+            if _parse_date(self.retrieved_at) is None:
+                raise ValueError("已复核数据的 retrieved_at 必须是 ISO 日期/时间")
         return self
 
     @property
@@ -399,6 +423,8 @@ class HsLookupResult(Schema):
             return self
 
         if self.code is None:
+            if self.effective_status is not EffectiveStatus.UNKNOWN:
+                raise ValueError("没有税则记录时不得声明编码记录有效期状态")
             expected = (
                 EvidenceStatus.NOT_FOUND
                 if self.version.verified
@@ -435,8 +461,29 @@ class HsLookupResult(Schema):
             raise ValueError("code_state 必须与 code.state 一致")
         if self.dataset is not None and self.authoritative != self.dataset.authoritative:
             raise ValueError("authoritative 必须由 dataset 的来源/复核状态计算，不能手工覆盖")
+        if self.dataset is None:
+            raise ValueError("查到税则记录时必须携带 dataset，不能省略来源元数据")
+        if self.query is None:
+            raise ValueError("查到税则记录时必须携带 query，不能省略查询基准")
+        expected_effective = _effective_status(self.code, self.query.basis, self.version)
+        if self.effective_status is not expected_effective:
+            raise ValueError(
+                f"effective_status 必须由记录有效期与申报日期计算，期望 {expected_effective.value}"
+            )
+        if self.effective_status is not EffectiveStatus.UNKNOWN:
+            if not (self.query.basis.declaration_date or "").strip():
+                raise ValueError("编码记录有效期状态必须有业务申报日期才能声明")
         if len(self.evidence) != 1 or self.evidence[0].status is not self.evidence_status:
             raise ValueError("查到税则记录时必须且只能携带一条同状态的可定位证据")
+        evidence = self.evidence[0]
+        if not _strip_invisible(evidence.document) or not _strip_invisible(evidence.locator):
+            raise ValueError("证据必须带非空 document 与 locator，否则无法回查")
+        for field in ("retrieved_at", "effective_from", "effective_to"):
+            value = getattr(evidence, field)
+            if value and _parse_date(value) is None:
+                raise ValueError(f"证据的 {field} 必须是 ISO 日期/时间")
+        if self.authoritative and not evidence.retrieved_at:
+            raise ValueError("权威来源的证据必须记录 retrieved_at（取得时间）")
         if self.declaration_ready:
             if self.format.state is not HsFormatState.VALID:
                 raise ValueError("declaration_ready 要求 10 位完整编码")
@@ -880,28 +927,41 @@ class InMemoryTariffStore:
         self._dataset = dataset
 
     def load(self) -> TariffSnapshot:
-        versions: list[VersionWindow] = []
+        versions: list[dict[str, Any]] = []
         for index, item in enumerate(self._raw_versions):
             try:
-                versions.append(
-                    item if isinstance(item, VersionWindow) else VersionWindow.model_validate(item)
+                parsed = (
+                    item.model_dump(mode="json")
+                    if isinstance(item, VersionWindow)
+                    else VersionWindow.model_validate(item).model_dump(mode="json")
                 )
             except ValidationError as exc:
                 raise TariffStoreError(
                     f"第 {index + 1} 个税则版本不符合契约（{_summarize_validation_error(exc)}）"
                 ) from exc
-        codes: list[TariffCode] = []
+            versions.append(parsed)
+        codes: list[dict[str, Any]] = []
         for index, item in enumerate(self._raw_codes):
             try:
-                codes.append(
-                    item if isinstance(item, TariffCode) else TariffCode.model_validate(item)
+                parsed = (
+                    item.model_dump(mode="json")
+                    if isinstance(item, TariffCode)
+                    else TariffCode.model_validate(item).model_dump(mode="json")
                 )
             except ValidationError as exc:
                 raise TariffStoreError(
                     f"第 {index + 1} 条税则记录不符合契约（{_summarize_validation_error(exc)}）"
                 ) from exc
-        return TariffSnapshot(
-            dataset=self._dataset, versions=tuple(versions), codes=tuple(codes)
+            codes.append(parsed)
+        # 复用与 JSON 存储相同的结构校验：重复版本/编码、未声明版本引用、坏日期一律拒绝。
+        return _snapshot_from_payload(
+            {
+                "schema_version": SCHEMA_VERSION,
+                "dataset": self._dataset.model_dump(mode="json"),
+                "versions": versions,
+                "codes": codes,
+            },
+            source_name="in-memory",
         )
 
 
@@ -1301,7 +1361,7 @@ class HsLookupSource:
                 )
 
         source = record.source
-        if source.retrieved_at is None and snapshot.dataset.retrieved_at:
+        if not source.retrieved_at and snapshot.dataset.retrieved_at:
             source = source.model_copy(update={"retrieved_at": snapshot.dataset.retrieved_at})
         record_has_dates = bool(record.effective_from or record.effective_to)
         evidence_from = (

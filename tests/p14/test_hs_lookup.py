@@ -299,6 +299,63 @@ class HsLookupTest(SimpleTestCase):
         with self.assertRaises(ValidationError):
             HsLookupResult.model_validate(payload)
 
+    def test_result_validator_rejects_effective_status_without_business_date(self):
+        result = self.lookup(basis=QueryBasis(tariff_version="2026"))
+        payload = result.model_dump(mode="json")
+        payload["effective_status"] = "effective"
+        with self.assertRaises(ValidationError):
+            HsLookupResult.model_validate(payload)
+
+    def test_result_validator_recomputes_effective_status_from_record_dates(self):
+        store = tariff_store(codes=[tariff_code(effective_from="2026-07-01")])
+        result = self.lookup(store=store, basis=QueryBasis(declaration_date="2026-05-20"))
+        payload = result.model_dump(mode="json")
+        payload["effective_status"] = "effective"
+        payload["declaration_ready"] = True
+        payload["usable_as_basis"] = True
+        with self.assertRaises(ValidationError):
+            HsLookupResult.model_validate(payload)
+
+    def test_blank_source_locator_is_rejected(self):
+        from adapters.sources.hs_lookup import SourceRef
+
+        with self.assertRaises(ValidationError):
+            SourceRef(document=" ", locator="x")
+        with self.assertRaises(ValidationError):
+            SourceRef(document="x", locator=" ")
+        with self.assertRaises(ValidationError):
+            SourceRef(document="\u200b", locator="x")
+        with self.assertRaises(ValidationError):
+            SourceRef(document="x", locator="\ufeff")
+
+    def test_result_validator_rejects_invisible_evidence_locator(self):
+        result = self.lookup()
+        payload = result.model_dump(mode="json")
+        payload["evidence"][0]["document"] = "\u200b"
+        with self.assertRaises(ValidationError):
+            HsLookupResult.model_validate(payload)
+
+    def test_result_validator_rejects_invalid_evidence_retrieved_at(self):
+        result = self.lookup()
+        payload = result.model_dump(mode="json")
+        payload["evidence"][0]["retrieved_at"] = "not-a-date"
+        with self.assertRaises(ValidationError):
+            HsLookupResult.model_validate(payload)
+
+    def test_result_validator_rejects_effective_status_without_record(self):
+        result = self.lookup("9999999999")
+        payload = result.model_dump(mode="json")
+        payload["effective_status"] = "effective"
+        with self.assertRaises(ValidationError):
+            HsLookupResult.model_validate(payload)
+
+    def test_result_validator_requires_dataset_when_record_present(self):
+        result = self.lookup()
+        payload = result.model_dump(mode="json")
+        payload["dataset"] = None
+        with self.assertRaises(ValidationError):
+            HsLookupResult.model_validate(payload)
+
     def test_result_validator_rejects_version_unverified_claiming_not_found(self):
         result = self.lookup("9999999999", basis=QueryBasis())
         payload = result.model_dump(mode="json")

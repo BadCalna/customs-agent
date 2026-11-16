@@ -96,6 +96,64 @@ class ParseTest(SimpleTestCase):
         self.assertEqual(result.missing_count, 0)
         self.assertEqual(result.checks[1].declared_key, "使用用途")
 
+    def test_newline_tab_and_space_before_label_are_segment_boundaries(self):
+        for raw in (
+            "品牌类型:无品牌\n用途:工业\n型号:X",
+            "品牌类型:无品牌\t用途:工业\t型号:X",
+            "品牌类型:无品牌 用途:工业 型号:X",
+        ):
+            with self.subTest(raw=raw):
+                result = self.check(declared_raw=raw)
+                self.assertIs(result.parse.status, ParseStatus.PARSED)
+                self.assertNotIn("\n", result.checks[0].declared_value or "")
+                self.assertNotIn("\t", result.checks[0].declared_value or "")
+                self.assertEqual(result.checks[1].declared_value, "工业")
+                self.assertEqual(result.checks[2].declared_value, "X")
+                self.assertEqual(result.parse.unrecognized_keys, [])
+
+    def test_value_with_space_before_next_label_is_split_not_swallowed(self):
+        result = self.check(declared_raw="品牌类型:无品牌;用途:用于 型号:X;品牌:ACME")
+        self.assertIs(result.parse.status, ParseStatus.PARSED)
+        self.assertEqual(result.checks[1].declared_value, "用于")
+        self.assertEqual(result.checks[2].declared_value, "X")
+
+    def test_mixed_pipe_and_semicolon_is_partial(self):
+        result = self.check(declared_raw="品牌类型:无品牌|用途;型号:X")
+        self.assertIs(result.parse.status, ParseStatus.PARTIAL)
+        self.assertIs(result.sufficiency.value, "unverified")
+        self.assertEqual(result.supplement_items, [])
+
+    def test_trailing_label_without_colon_is_not_silently_split(self):
+        specs = [element_spec("a", "甲", 1), element_spec("b", "乙", 2, requirement="optional")]
+        store = element_store(schemas=[element_schema(specs=specs)])
+        src = DeclarationElementsSource(store, clock=FIXED_CLOCK)
+        result = src.check(
+            ElementQuery(
+                hs_code_raw="8544422900",
+                basis=QueryBasis(tariff_version="2026"),
+                declared_raw="甲:正确值 乙",
+            )
+        )
+        self.assertIs(result.parse.status, ParseStatus.PARSED)
+        self.assertEqual(result.checks[0].declared_value, "正确值 乙")
+        self.assertIs(result.sufficiency.value, "sufficient")
+
+    def test_newline_or_tab_bare_label_is_partial_not_swallowed(self):
+        specs = [element_spec("a", "甲", 1), element_spec("b", "乙", 2, requirement="optional")]
+        store = element_store(schemas=[element_schema(specs=specs)])
+        src = DeclarationElementsSource(store, clock=FIXED_CLOCK)
+        for raw in ("甲:正确值\n乙", "甲:正确值\t乙"):
+            with self.subTest(raw=raw):
+                result = src.check(
+                    ElementQuery(
+                        hs_code_raw="8544422900",
+                        basis=QueryBasis(tariff_version="2026"),
+                        declared_raw=raw,
+                    )
+                )
+                self.assertIs(result.parse.status, ParseStatus.PARTIAL)
+                self.assertIs(result.sufficiency.value, "unverified")
+
     def test_keyed_unknown_label_is_partial_not_silently_ignored(self):
         result = self.check(declared_raw="品牌类型:无品牌;用途:工业设备连接;型号:X-100;品牌:无;奇怪要素:值")
         self.assertIs(result.parse.status, ParseStatus.PARTIAL)
