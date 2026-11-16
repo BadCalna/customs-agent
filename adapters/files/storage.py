@@ -2,14 +2,16 @@
 
 设计口径：
 
-- **原件与图片分开目录**。``tasks/<task>/versions/<version>/original/`` 放版本原件，
-  ``.../images/`` 放从工作簿提取出来的附图；新版本重新解析，不沿用旧版本目录。
+- **原件、图片、导出副本分开目录**。``tasks/<task>/versions/<version>/original/`` 放版本原件，
+  ``.../images/`` 放从工作簿提取出来的附图，``.../exports/<kind>/`` 放导出副本；
+  新版本重新解析，不沿用旧版本目录。
 - **内容寻址、可去重**。落盘文件名是内容 ``sha256`` + 归一化后缀，同一内容重复保存
   会命中同一路径（幂等），不同字节不会互相覆盖。
 - **原子写入、不覆盖**。先写同目录临时文件并 ``fsync``，再用硬链接“独占发布”到目标名；
   目标已存在时只允许内容完全一致（幂等复用），内容不同即报错，绝不覆盖已有文件。
-- **不可变**。本模块不提供修改/删除入口；删除显式拒绝（``delete``），清理只能由运维
-  在仓库外按备份策略处理，避免业务代码误删历史证据。
+- **不可变**。正式文件不提供修改/删除入口；删除显式拒绝（``delete``），清理只能由运维
+  在仓库外按备份策略处理，避免业务代码误删历史证据。唯一可删的是 ``incoming/`` 暂存区，
+  供 P06 实现“先落暂存 → 事务提交 → 原子发布”，失败时丢弃暂存，不留孤件。
 - **路径即攻击面**。所有相对路径在读写前统一解析：拒绝绝对路径、``..``、反斜杠、
   控制字符、盘符冒号与符号链接逃逸，解析后必须落在根目录内。
 - **文件名只作展示元数据**。展示名经过净化（去路径分隔符/控制字符/超长/危险扩展名），
@@ -22,10 +24,12 @@ from __future__ import annotations
 
 import errno
 import hashlib
+import json
 import os
 import re
 import tempfile
 import unicodedata
+import uuid
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
@@ -38,6 +42,10 @@ DEFAULT_MAX_READ_BYTES = 200 * 1024 * 1024
 
 #: 版本原件只接受 Excel 工作簿（含启用宏的工作簿），其它类型由上传/解析任务拒绝。
 ORIGINAL_SUFFIXES = frozenset({".xlsx", ".xlsm", ".xltx"})
+#: 导出副本允许的后缀；导出业务本身由 P20 负责，本模块只做受控存取。
+EXPORT_SUFFIXES = frozenset({".xlsx", ".xlsm", ".csv", ".pdf", ".zip"})
+#: 暂存区目录；只允许 stage/publish/discard 触碰，不属于正式版本目录。
+STAGE_DIR = "incoming"
 #: 附图允许的媒体后缀（与 OOXML 常见媒体类型一致）。
 IMAGE_SUFFIXES = frozenset({
     ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tif", ".tiff", ".webp", ".emf", ".wmf",
@@ -78,6 +86,17 @@ class StoredFile:
     suffix: str
     display_name: str
     created: bool
+
+
+@dataclass(frozen=True)
+class StagedFile:
+    """暂存结果；P06 在事务提交后再用 token 发布到正式版本目录。"""
+
+    token: str
+    relative_path: str
+    sha256: str
+    size: int
+    suffix: str
 
 
 # --------------------------------------------------------------------- 命名与净化
@@ -165,6 +184,19 @@ def version_image_relative_path(task_id: str, version_id: str, sha256: str, suff
         f"tasks/{_safe_segment(task_id, 'task_id')}"
         f"/versions/{_safe_segment(version_id, 'version_id')}"
         f"/images/{_safe_segment(sha256, 'sha256')}{suffix}"
+    )
+
+
+def version_export_relative_path(
+    task_id: str, version_id: str, kind: str, sha256: str, suffix: str,
+) -> str:
+    """导出副本路径：``tasks/<task>/versions/<version>/exports/<kind>/<sha256>.<ext>``。"""
+    safe_kind = _safe_segment(kind, "导出类型")
+    safe_suffix = _content_suffix(suffix, EXPORT_SUFFIXES, "导出副本")
+    return (
+        f"tasks/{_safe_segment(task_id, 'task_id')}"
+        f"/versions/{_safe_segment(version_id, 'version_id')}"
+        f"/exports/{safe_kind}/{_safe_segment(sha256, 'sha256')}{safe_suffix}"
     )
 
 
@@ -279,15 +311,247 @@ def save_image(
                   display_name=display_name, max_bytes=max_bytes)
 
 
-def _store(
-    data: bytes,
+def save_export(
     root: str | Path,
     *,
-    relative_path: str,
-    suffix: str,
-    display_name: str,
-    max_bytes: int,
+    task_id: str,
+    version_id: str,
+    kind: str,
+    filename: str,
+    data: bytes,
+    max_bytes: int = DEFAULT_MAX_BYTES,
 ) -> StoredFile:
+    """保存一份导出副本；业务内容由 P20 生成，这里只做不可覆盖的受控落盘。"""
+    display_name = sanitize_filename(filename, fallback="导出.xlsx", allowed_suffixes=EXPORT_SUFFIXES)
+    suffix = _content_suffix(PurePosixPath(display_name).suffix, EXPORT_SUFFIXES, "导出副本")
+    relative_path = version_export_relative_path(
+        task_id, version_id, kind, sha256(data), suffix,
+    )
+    return _store(data, root, relative_path=relative_path, suffix=suffix,
+                  display_name=display_name, max_bytes=max_bytes)
+
+
+def read_export(
+    root: str | Path, relative_path: str, *, max_bytes: int = DEFAULT_MAX_READ_BYTES,
+) -> bytes:
+    """读取导出副本；只接受 ``.../exports/<kind>/<sha256>.<ext>`` 路径。"""
+    _export_path_parts(relative_path)
+    return read_bytes(root, relative_path, max_bytes=max_bytes)
+
+
+def export_exists(root: str | Path, relative_path: str) -> bool:
+    """导出副本存在性检查；路径必须是导出目录，不能借此探测原件/图片。"""
+    _export_path_parts(relative_path)
+    return exists(root, relative_path)
+
+
+def _export_path_parts(relative_path: str) -> tuple[str, ...]:
+    pure = PurePosixPath(relative_path or "")
+    parts = pure.parts
+    if (len(parts) != 7 or parts[0] != "tasks" or parts[2] != "versions"
+            or parts[4] != "exports"):
+        raise StorageError(
+            "unsafe_path", f"只能按导出副本路径读取：{relative_path!r}",
+        )
+    _safe_segment(parts[1], "task_id")
+    _safe_segment(parts[3], "version_id")
+    _safe_segment(parts[5], "导出类型")
+    if PurePosixPath(parts[6]).suffix.lower() not in EXPORT_SUFFIXES:
+        raise StorageError("unsafe_path", f"导出副本后缀不受支持：{parts[6]!r}")
+    return parts
+
+
+# --------------------------------------------------------------------- 暂存与发布
+def stage_bytes(
+    root: str | Path,
+    data: bytes,
+    *,
+    suffix: str,
+    max_bytes: int = DEFAULT_MAX_BYTES,
+) -> StagedFile:
+    """把上传字节写入 ``incoming/<uuid>.<ext>`` 暂存区。
+
+    P06 推荐顺序：先暂存 → 创建 Task/FileVersion 并在事务内提交 → 用返回的 token
+    调用 :func:`publish_staged_original` 原子发布；事务失败则 :func:`discard_staged`。
+    暂存同样执行大小上限、扩展名白名单与路径安全校验。
+    """
+    payload = _validated_payload(data, max_bytes)
+    safe_suffix = _content_suffix(suffix, ORIGINAL_SUFFIXES, "暂存原件")
+    digest = sha256(payload)
+    for _ in range(3):
+        token = str(uuid.uuid4())
+        relative_path = f"{STAGE_DIR}/{token}{safe_suffix}"
+        created = _write_exclusive(root, relative_path, payload, safe_suffix)
+        if created:
+            return StagedFile(
+                token=token, relative_path=relative_path, sha256=digest,
+                size=len(payload), suffix=safe_suffix,
+            )
+    raise StorageError("storage_token_collision", "暂存 token 连续冲突，请重试")
+
+
+def publish_staged_original(
+    root: str | Path,
+    token: str,
+    *,
+    task_id: str,
+    version_id: str,
+    filename: str,
+) -> StoredFile:
+    """把暂存原件原子发布到版本原件路径；成功后清理暂存，重复发布幂等。"""
+    canonical = _canonical_stage_token(token)
+    receipt_relative = f"{STAGE_DIR}/{canonical}.json"
+    receipt = _read_receipt(root, receipt_relative)
+    if receipt is not None:
+        return _stored_from_receipt(
+            root, receipt, task_id=task_id, version_id=version_id,
+        )
+
+    staged_relative = _staged_relative_path(root, canonical)
+    payload = read_bytes(root, staged_relative, max_bytes=DEFAULT_MAX_READ_BYTES)
+    suffix = PurePosixPath(staged_relative).suffix.lower()
+    suffix = _content_suffix(suffix, ORIGINAL_SUFFIXES, "暂存原件")
+    stored = _store(
+        payload, root,
+        relative_path=version_original_relative_path(
+            task_id, version_id, sha256(payload), suffix,
+        ),
+        suffix=suffix, display_name=filename, max_bytes=DEFAULT_MAX_BYTES,
+    )
+    _write_receipt(root, receipt_relative, {
+        "token": canonical,
+        "task_id": str(task_id),
+        "version_id": str(version_id),
+        "relative_path": stored.relative_path,
+        "sha256": stored.sha256,
+        "size": stored.size,
+        "suffix": stored.suffix,
+        "display_name": stored.display_name,
+    })
+    try:
+        resolve_path(root, staged_relative).unlink()
+    except OSError as exc:
+        raise StorageError("storage_unwritable", f"清理暂存文件失败：{exc}") from exc
+    return stored
+
+
+def discard_staged(root: str | Path, token: str) -> None:
+    """丢弃暂存文件（只允许 ``incoming/`` 内的合法 UUID），不触碰任何正式文件。"""
+    canonical = _canonical_stage_token(token)
+    removed = False
+    try:
+        staged = _staged_relative_path(root, canonical)
+    except StorageError as exc:
+        if exc.code != "stage_not_found":
+            raise
+        staged = ""
+    if staged:
+        try:
+            resolve_path(root, staged).unlink()
+            removed = True
+        except FileNotFoundError:
+            pass
+        except OSError as exc:
+            raise StorageError("storage_unwritable", f"清理暂存文件失败：{exc}") from exc
+
+    receipt_relative = f"{STAGE_DIR}/{canonical}.json"
+    try:
+        receipt = resolve_path(root, receipt_relative)
+        if receipt.is_file() and not receipt.is_symlink():
+            receipt.unlink()
+            removed = True
+    except FileNotFoundError:
+        pass
+    if not removed:
+        raise StorageError("stage_not_found", "暂存记录不存在或已发布并清理")
+
+
+def _canonical_stage_token(token: str) -> str:
+    try:
+        return str(uuid.UUID(str(token)))
+    except (AttributeError, TypeError, ValueError) as exc:
+        raise StorageError("invalid_stage_token", f"暂存 token 不是合法 UUID：{token!r}") from exc
+
+
+def _staged_relative_path(root: str | Path, canonical: str) -> str:
+    incoming = resolve_path(root, STAGE_DIR)
+    if not incoming.is_dir():
+        raise StorageError("stage_not_found", "暂存区还没有内容")
+    candidates = [
+        path for path in sorted(incoming.iterdir())
+        if path.is_file() and not path.is_symlink()
+        and path.name.startswith(f"{canonical}.") and not path.name.endswith(".json")
+    ]
+    if not candidates:
+        raise StorageError("stage_not_found", "暂存文件不存在或已发布并清理")
+    if len(candidates) > 1:
+        raise StorageError("stage_ambiguous", "同一 token 有多个暂存文件，需人工核对")
+    return f"{STAGE_DIR}/{candidates[0].name}"
+
+
+def _read_receipt(root: str | Path, relative_path: str) -> dict | None:
+    try:
+        payload = read_bytes(root, relative_path)
+    except StorageError as exc:
+        if exc.code == "file_not_found":
+            return None
+        raise
+    try:
+        receipt = json.loads(payload.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise StorageError("stage_receipt_invalid", f"暂存发布回执无法解析：{exc}") from exc
+    if not isinstance(receipt, dict):
+        raise StorageError("stage_receipt_invalid", "暂存发布回执格式不正确")
+    return receipt
+
+
+def _stored_from_receipt(root, receipt: dict, *, task_id: str, version_id: str) -> StoredFile:
+    for key in ("relative_path", "sha256", "suffix", "size", "display_name"):
+        if key not in receipt:
+            raise StorageError("stage_receipt_invalid", f"暂存发布回执缺少字段：{key}")
+    if str(receipt.get("task_id")) != str(task_id) or str(receipt.get("version_id")) != str(version_id):
+        raise StorageError(
+            "stage_publish_conflict",
+            "该暂存 token 已发布到其它任务/版本，不能跨版本重放",
+        )
+    expected = version_original_relative_path(
+        task_id, version_id, str(receipt["sha256"]), str(receipt["suffix"]),
+    )
+    if receipt["relative_path"] != expected:
+        raise StorageError("stage_receipt_invalid", "暂存发布回执路径与内容寻址不一致")
+    if not exists(root, expected) or file_sha256(root, expected) != str(receipt["sha256"]):
+        raise StorageError("file_not_found", "已发布的正式原件丢失或内容不一致，需运维核查")
+    return StoredFile(
+        relative_path=expected, sha256=str(receipt["sha256"]), size=int(receipt["size"]),
+        suffix=str(receipt["suffix"]), display_name=str(receipt["display_name"]),
+        created=False,
+    )
+
+
+def _write_receipt(root: str | Path, relative_path: str, payload: dict) -> None:
+    target = resolve_path(root, relative_path)
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise StorageError("storage_unwritable", f"创建暂存目录失败：{exc}") from exc
+    handle = tempfile.NamedTemporaryFile(
+        mode="wb", dir=target.parent, prefix=".tmp-", suffix=".json", delete=False,
+    )
+    temp_path = Path(handle.name)
+    try:
+        with handle:
+            handle.write(json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8"))
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp_path, target)
+    finally:
+        try:
+            temp_path.unlink()
+        except FileNotFoundError:
+            pass
+
+
+def _validated_payload(data: bytes, max_bytes: int) -> bytes:
     if not isinstance(data, (bytes, bytearray, memoryview)):
         raise StorageError("invalid_content", "保存内容必须是字节")
     payload = bytes(data)
@@ -297,6 +561,19 @@ def _store(
         raise StorageError(
             "file_too_large", f"文件体积 {len(payload)} 字节超过上限 {max_bytes} 字节",
         )
+    return payload
+
+
+def _store(
+    data: bytes,
+    root: str | Path,
+    *,
+    relative_path: str,
+    suffix: str,
+    display_name: str,
+    max_bytes: int,
+) -> StoredFile:
+    payload = _validated_payload(data, max_bytes)
     digest = sha256(payload)
     expected = relative_path.rsplit("/", 1)[-1]
     if not expected.startswith(digest):
@@ -314,6 +591,26 @@ def _store(
         return StoredFile(relative_path=relative_path, sha256=digest, size=len(payload),
                           suffix=suffix, display_name=display_name, created=False)
 
+    created = _write_exclusive(root, relative_path, payload, suffix)
+
+    if not created:
+        # 并发保存同一内容：另一个进程已发布，校验后按幂等复用处理。
+        if file_sha256(root, relative_path) != digest:
+            raise StorageError(
+                "storage_content_conflict",
+                f"目标路径已有不同内容的文件，拒绝覆盖：{relative_path}",
+            )
+    return StoredFile(relative_path=relative_path, sha256=digest, size=len(payload),
+                      suffix=suffix, display_name=display_name, created=created)
+
+
+def _write_exclusive(
+    root: str | Path, relative_path: str, payload: bytes, suffix: str,
+) -> bool:
+    """把字节写进受控根内的目标名：同目录临时文件 + 原子独占发布，不覆盖已有文件。"""
+    target = resolve_path(root, relative_path)
+    if target.is_file():
+        return False
     parent = target.parent
     try:
         parent.mkdir(parents=True, exist_ok=True)
@@ -334,22 +631,12 @@ def _store(
             handle.write(payload)
             handle.flush()
             os.fsync(handle.fileno())
-        created = _publish_exclusive(temp_path, target)
+        return _publish_exclusive(temp_path, target)
     finally:
         try:
             temp_path.unlink()
         except FileNotFoundError:
             pass
-
-    if not created:
-        # 并发保存同一内容：另一个进程已发布，校验后按幂等复用处理。
-        if file_sha256(root, relative_path) != digest:
-            raise StorageError(
-                "storage_content_conflict",
-                f"目标路径已有不同内容的文件，拒绝覆盖：{relative_path}",
-            )
-    return StoredFile(relative_path=relative_path, sha256=digest, size=len(payload),
-                      suffix=suffix, display_name=display_name, created=created)
 
 
 def _publish_exclusive(temp_path: Path, target: Path) -> bool:

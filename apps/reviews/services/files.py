@@ -4,15 +4,16 @@
 
 1. P06 在自己的事务里创建 ``Task`` / ``FileVersion`` 与商品行 ``Item``；
 2. 调用 :func:`store_version_original` 把上传字节落到该版本目录并写 ``FileVersion.storage_path``；
-3. 商品行建立后调用 :func:`extract_version_images`，按 ``(页签, 行号集合, 图片列)``
-   解析原件并替换该版本、该批商品行的 ``ItemImage`` 记录；
+3. 商品行建立后调用 :func:`extract_version_images_for_version`，按 ``(页签, 行号集合, 图片列)``
+   解析原件并按 ``(item, source_cell)`` upsert 该版本、该批商品行的 ``ItemImage`` 记录；
 4. 页面/端点需要下载时调用 :func:`read_version_original` / :func:`read_item_image`
    （或 :func:`read_item_image_path` 取相对路径），不要自行拼存储路径。
 
 P06 负责上传端点、事务、幂等键与事件；本模块不依赖 HTTP 视图，只复用
 ``apps.accounts.permissions.require_action`` 的权限语义，异常交给 API 层统一转 JSON。
-存储根取 ``settings.CUSTOMS_FILE_ROOT``，未配置时回落到 ``BASE_DIR/.local/files``；
-测试用 ``override_settings`` 指向临时目录，不改 ``config/settings.py``。
+图片提取只提供系统入口，**不开放任何角色手动重跑**；未来若开放需同时校验版本与任务阶段。
+存储根取 ``settings.CUSTOMS_FILE_ROOT``（默认 ``BASE_DIR/.local/files``，见 settings）；
+测试用 ``override_settings`` 指向临时目录。
 """
 
 from __future__ import annotations
@@ -262,32 +263,6 @@ def read_item_image(user, image_id) -> FileDownload:
 
 
 # --------------------------------------------------------------------- 图片入库
-def extract_version_images(
-    user,
-    version_id,
-    *,
-    sheet_name: str,
-    rows=None,
-    column: str | None = None,
-    header_row: int = 1,
-    keywords=dispimg.DEFAULT_IMAGE_HEADER_KEYWORDS,
-    extracted_at=None,
-) -> dict:
-    """用户入口：把版本原件的附图写入 ``ItemImage``。
-
-    这是系统派生写动作，只对“能为该任务创建版本”的角色开放（``UPLOAD_VERSION``，
-    当前为供应商本人任务）；业务员/专家的只读权限**不能**触发图片入库。
-    P06 在上传/解析流程内应改用 :func:`extract_version_images_for_version`，
-    那里不再重复权限校验，由上传/解析流程统一负责。
-    """
-    version = _get_version(version_id)
-    require_action(user, UPLOAD_VERSION, version)
-    return extract_version_images_for_version(
-        version, sheet_name=sheet_name, rows=rows, column=column,
-        header_row=header_row, keywords=keywords, extracted_at=extracted_at,
-    )
-
-
 def extract_version_images_for_version(
     version,
     *,
@@ -298,11 +273,12 @@ def extract_version_images_for_version(
     keywords=dispimg.DEFAULT_IMAGE_HEADER_KEYWORDS,
     extracted_at=None,
 ) -> dict:
-    """系统派生入口：解析版本原件里的附图并写入 ``ItemImage``（同版本重跑幂等替换）。
+    """系统派生入口：解析版本原件里的附图并 upsert ``ItemImage``。
 
-    **不接收 user，也不做权限校验**：调用方必须已在上传/解析流程中完成权限校验，
-    并在自己的事务里完成 Task/FileVersion/Item 的归属校验。允许传 ``FileVersion``
-    实例或版本 ID。
+    **不接收 user，也不做权限校验，且不对外提供用户重跑入口**：调用方必须已在上传/解析
+    流程中完成权限校验，并在自己的事务里完成 Task/FileVersion/Item 的归属校验。允许传
+    ``FileVersion`` 实例或版本 ID。同一 ``(item, source_cell)`` 重跑只更新字段、保留主键；
+    本次解析未出现的旧单元格记录会被删除（仍限定在本版本内）。
 
     参数：
     - ``sheet_name``：申报要素页签名（与 ``Item.source_sheet`` 对应）；
@@ -421,12 +397,35 @@ def extract_version_images_for_version(
             "notes": list(row_image.notes),
         })
 
-    # 只替换本次实际解析到的商品行图片；过滤条件带版本 ID，绝不串到旧版本。
+    # 按 (item, source_cell) upsert：重跑保留 ItemImage 主键，旧图片 ID 仍能读到同一张图。
+    # 过滤条件带版本 ID，绝不串到旧版本；本次未出现的旧单元格记录删除。
     with transaction.atomic():
         touched = [item.pk for item in written_items]
-        if touched:
-            ItemImage.objects.filter(item__version_id=version.pk, item_id__in=touched).delete()
-            ItemImage.objects.bulk_create(records)
+        existing = {
+            (image.item_id, image.source_cell): image
+            for image in ItemImage.objects.filter(
+                item__version_id=version.pk, item_id__in=touched,
+            )
+        }
+        kept: set[tuple] = set()
+        for record in records:
+            key = (record.item_id, record.source_cell)
+            current = existing.get(key)
+            if current is None:
+                record.save()
+            else:
+                current.status = record.status
+                current.dispimg_id = record.dispimg_id
+                current.storage_path = record.storage_path
+                current.error_message = record.error_message
+                current.extracted_at = record.extracted_at
+                current.save(update_fields=[
+                    "status", "dispimg_id", "storage_path", "error_message", "extracted_at",
+                ])
+            kept.add(key)
+        stale = [image.pk for key, image in existing.items() if key not in kept]
+        if stale:
+            ItemImage.objects.filter(pk__in=stale, item__version_id=version.pk).delete()
 
     counts = {dispimg.STATUS_AVAILABLE: 0, dispimg.STATUS_ABSENT: 0, dispimg.STATUS_READ_FAILED: 0}
     for record in records:
@@ -450,7 +449,6 @@ def extract_version_images_for_version(
 
 __all__ = [
     "FileDownload",
-    "extract_version_images",
     "extract_version_images_for_version",
     "max_image_bytes",
     "max_original_bytes",
