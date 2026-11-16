@@ -23,6 +23,7 @@
 from __future__ import annotations
 
 import errno
+import fcntl
 import hashlib
 import json
 import os
@@ -30,8 +31,10 @@ import re
 import tempfile
 import unicodedata
 import uuid
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
+from typing import Callable
 
 #: 单次保存的默认上限；调用方可用 ``max_bytes`` 或 settings 覆盖。
 DEFAULT_MAX_BYTES = 100 * 1024 * 1024
@@ -46,6 +49,8 @@ ORIGINAL_SUFFIXES = frozenset({".xlsx", ".xlsm", ".xltx"})
 EXPORT_SUFFIXES = frozenset({".xlsx", ".xlsm", ".csv", ".pdf", ".zip"})
 #: 暂存区目录；只允许 stage/publish/discard 触碰，不属于正式版本目录。
 STAGE_DIR = "incoming"
+#: 测试可注入的发布暂停点；生产保持 ``None``。签名 ``(stage, token, details)``。
+_PUBLISH_HOOK: Callable[[str, str, dict], None] | None = None
 #: 附图允许的媒体后缀（与 OOXML 常见媒体类型一致）。
 IMAGE_SUFFIXES = frozenset({
     ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tif", ".tiff", ".webp", ".emf", ".wmf",
@@ -401,9 +406,10 @@ def publish_staged_original(
 ) -> StoredFile:
     """把暂存原件原子发布到版本原件路径；成功后清理暂存，重复发布幂等。
 
-    ``max_bytes`` 必须与 :func:`stage_bytes` 使用同一上限（P06 不应在发布阶段换一个更小的
-    默认值）；正式发布仍执行一次上限校验，避免暂存后绕过。并发发布同一 token 时，先完成者
-    写回执并清理暂存，后到者按回执返回同一正式路径，不把“暂存已被清理”当失败。
+    ``max_bytes`` 必须与 :func:`stage_bytes` 使用同一上限。同一 token 的所有发布调用由
+    ``incoming/<token>.lock`` 上的 ``flock`` 串行化；进入锁后先做目标绑定，保证跨目标重放
+    在写任何正式文件之前就被拒绝。并发发布同一目标时，后到者按回执返回同一正式路径；
+    若暂存已被先到者清理，读取时 ``file_not_found`` / ``storage_unreadable`` 都会回查回执。
     """
     canonical = _canonical_stage_token(token)
     receipt_relative = f"{STAGE_DIR}/{canonical}.json"
@@ -413,12 +419,60 @@ def publish_staged_original(
             root, receipt, task_id=task_id, version_id=version_id,
         )
 
+    # 锁前只做一次非权威存在性检查，并给测试留确定性的暂停点；权威判断在锁内。
+    staged_exists = True
+    try:
+        _staged_relative_path(root, canonical)
+    except StorageError as exc:
+        if exc.code != "stage_not_found":
+            raise
+        staged_exists = False
+    if staged_exists:
+        _call_publish_hook(
+            "after_staged_check", canonical,
+            {"task_id": str(task_id), "version_id": str(version_id)},
+        )
+
+    with _token_lock(root, canonical):
+        return _publish_locked(
+            root, canonical, task_id=task_id, version_id=version_id,
+            filename=filename, max_bytes=max_bytes,
+        )
+
+
+def _publish_locked(
+    root: str | Path,
+    canonical: str,
+    *,
+    task_id: str,
+    version_id: str,
+    filename: str,
+    max_bytes: int,
+) -> StoredFile:
+    """持 token 锁执行：绑定 → 读暂存 → 写正式文件 → 回执 → 清理。"""
+    receipt_relative = f"{STAGE_DIR}/{canonical}.json"
+    receipt = _read_receipt(root, receipt_relative)
+    if receipt is not None:
+        return _stored_from_receipt(
+            root, receipt, task_id=task_id, version_id=version_id,
+        )
+
+    binding = _read_binding(root, canonical)
+    if binding is None:
+        binding = _write_binding(
+            root, canonical, task_id=task_id, version_id=version_id,
+        )
+    _require_binding_target(binding, task_id=task_id, version_id=version_id)
+    _call_publish_hook(
+        "after_binding", canonical,
+        {"task_id": str(task_id), "version_id": str(version_id)},
+    )
+
     try:
         staged_relative = _staged_relative_path(root, canonical)
     except StorageError as exc:
         if exc.code != "stage_not_found":
             raise
-        # 另一发布调用可能刚写完回执并清掉暂存：回查回执，命中即按同一路径成功返回。
         receipt = _read_receipt(root, receipt_relative)
         if receipt is not None:
             return _stored_from_receipt(
@@ -428,7 +482,8 @@ def publish_staged_original(
     try:
         payload = read_bytes(root, staged_relative, max_bytes=DEFAULT_MAX_READ_BYTES)
     except StorageError as exc:
-        if exc.code != "file_not_found":
+        # 打开文件瞬间被另一发布清理：file_not_found 与 storage_unreadable 都回查回执。
+        if exc.code not in ("file_not_found", "storage_unreadable"):
             raise
         receipt = _read_receipt(root, receipt_relative)
         if receipt is not None:
@@ -465,6 +520,95 @@ def publish_staged_original(
     return stored
 
 
+def _call_publish_hook(stage: str, token: str, details: dict) -> None:
+    hook = _PUBLISH_HOOK
+    if hook is not None:
+        hook(stage, token, details)
+
+
+@contextmanager
+def _token_lock(root: str | Path, canonical: str):
+    """同一 token 的跨进程排他锁；锁文件保留在 ``incoming/`` 并复用。"""
+    incoming = resolve_path(root, STAGE_DIR)
+    if not incoming.is_dir():
+        raise StorageError("stage_not_found", "暂存区还没有内容")
+    lock_relative = f"{STAGE_DIR}/{canonical}.lock"
+    lock_path = resolve_path(root, lock_relative)
+    try:
+        descriptor = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600)
+    except OSError as exc:
+        raise StorageError("storage_unwritable", f"创建暂存锁失败：{exc}") from exc
+    try:
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        yield
+    finally:
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_UN)
+        finally:
+            os.close(descriptor)
+
+
+def _binding_relative(canonical: str) -> str:
+    return f"{STAGE_DIR}/{canonical}.binding.json"
+
+
+def _read_binding(root: str | Path, canonical: str) -> dict | None:
+    relative_path = _binding_relative(canonical)
+    try:
+        payload = read_bytes(root, relative_path)
+    except StorageError as exc:
+        if exc.code == "file_not_found":
+            return None
+        raise
+    try:
+        binding = json.loads(payload.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise StorageError("stage_binding_invalid", f"暂存目标绑定无法解析：{exc}") from exc
+    if not isinstance(binding, dict) or not binding.get("task_id") or not binding.get("version_id"):
+        raise StorageError("stage_binding_invalid", "暂存目标绑定缺少 task_id/version_id")
+    return binding
+
+
+def _write_binding(
+    root: str | Path, canonical: str, *, task_id: str, version_id: str,
+) -> dict:
+    """原子写目标绑定；已存在时返回既有绑定，由调用方校验目标是否一致。"""
+    relative_path = _binding_relative(canonical)
+    target = resolve_path(root, relative_path)
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise StorageError("storage_unwritable", f"创建暂存目录失败：{exc}") from exc
+    payload = json.dumps({
+        "token": canonical,
+        "task_id": str(task_id),
+        "version_id": str(version_id),
+    }, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    try:
+        descriptor = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        binding = _read_binding(root, canonical)
+        if binding is None:
+            raise StorageError("stage_binding_invalid", "暂存目标绑定已存在但无法读取")
+        return binding
+    try:
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+    except OSError as exc:
+        raise StorageError("storage_unwritable", f"写暂存目标绑定失败：{exc}") from exc
+    return {"token": canonical, "task_id": str(task_id), "version_id": str(version_id)}
+
+
+def _require_binding_target(binding: dict, *, task_id: str, version_id: str) -> None:
+    if (str(binding.get("task_id")) != str(task_id)
+            or str(binding.get("version_id")) != str(version_id)):
+        raise StorageError(
+            "stage_publish_conflict",
+            "该暂存 token 已绑定到其它任务/版本，不能跨版本发布；未写入任何正式文件",
+        )
+
 def discard_staged(root: str | Path, token: str) -> None:
     """丢弃暂存文件（只允许 ``incoming/`` 内的合法 UUID），不触碰任何正式文件。"""
     canonical = _canonical_stage_token(token)
@@ -484,14 +628,17 @@ def discard_staged(root: str | Path, token: str) -> None:
         except OSError as exc:
             raise StorageError("storage_unwritable", f"清理暂存文件失败：{exc}") from exc
 
-    receipt_relative = f"{STAGE_DIR}/{canonical}.json"
-    try:
-        receipt = resolve_path(root, receipt_relative)
-        if receipt.is_file() and not receipt.is_symlink():
-            receipt.unlink()
-            removed = True
-    except FileNotFoundError:
-        pass
+    for relative_path in (
+        f"{STAGE_DIR}/{canonical}.json",
+        _binding_relative(canonical),
+    ):
+        try:
+            metadata = resolve_path(root, relative_path)
+            if metadata.is_file() and not metadata.is_symlink():
+                metadata.unlink()
+                removed = True
+        except FileNotFoundError:
+            pass
     if not removed:
         raise StorageError("stage_not_found", "暂存记录不存在或已发布并清理")
 
@@ -510,7 +657,8 @@ def _staged_relative_path(root: str | Path, canonical: str) -> str:
     candidates = [
         path for path in sorted(incoming.iterdir())
         if path.is_file() and not path.is_symlink()
-        and path.name.startswith(f"{canonical}.") and not path.name.endswith(".json")
+        and path.name.startswith(f"{canonical}.")
+        and PurePosixPath(path.name).suffix.lower() in ORIGINAL_SUFFIXES
     ]
     if not candidates:
         raise StorageError("stage_not_found", "暂存文件不存在或已发布并清理")
