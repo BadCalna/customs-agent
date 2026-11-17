@@ -399,6 +399,26 @@ def stage_bytes(
     raise StorageError("storage_token_collision", "暂存 token 连续冲突，请重试")
 
 
+def read_staged_original(
+    root: str | Path,
+    token: str,
+    *,
+    max_bytes: int = DEFAULT_MAX_READ_BYTES,
+) -> bytes:
+    """读取暂存原件；发布回执存在时从正式路径幂等回查。"""
+    canonical = _canonical_stage_token(token)
+    try:
+        relative_path = _staged_relative_path(root, canonical)
+    except StorageError as exc:
+        if exc.code != "stage_not_found":
+            raise
+        receipt = _read_receipt(root, f"{STAGE_DIR}/{canonical}.json")
+        if receipt is None:
+            raise
+        relative_path = receipt.get("relative_path", "")
+    return read_bytes(root, relative_path, max_bytes=max_bytes)
+
+
 def publish_staged_original(
     root: str | Path,
     token: str,

@@ -5,6 +5,7 @@ import uuid
 
 from django.conf import settings
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from apps.reviews.models import Task
@@ -41,20 +42,26 @@ def safe_dispatch(run_id):
 
 def dispatch_pending(*, run_id=None, limit=100):
     now = timezone.now()
-    due = RunWork.objects.filter(state="pending", available_at__lte=now)
-    if run_id:
-        due = due.filter(run_id=run_id)
     cutoff = now - timedelta(seconds=settings.CUSTOMS_QUEUE_REDELIVERY_SECONDS)
-    from django.db.models import Q
-    due = due.filter(Q(dispatched_at__isnull=True) | Q(dispatched_at__lte=cutoff))
     sent = 0
-    for work in due.order_by("available_at")[:limit]:
+    for _ in range(limit):
+        with transaction.atomic():
+            due = RunWork.objects.select_for_update(skip_locked=True).filter(
+                state="pending", available_at__lte=now,
+            ).filter(Q(dispatched_at__isnull=True) | Q(dispatched_at__lte=cutoff))
+            if run_id:
+                due = due.filter(run_id=run_id)
+            work = due.order_by("available_at").first()
+            if work is None:
+                break
+            dispatch_stamp = timezone.now()
+            RunWork.objects.filter(pk=work.pk).update(dispatched_at=dispatch_stamp)
         try:
             _enqueue(work.run_id)
         except Exception as exc:
             logger.warning("P13 broker unavailable; durable work retained (%s)", type(exc).__name__)
+            RunWork.objects.filter(pk=work.pk, state="pending", dispatched_at=dispatch_stamp).update(dispatched_at=None)
             break
-        RunWork.objects.filter(pk=work.pk, state="pending").update(dispatched_at=now)
         sent += 1
     return sent
 
@@ -71,10 +78,12 @@ def recover_expired(*, limit=100):
             work = RunWork.objects.select_for_update().get(run=run)
             if work.state != "running" or work.lease_until > timezone.now():
                 continue
-            for attempt in RunAttempt.objects.filter(row__run=run, status="running"):
+            for attempt in RunAttempt.objects.filter(Q(row__run=run) | Q(run=run), status="running"):
                 attempt.status, attempt.error_code, attempt.finished_at = "interrupted", "worker_lease_expired", timezone.now()
                 attempt.save(update_fields=["status", "error_code", "finished_at"])
                 row = attempt.row
+                if row is None:
+                    continue
                 row.status = "queued" if attempt.number < settings.CUSTOMS_ROW_MAX_ATTEMPTS else "failed"
                 row.error_message = f"后台执行中断，已尝试 {attempt.number} 次"
                 row.save(update_fields=["status", "error_message", "updated_at"])

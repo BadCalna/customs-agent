@@ -79,11 +79,11 @@ M0/M1 的 inline mock 只验证短时顺序流程。P13 的 Windows 本机 Postg
 
 ### 4.1 P13 已实现约定（2026-11-17，契约 1.2.0）
 
-- 上传先在业务事务内登记版本、ImportJob、queued Run 和 RunWork；rq 请求返回 staged，worker 导入成功后执行预审。上传请求仍做模板结构预校验，不能声称所有文件解析均在后台。导入失败不发布成功事件。
+- 上传先在业务事务内登记版本、ImportJob、queued Run 和 RunWork；rq 请求只校验文件大小、后缀和哈希并暂存原件，返回 staged。worker 解析、导入成功后执行预审；导入失败不发布成功事件。
 - 业务员提交在快照事务内登记专家 Run/RunWork，提交后安全投递；Redis 故障不把已提交业务响应变成 500。扫描器重投 pending，恢复 running 的过期租约。
 - Redis 仅载 run_id；Task → Run → RunWork → 行/尝试为锁序。模型在锁外执行；写回复核 token、租约、输入哈希、当前版本/同版最新执行和提交状态。过期输出不能成为当前结果。
-- RunStatus 继续使用 queued/running/succeeded/failed/superseded；部分行失败时通过 progress.failed 单列，run succeeded 不代表业务通过。业务资料不足、无法确认、来源未知不触发技术重试。
-- 自动单行默认最多 3 次；RunAttempt 保留 succeeded/failed/interrupted/superseded 及时间、错误类别、输入哈希。人工重试生成 parent_run 关联的新执行，只重新调用所选失败行，其他行带 origin_run_id；旧执行与旧结果保留。
+- RunStatus 继续使用 queued/running/succeeded/failed/superseded；任一行技术失败时 Run 为 failed，并通过 progress.failed 展示数量。业务资料不足、无法确认、来源未知不触发技术重试。
+- 自动单行默认最多 3 次；RunAttempt 保留导入与商品行的 succeeded/failed/interrupted/superseded 及时间、错误类别、输入哈希。人工重试生成 parent_run 关联的新执行，只重新调用所选失败行，其他行带 origin_run_id；旧执行与旧结果保留。
 - 正式 POST prechecks/retries 要求 Idempotency-Key、登录/CSRF 与对象操作权限；服务端发布 precheck_allowed/retry_allowed/retry_item_ids，前端不能自行放宽。GET 进度只读。
 - 升级迁移为旧 queued/running Run 登记持久任务，保留成功行，只恢复未完成行；没有历史尝试时不编造调用记录。
 

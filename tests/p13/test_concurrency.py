@@ -8,7 +8,7 @@ from django.db import connection, connections
 from django.test import TransactionTestCase, override_settings
 
 from apps.accounts.models import Role
-from apps.runs import services
+from apps.runs import dispatch, services
 from apps.runs.jobs import perform_work
 from apps.runs.models import Run, RunAttempt
 from apps.reviews.models import Task
@@ -48,6 +48,20 @@ class ConcurrentWorkerTests(TransactionTestCase):
                     result.result(timeout=15)
         self.assertEqual(RunAttempt.objects.filter(status="succeeded").count(), 2)
         self.assertEqual(self.run.items.filter(status="succeeded").count(), 2)
+
+    def test_two_dispatchers_enqueue_pending_run_once(self):
+        barrier = Barrier(2)
+        def scan():
+            try:
+                barrier.wait(timeout=10)
+                return dispatch.dispatch_pending(run_id=str(self.run.pk))
+            finally:
+                connections.close_all()
+        with patch.object(dispatch, "_enqueue", side_effect=lambda _: time.sleep(0.05)) as enqueue:
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                results = list(pool.map(lambda _: scan(), range(2)))
+        self.assertEqual(sum(results), 1)
+        enqueue.assert_called_once_with(self.run.pk)
 
     def test_model_call_releases_task_lock_for_new_version(self):
         entered, release = Event(), Event()

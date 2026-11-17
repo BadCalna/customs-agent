@@ -29,6 +29,7 @@ RUNTIME = Path(os.environ.get("CUSTOMS_P13_RUNTIME", str(Path(os.environ.get("LO
 PG = RUNTIME / "postgres" / "bin"
 REDIS = RUNTIME / "redis"
 PGDATA, REDISDATA = RUNTIME / "pgdata", RUNTIME / "redisdata"
+REDIS_PID = LOCAL / "p13-redis.pid"
 SOURCES = {
     "postgres17.jar": ("https://repo.maven.apache.org/maven2/io/zonky/test/postgres/embedded-postgres-binaries-windows-amd64/17.12.0/embedded-postgres-binaries-windows-amd64-17.12.0.jar",
         "bebadbe868ed53adb1c12033a381e41005915205ea9fedaa2349f5467fa7016b"),
@@ -43,6 +44,58 @@ def listening(port):
             return True
     except OSError:
         return False
+
+
+def _read_pid():
+    try:
+        pid = int(REDIS_PID.read_text(encoding="ascii").strip())
+    except (FileNotFoundError, OSError, ValueError):
+        return None
+    return pid if pid > 0 else None
+
+
+def _process_command_line(pid):
+    """Read a process command line without trusting a port-only check."""
+    if not isinstance(pid, int) or pid <= 0:
+        return ""
+    try:
+        result = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command",
+             f"(Get-CimInstance Win32_Process -Filter 'ProcessId={pid}').CommandLine"],
+            capture_output=True, text=True, timeout=5, check=False,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    return (result.stdout or "").strip()
+
+
+def _listener_pid():
+    try:
+        result = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command",
+             "(Get-NetTCPConnection -LocalAddress 127.0.0.1 -LocalPort 63813 -State Listen "
+             "-ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty OwningProcess)"],
+            capture_output=True, text=True, timeout=5, check=False,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        return int(result.stdout.strip())
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return None
+
+
+def redis_owned():
+    pid = _read_pid()
+    if pid is None or _listener_pid() != pid:
+        return False
+    command = _process_command_line(pid).lower()
+    if not command:
+        return False
+    expected_binary = str((REDIS / "redis-server.exe").resolve()).lower()
+    expected_data = str(REDISDATA.resolve()).lower()
+    current = expected_data in command and "--pidfile" in command
+    legacy = "--dir . --appendonly yes --logfile redis.log" in command
+    return expected_binary in command and "--port 63813" in command and (current or legacy)
 
 
 def run(args, **kwargs):
@@ -91,17 +144,24 @@ def start():
     if not listening(55413):
         run([PG / "pg_ctl.exe", "-D", PGDATA, "-l", RUNTIME / "postgres.log", "-o", "-h 127.0.0.1 -p 55413", "-w", "start"])
     REDISDATA.mkdir(parents=True, exist_ok=True)
-    if not listening(63813):
+    if listening(63813):
+        if not redis_owned():
+            raise RuntimeError("Redis 63813 已被其它实例占用，无法证明属于 customs-p13；未修改该实例")
+    else:
         process = subprocess.Popen([str(REDIS / "redis-server.exe"), "--bind", "127.0.0.1", "--port", "63813",
-            "--protected-mode", "yes", "--dir", ".", "--appendonly", "yes", "--logfile", "redis.log"],
+            "--protected-mode", "yes", "--dir", str(REDISDATA), "--appendonly", "yes",
+            "--logfile", str(REDISDATA / "redis.log"), "--pidfile", str(REDIS_PID)],
             cwd=REDISDATA, creationflags=subprocess.CREATE_NO_WINDOW, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        (LOCAL / "p13-redis.pid").write_text(str(process.pid))
+        LOCAL.mkdir(parents=True, exist_ok=True)
+        REDIS_PID.write_text(str(process.pid), encoding="ascii")
         for _ in range(50):
             if listening(63813):
                 break
             if process.poll() is not None:
                 raise RuntimeError("Redis did not start; see .local/p13-redisdata/redis.log")
             time.sleep(0.1)
+        if not redis_owned():
+            raise RuntimeError("Redis 启动后无法验证进程归属；未继续配置数据库")
     import psycopg
     from psycopg import sql
     with psycopg.connect(host="127.0.0.1", port=55413, user="customs_p13_admin", dbname="postgres", autocommit=True) as conn:
@@ -123,8 +183,19 @@ def start():
 
 def stop():
     if listening(63813):
+        if not redis_owned():
+            raise RuntimeError("Redis 63813 不是 customs-p13 helper 启动的实例，拒绝关闭")
         from redis import Redis
         Redis(host="127.0.0.1", port=63813).shutdown(save=True)
+        try:
+            REDIS_PID.unlink()
+        except FileNotFoundError:
+            pass
+    else:
+        try:
+            REDIS_PID.unlink()
+        except FileNotFoundError:
+            pass
     if (PGDATA / "postmaster.pid").exists():
         run([PG / "pg_ctl.exe", "-D", PGDATA, "-m", "fast", "-w", "stop"])
     print("Local queue database and broker stopped; all data retained")
@@ -141,4 +212,5 @@ if __name__ == "__main__":
     elif args.action == "stop":
         stop()
     else:
-        print(json.dumps({"postgres": listening(55413), "redis": listening(63813)}))
+        print(json.dumps({"postgres": listening(55413), "redis": listening(63813),
+                          "redis_owned": redis_owned()}))

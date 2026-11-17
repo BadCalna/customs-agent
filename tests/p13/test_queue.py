@@ -78,8 +78,16 @@ class QueueTests(TestCase):
             self.drain()
         self.assertEqual(self.run.items.filter(status="succeeded").count(), 1)
         self.assertEqual(self.run.items.filter(status="failed").count(), 1)
+        self.assertEqual(self.run.status, Run.Status.FAILED)
         self.assertEqual(RunAttempt.objects.filter(row__item=self.items[0]).count(), 3)
         self.assertEqual(RunAttempt.objects.filter(row__item=self.items[1]).count(), 1)
+        self.assertEqual(services.retry_capability(self.operator, self.run), [str(self.items[0].pk)])
+
+    def test_dispatch_claim_is_single_delivery_until_redelivery_window(self):
+        with patch.object(dispatch, "_enqueue") as enqueue:
+            self.assertEqual(dispatch.dispatch_pending(run_id=str(self.run.pk)), 1)
+            self.assertEqual(dispatch.dispatch_pending(run_id=str(self.run.pk)), 0)
+        enqueue.assert_called_once_with(self.run.pk)
 
     def test_retry_keeps_success_and_all_old_failures(self):
         original = services.evaluate_row
@@ -88,7 +96,17 @@ class QueueTests(TestCase):
             self.drain()
         old_success = self.run.items.get(item=self.items[1])
         old_result = old_success.result
-        child = services.retry_run(self.operator, str(self.run.pk), [str(self.items[0].pk)], "retry-1")
+        self.client.force_login(self.operator)
+        detail = self.client.get(f"/api/v1/runs/{self.run.pk}").json()
+        self.assertEqual(detail["status"], Run.Status.FAILED)
+        self.assertEqual(detail["progress"]["failed"], 1)
+        self.assertEqual(detail["progress"]["succeeded"], 1)
+        self.assertEqual(detail["retry_item_ids"], [str(self.items[0].pk)])
+        response = self.client.post(f"/api/v1/runs/{self.run.pk}/retries",
+            data=json.dumps({"item_ids": detail["retry_item_ids"]}), content_type="application/json",
+            HTTP_IDEMPOTENCY_KEY="retry-1")
+        self.assertEqual(response.status_code, 200)
+        child = response.json()
         with patch.object(services, "evaluate_row", wraps=original) as mock:
             self.drain(Run.objects.get(pk=child["run_id"]))
         self.assertEqual(mock.call_count, 1)
@@ -111,6 +129,50 @@ class QueueTests(TestCase):
         self.assertEqual(RunAttempt.objects.filter(status="interrupted").count(), 1)
         self.drain()
         self.assertEqual(self.run.status, "succeeded")
+
+    def test_expired_import_attempt_is_recorded_and_retried(self):
+        with tempfile.TemporaryDirectory() as root, override_settings(CUSTOMS_FILE_ROOT=Path(root)):
+            result = imports.upload(self.supplier, filename="synthetic.xlsx", data=sample(), key="lease-import")
+            run = Run.objects.get(pk=result["precheck_run_id"])
+            token = services.claim_work(str(run.pk))
+            work = RunWork.objects.get(run=run)
+            work.import_attempts = 1
+            work.lease_until = timezone.now() - timedelta(seconds=1)
+            work.save(update_fields=["import_attempts", "lease_until"])
+            RunAttempt.objects.create(run=run, number=1, token=token, input_hash=result["sha256"])
+            self.assertEqual(dispatch.recover_expired(), 1)
+            self.assertEqual(RunAttempt.objects.get(run=run).status, "interrupted")
+            self.drain(run)
+            self.assertEqual(run.status, Run.Status.SUCCEEDED)
+            self.assertEqual(RunAttempt.objects.filter(run=run, status="succeeded").count(), 1)
+
+    def test_exhausted_import_does_not_create_extra_attempt(self):
+        with tempfile.TemporaryDirectory() as root, override_settings(CUSTOMS_FILE_ROOT=Path(root)):
+            result = imports.upload(self.supplier, filename="synthetic.xlsx", data=sample(), key="exhaust-import")
+            run = Run.objects.get(pk=result["precheck_run_id"])
+            RunWork.objects.filter(run=run).update(import_attempts=3)
+            perform_work(str(run.pk))
+            self.assertEqual(RunWork.objects.get(run=run).state, "done")
+            self.assertEqual(ImportJob.objects.get(precheck=run).error["code"], "import_attempts_exhausted")
+            self.assertFalse(RunAttempt.objects.filter(run=run).exists())
+
+    def test_publish_rollback_receipt_allows_same_import_retry(self):
+        from apps.accounts.errors import ApiError
+        from apps.reviews.services import files
+        with tempfile.TemporaryDirectory() as root, override_settings(CUSTOMS_FILE_ROOT=Path(root)):
+            data = sample()
+            result = imports.upload(self.supplier, filename="synthetic.xlsx", data=data, key="rollback-import")
+            run = Run.objects.get(pk=result["precheck_run_id"])
+            with patch.object(files, "extract_version_images_for_version", side_effect=ApiError(500, "storage_unavailable", "test")):
+                self.drain(run)
+            job = ImportJob.objects.get(precheck=run)
+            self.assertEqual(job.status, ImportJob.Status.FAILED)
+            self.assertFalse(FileVersion.objects.get(pk=job.version_id).storage_path)
+            self.assertTrue(list(Path(root).glob("tasks/*/versions/*/original/*")))
+            replay = imports.upload(self.supplier, filename="synthetic.xlsx", data=data, key="rollback-import")
+            self.assertEqual(replay["version_id"], result["version_id"])
+            self.drain(run)
+            self.assertEqual(run.status, Run.Status.SUCCEEDED)
 
     def test_old_run_late_output_cannot_replace_new_run(self):
         original = services.evaluate_row
@@ -191,7 +253,8 @@ class QueueTests(TestCase):
         self.assertEqual(response.status_code, 403)
     def test_upload_returns_before_parsing_and_engine_worker_phase(self):
         with tempfile.TemporaryDirectory() as root, override_settings(CUSTOMS_FILE_ROOT=Path(root)):
-            with patch.object(services, "evaluate_row", side_effect=AssertionError("request called engine")):
+            with patch.object(imports, "parse", side_effect=AssertionError("request called parser")), \
+                 patch.object(services, "evaluate_row", side_effect=AssertionError("request called engine")):
                 result = imports.upload(self.supplier, filename="合成.xlsx", data=sample(), key="upload-new")
             self.assertEqual(result["executor_mode"], "rq")
             self.assertEqual(result["parse_status"], "staged")
@@ -260,6 +323,8 @@ class QueueTests(TestCase):
                 self.drain(run)
             self.assertFalse(AuditEvent.objects.filter(task_id=run.task_id, action="import.succeeded").exists())
             self.assertEqual(ImportJob.objects.get(precheck=run).status, "failed")
+            self.assertEqual(RunAttempt.objects.filter(run=run, row__isnull=True, status="failed").count(), 3)
+            self.assertEqual(RunAttempt.objects.filter(run=run, row__isnull=True).first().error_code, "parse_blocked")
             self.assertEqual(RunWork.objects.get(run=run).state, "done")
             self.assertFalse(engine.called)
             replay = imports.upload(self.supplier, filename="合成.xlsx", data=data, key="broken-parse")

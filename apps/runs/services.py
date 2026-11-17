@@ -10,6 +10,7 @@ import uuid
 from django.conf import settings
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
+from django.db.models import Q
 from django.http import Http404
 from django.utils import timezone
 
@@ -180,7 +181,8 @@ def _supersede(run, work):
     run.save(update_fields=["status", "is_current", "finished_at"])
     work.state, work.token, work.lease_until = "done", None, None
     work.save()
-    RunAttempt.objects.filter(row__run=run, status="running").update(status="superseded", finished_at=timezone.now())
+    RunAttempt.objects.filter(Q(row__run=run) | Q(run=run), status="running").update(
+        status="superseded", finished_at=timezone.now())
 
 
 @transaction.atomic
@@ -199,6 +201,21 @@ def claim_work(run_id):
     work.dispatched_at = None
     work.save()
     return str(work.token)
+
+
+@transaction.atomic
+def renew_lease(run_id, token):
+    """续租当前 worker；旧 token 或已过期租约不能重新取得写权限。"""
+    initial = Run.objects.get(pk=run_id)
+    Task.objects.select_for_update().get(pk=initial.task_id)
+    run = Run.objects.select_for_update().get(pk=run_id)
+    work = RunWork.objects.select_for_update().get(run=run)
+    now = timezone.now()
+    if work.state != "running" or str(work.token) != str(token) or not work.lease_until or work.lease_until <= now:
+        return False
+    work.lease_until = now + timedelta(seconds=settings.CUSTOMS_QUEUE_LEASE_SECONDS)
+    work.save(update_fields=["lease_until", "updated_at"])
+    return True
 
 
 @transaction.atomic
@@ -319,7 +336,7 @@ def finish_pass(run_id, token):
         work.available_at = timezone.now() + timedelta(seconds=settings.CUSTOMS_RETRY_BACKOFF_SECONDS)
     else:
         work.state = "done"
-        run.status = "failed" if run.items.exists() and not run.items.filter(status="succeeded").exists() else "succeeded"
+        run.status = Run.Status.FAILED if run.items.filter(status=RunItem.Status.FAILED).exists() else Run.Status.SUCCEEDED
         run.finished_at = timezone.now()
         if run.kind == Run.Kind.PRECHECK and task.stage in (Task.Stage.UPLOADED, Task.Stage.PRECHECKING):
             task.stage = Task.Stage.AWAITING_CONFIRMATION

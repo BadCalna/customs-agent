@@ -258,6 +258,14 @@ def publish_staged_version_original(version, token: str, *, filename: str) -> Fi
     return version
 
 
+def read_staged_version_original(token: str) -> bytes:
+    """读取上传暂存内容；发布回执存在时允许从正式文件恢复。"""
+    try:
+        return storage.read_staged_original(storage_root(), token, max_bytes=max_read_bytes())
+    except storage.StorageError as exc:
+        _raise_storage_error(exc)
+
+
 # --------------------------------------------------------------------- 受控读取
 def read_version_original(user, version_id) -> FileDownload:
     """读取版本原件字节；先做对象权限校验，再读受控存储。"""

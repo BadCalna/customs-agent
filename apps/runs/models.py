@@ -173,11 +173,12 @@ class RunWork(models.Model):
 
 
 class RunAttempt(FixedInputModel):
-    """每次真正调用引擎的记录；失败、中断与过期输出分别保留。"""
+    """每次引擎调用或导入解析尝试；失败、中断与过期输出分别保留。"""
 
-    fixed_input_fields = ("row", "number", "token")
+    fixed_input_fields = ("run", "row", "number", "token")
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    row = models.ForeignKey(RunItem, on_delete=models.CASCADE, related_name="attempt_records")
+    run = models.ForeignKey(Run, on_delete=models.CASCADE, null=True, blank=True, related_name="attempts")
+    row = models.ForeignKey(RunItem, on_delete=models.CASCADE, null=True, blank=True, related_name="attempt_records")
     number = models.PositiveIntegerField()
     token = models.UUIDField()
     status = models.CharField(max_length=16, default="running")
@@ -190,6 +191,14 @@ class RunAttempt(FixedInputModel):
     class Meta(FixedInputModel.Meta):
         ordering = ["row_id", "number"]
         constraints = [models.UniqueConstraint(fields=["row", "number"], name="uniq_row_attempt_number")]
+
+    def clean(self):
+        if self.run_id is None and self.row_id is None:
+            raise ValidationError("执行尝试必须绑定 Run 或商品行")
+        if self.row_id is not None:
+            row = _related_or_none(self, "row")
+            if row is not None and self.run_id is not None and row.run_id != self.run_id:
+                raise ValidationError("执行尝试的 Run 必须与商品行所属 Run 一致")
 
 
 protect_from_direct_delete(RunAttempt)

@@ -97,7 +97,7 @@ def upload(user, *, filename, data, key, task_id=None, expected_current_version_
         if settings.EXECUTOR_MODE == "rq":
             return queue_import(replay["import_id"], replay=True)
         return finish_import(replay["import_id"], replay=True)
-    mapping = parse(data, filename)
+    mapping = parse(data, filename) if settings.EXECUTOR_MODE != "rq" else None
     staged = files.stage_version_original(data, filename=filename)
     reserved = False
     try:
@@ -185,10 +185,21 @@ def finish_import(job_id, *, replay=False, mapping=None, defer_precheck=False):
             if job.status != ImportJob.Status.SUCCEEDED:
                 if task.versions.filter(number__gt=job.version.number).exists():
                     raise ApiError(409, "stale_version", "旧版本导入不能覆盖当前版本")
-                version = files.publish_staged_version_original(job.version, job.stage_token, filename=job.version.original_filename)
                 if mapping is None:
-                    data = storage.read_bytes(files.storage_root(), version.storage_path, max_bytes=files.max_read_bytes())
-                    mapping = parse(data, version.original_filename)
+                    if job.version.storage_path:
+                        data = storage.read_bytes(files.storage_root(), job.version.storage_path,
+                                                  max_bytes=files.max_read_bytes())
+                    else:
+                        data = files.read_staged_version_original(job.stage_token)
+                    if hashlib.sha256(data).hexdigest() != job.sha256:
+                        raise ApiError(409, "storage_conflict", "暂存原件与上传登记的哈希不一致")
+                    mapping = parse(data, job.version.original_filename)
+                version = job.version
+                if not version.storage_path:
+                    version = files.publish_staged_version_original(
+                        version, job.stage_token, filename=version.original_filename)
+                if storage.file_sha256(files.storage_root(), version.storage_path) != job.sha256:
+                    raise ApiError(409, "storage_conflict", "正式原件与上传登记的哈希不一致")
                 # B 完整事务成功前不会有商品或行结果；失败回滚后复用同一版本/run。
                 for link in mapping.links:
                     values = link.item_values()

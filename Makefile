@@ -41,7 +41,7 @@ test-contracts:
 dev:
 	$(MANAGE) runserver $(BIND)
 
-QUEUE ?= customs
+QUEUE ?= $(shell $(PYTHON) -c "from config.settings import CUSTOMS_QUEUE_NAME; print(CUSTOMS_QUEUE_NAME)")
 worker:
 	$(MANAGE) rqworker $(QUEUE)
 
