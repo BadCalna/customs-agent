@@ -229,6 +229,11 @@ class HistorySearchResult(Schema):
     reason: str = ""
     query: HistoryQuery | None = None
     candidates: list[HistoryCandidate] = Field(default_factory=list)
+    excluded_needs_review: int = Field(
+        default=0,
+        ge=0,
+        description="本次检索因 needs_review=true 而未纳入成功案例的记录数",
+    )
     dataset: HistoryDatasetInfo | None = None
     searched_at: str | None = Field(default=None, description="本次检索时间；未检索时为空")
     scanned_records: int = Field(default=0, ge=0)
@@ -624,6 +629,7 @@ class HistorySearchSource:
         limit: int = DEFAULT_LIMIT,
         min_score: float = DEFAULT_MIN_SCORE,
         stale_days: int = DEFAULT_STALE_DAYS,
+        include_needs_review: bool = False,
     ):
         if records is not None and store is not None:
             raise ValueError("records 与 store 只能二选一")
@@ -641,10 +647,13 @@ class HistorySearchSource:
             raise ValueError("min_score 必须在 0~1 之间")
         if stale_days < 0:
             raise ValueError("stale_days 必须 >= 0")
+        if not isinstance(include_needs_review, bool):
+            raise ValueError("include_needs_review 必须是 bool")
         self._clock = clock or (lambda: datetime.now(timezone.utc))
         self.limit = limit
         self.min_score = min_score
         self.stale_days = stale_days
+        self.include_needs_review = include_needs_review
 
     @classmethod
     def load(cls, path: str | Path, **kwargs: Any) -> "HistorySearchSource":
@@ -711,9 +720,15 @@ class HistorySearchSource:
         success_summary = (
             f"符合成功口径 {len(success_records)} 条，其中待核异常 {review_in_snapshot} 条"
         )
+        excluded_needs_review = 0 if self.include_needs_review else review_in_snapshot
+        searchable_records = (
+            success_records
+            if self.include_needs_review
+            else [record for record in success_records if not _needs_review(record)]
+        )
         candidates = [
             candidate
-            for record in success_records
+            for record in searchable_records
             if (candidate := self._build_candidate(prepared, record, now)) is not None
             and candidate.score >= self.min_score
         ]
@@ -721,12 +736,18 @@ class HistorySearchSource:
         candidates = candidates[: self.limit]
 
         if not candidates:
+            exclusion_note = (
+                f"；其中 {excluded_needs_review} 条待核异常记录已排除，"
+                "可用 include_needs_review=True 单独查看"
+                if excluded_needs_review
+                else ""
+            )
             return HistorySearchResult(
                 outcome=HistorySearchOutcome.NO_MATCH,
                 evidence_status=EvidenceStatus.NOT_FOUND,
                 reason=(
                     f"检索执行成功，未取得达到阈值 {self.min_score:.2f} 的历史参考记录"
-                    f"（扫描 {len(snapshot.records)} 条，{success_summary}）；"
+                    f"（扫描 {len(snapshot.records)} 条，{success_summary}{exclusion_note}）；"
                     f"这是没查到，不是查询失败"
                 ),
                 query=prepared,
@@ -735,6 +756,7 @@ class HistorySearchSource:
                 scanned_records=len(snapshot.records),
                 query_gaps=query_gaps,
                 truncated=truncated,
+                excluded_needs_review=excluded_needs_review,
             )
 
         gap_note = f"；输入缺口：{'、'.join(query_gaps)}" if query_gaps else ""
@@ -742,7 +764,12 @@ class HistorySearchSource:
         review_note = (
             f"；其中 {review_count} 条待核异常，不能视为成功案例"
             if review_count
-            else ""
+            else (
+                f"；另有 {excluded_needs_review} 条待核异常记录已排除，"
+                "可用 include_needs_review=True 单独查看"
+                if excluded_needs_review
+                else ""
+            )
         )
         return HistorySearchResult(
             outcome=HistorySearchOutcome.MATCHED,
@@ -759,6 +786,7 @@ class HistorySearchSource:
             scanned_records=len(snapshot.records),
             query_gaps=query_gaps,
             truncated=truncated,
+            excluded_needs_review=excluded_needs_review,
         )
 
     # --- 内部 ---

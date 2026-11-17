@@ -1546,6 +1546,13 @@ def import_history_templates(request: ImportRequest) -> ImportOutcome:
 
 
 # --------------------------------------------------------------------------- 查询验证
+def _record_needs_review(record: Mapping[str, Any]) -> bool:
+    attributes = record.get("attributes") or {}
+    if str(attributes.get("needs_review", "")).strip().casefold() in {"true", "1", "yes", "y", "是"}:
+        return True
+    return bool(str(attributes.get("blocking_issue_codes", "")).strip())
+
+
 def _query_from_record(record: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "name": record.get("historical_name", ""),
@@ -1558,10 +1565,21 @@ def _query_from_record(record: Mapping[str, Any]) -> dict[str, Any]:
 def generate_query_cases(records: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
     if not records:
         return []
+    # 默认检索会排除 needs_review 记录；验证用例也必须从可命中记录中选，
+    # 否则会把“被排除”误判成 hit-basic 失败。
+    usable_records = [record for record in records if not _record_needs_review(record)]
+    if not usable_records:
+        usable_records = []
     hit_record = next(
-        (record for record in records if record.get("historical_name") and record.get("historical_hs")),
-        records[0],
+        (
+            record
+            for record in usable_records
+            if record.get("historical_name") and record.get("historical_hs")
+        ),
+        usable_records[0] if usable_records else None,
     )
+    if hit_record is None:
+        return []
     hit_query = _query_from_record(hit_record)
     cases: list[dict[str, Any]] = [
         {
@@ -1587,7 +1605,7 @@ def generate_query_cases(records: Sequence[Mapping[str, Any]]) -> list[dict[str,
     diff_record = next(
         (
             record
-            for record in records
+            for record in usable_records
             if record.get("material") or record.get("spec") or (record.get("elements") or {})
         ),
         None,

@@ -350,6 +350,13 @@
       "default": null,
       "description": "D4 四态；invalid_query 时为 null（未发起查询）"
     },
+    "excluded_needs_review": {
+      "default": 0,
+      "description": "本次检索因 needs_review=true 而未纳入成功案例的记录数",
+      "minimum": 0,
+      "title": "Excluded Needs Review",
+      "type": "integer"
+    },
     "outcome": {
       "$ref": "#/$defs/HistorySearchOutcome"
     },

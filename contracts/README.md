@@ -100,4 +100,7 @@ FIX-08 不代表重试去重已可用。
   `blocking_issue_codes: list[str] = []`。导入层把 P04 行级 blocking/error
   问题透传到检索候选与证据；`needs_review=true` 只表示“记录取到了但待核”，
   不改变 `outcome` 原值，也不能被下游当成成功案例直接采用。
+- `HistorySearchResult` 新增 `excluded_needs_review: int = 0`，表示本次检索因
+  `needs_review=true` 而未纳入成功案例的记录数；默认检索排除待核异常记录，
+  需要审计时可构造 `HistorySearchSource(include_needs_review=True)`。
 - 纯新增可选字段，未改既有字段、端点或 `CONTRACT_VERSION`（仍为 `1.1.0`）。

@@ -505,7 +505,9 @@ class NeedsReviewRecordTest(SimpleTestCase):
                 "blocking_issue_codes": "reversed_item_range,missing_contract",
             }
         )
-        source = HistorySearchSource(records=[record], clock=fixed_clock)
+        source = HistorySearchSource(
+            records=[record], clock=fixed_clock, include_needs_review=True
+        )
         result = source.search(HistoryQuery(name="待核法兰盘", elements={"材质": "不锈钢"}))
         self.assertIs(result.outcome, HistorySearchOutcome.MATCHED)
         candidate = result.candidates[0]
@@ -522,11 +524,28 @@ class NeedsReviewRecordTest(SimpleTestCase):
 
     def test_blocking_codes_without_explicit_flag_still_marks_review(self):
         record = self._record(attributes={"blocking_issue_codes": "missing_contract"})
-        source = HistorySearchSource(records=[record], clock=fixed_clock)
+        source = HistorySearchSource(
+            records=[record], clock=fixed_clock, include_needs_review=True
+        )
         result = source.search(HistoryQuery(name="待核法兰盘", elements={"材质": "不锈钢"}))
         candidate = result.candidates[0]
         self.assertTrue(candidate.needs_review)
         self.assertEqual(candidate.blocking_issue_codes, ["missing_contract"])
+
+    def test_needs_review_is_excluded_from_success_hits_by_default(self):
+        record = self._record(
+            attributes={
+                "needs_review": "true",
+                "blocking_issue_codes": "reversed_item_range",
+            }
+        )
+        source = HistorySearchSource(records=[record], clock=fixed_clock)
+        result = source.search(HistoryQuery(name="待核法兰盘", elements={"材质": "不锈钢"}))
+        self.assertIs(result.outcome, HistorySearchOutcome.NO_MATCH)
+        self.assertEqual(result.candidates, [])
+        self.assertEqual(result.excluded_needs_review, 1)
+        self.assertIn("待核异常", result.reason)
+        self.assertIn("已排除", result.reason)
 
     def test_normal_record_is_not_flagged(self):
         record = self._record(attributes={"needs_review": "false"})
