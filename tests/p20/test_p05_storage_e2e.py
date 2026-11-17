@@ -381,6 +381,60 @@ class CorruptWorkbookPartExportTests(TestCase):
                          hashlib.sha256(self.corrupt).hexdigest())
 
 
+class UnknownEncodingWorkbookExportTests(TestCase):
+    """原件样式部件声明了不存在的编码：ElementTree 抛 LookupError，导出必须结构化成 422。
+
+    这条与 CorruptWorkbookPartExportTests 的区别：内容本身是合法 XML，只是
+    ``<?xml ... encoding="unknown-codec"?>`` 解析器无法解码，异常类型是 LookupError
+    而不是 ParseError。
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls._tmp = tempfile.TemporaryDirectory(prefix="p20-bad-encoding-")
+        cls.addClassCleanup(cls._tmp.cleanup)
+        cls.root = Path(cls._tmp.name) / "files"
+        cls._settings = override_settings(CUSTOMS_FILE_ROOT=cls.root)
+        cls._settings.enable()
+        cls.addClassCleanup(cls._settings.disable)
+        super().setUpClass()
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.supplier = make_user("p20-badcodec-supplier", Role.SUPPLIER, "供应商丙")
+        cls.operator = make_user("p20-badcodec-operator", Role.OPERATOR, "业务员丙")
+        cls.source = TEMPLATE.read_bytes()
+        styles = zipfile.ZipFile(io.BytesIO(cls.source)).read("xl/styles.xml")
+        body = styles.decode("utf-8")
+        # 只改 XML 声明里的编码名，正文保持原样（内容仍是合法 XML）。
+        start = body.index("?>") + 2
+        declared = '<?xml version="1.0" encoding="unknown-codec"?>' + body[start:]
+        cls.corrupt = replace_zip_part(cls.source, "xl/styles.xml", declared.encode("utf-8"))
+        client = Client()
+        client.force_login(cls.supplier)
+        response = client.post("/api/v1/tasks", {"file": SimpleUploadedFile(TEMPLATE.name, cls.corrupt)},
+                               HTTP_IDEMPOTENCY_KEY=str(uuid.uuid4()))
+        assert response.status_code == 200, response.content[:800]
+        cls.upload = response.json()
+        cls.version = FileVersion.objects.get(pk=cls.upload["version_id"])
+        claim_task(cls.operator, cls.upload["task_id"], "p20-badcodec-claim")
+        cls.operator_client = Client()
+        cls.operator_client.force_login(cls.operator)
+
+    def test_unknown_encoding_uploads_but_export_fails_structurally(self):
+        self.assertEqual(self.upload["parse_status"], "succeeded")
+        self.assertGreater(self.upload["item_count"], 0)
+        response = self.operator_client.post(
+            f"/api/v1/versions/{self.version.pk}/exports",
+            data=json.dumps({"kind": "precheck", "run_id": self.upload["precheck_run_id"]}),
+            content_type="application/json")
+        self.assertEqual(response.status_code, 422, getattr(response, "content", b"")[:400])
+        self.assertEqual(response.json()["error"]["code"], "source_workbook_invalid")
+        stored = self.root / self.version.storage_path
+        self.assertEqual(hashlib.sha256(stored.read_bytes()).hexdigest(),
+                         hashlib.sha256(self.corrupt).hexdigest())
+
+
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()
 

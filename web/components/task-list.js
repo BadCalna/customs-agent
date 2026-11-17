@@ -107,8 +107,12 @@ export function createTaskList(host, { client, onSelectTask = () => {}, onLoaded
   async function selectTask(taskId) {
     if (!alive || !state.items.some(t => t.task_id === taskId)) return;
     if (state.selecting && taskId === state.selectedId) return;
+    // 失败时回到上一个选择：列表不能一直显示一个没加载成功的任务，
+    // 否则宿主页面的详情（仍是被选择过的那个）与列表状态永久不一致。
+    const previousId = state.selectedId;
     const request = ++selectionToken;
     state = {...state, selectedId: taskId, selecting: true, selectionError: null}; draw();
+    let settledId = taskId;
     try {
       const detail = await client.getTask(taskId);
       if (!alive || request !== selectionToken) return;
@@ -116,13 +120,14 @@ export function createTaskList(host, { client, onSelectTask = () => {}, onLoaded
       await onSelectTask(detail);
     } catch (error) {
       if (!alive || request !== selectionToken) return;
-      state = {...state, selectionError: error};
+      state = {...state, selectedId: previousId, selectionError: error};
+      settledId = previousId;
     }
     if (!alive || request !== selectionToken) return;
     state = {...state, selecting: false}; draw();
     if (onSelectionSettled) {
       try {
-        await onSelectionSettled(state.selectedId, {taskId});
+        await onSelectionSettled(settledId, {taskId, ok: settledId === taskId});
       } catch (error) {
         if (!alive || request !== selectionToken) return;
         state = {...state, selectionError: error}; draw();

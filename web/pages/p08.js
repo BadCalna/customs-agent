@@ -172,11 +172,21 @@ export function mountP08Page({client, mode = MODE_LIVE, taskHost, runHost, ident
    * 说成「当前版本」。列表的刷新按钮调用的是组件内部 load()，因此核对必须挂在这个回调上。
    */
   async function reconcileSelection(items) {
-    if (!alive || !state.selectedId || !state.detail) return;
+    if (!alive) return;
     const listState = tasks.getState();
-    // 用户正在点选别的任务、或列表已经切到别的任务时，不能用页面上旧的详情去覆盖
-    // 用户的最新选择；记下待核对，等选择落定后再按当时的列表数据补一次。
-    if (listState.selecting || (listState.selectedId && listState.selectedId !== state.selectedId)) {
+    if (!listState.selectedId) return; // 没有选中任务，没有可核对的对象
+    // 选中还在飞（含首次点击、页面还没有 detail）时无法比对，但必须登记待核对：
+    // 直接返回会让「首次选择 + 期间刷新到新版本」永远漏掉。
+    if (listState.selecting) {
+      pendingReconcile = true;
+      return;
+    }
+    if (!state.selectedId || !state.detail) {
+      pendingReconcile = true;
+      return;
+    }
+    // 列表已经改选到别的任务：服从用户最新选择，等它的选中流程落定后再核对。
+    if (listState.selectedId !== state.selectedId) {
       pendingReconcile = true;
       return;
     }

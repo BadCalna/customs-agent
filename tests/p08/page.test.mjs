@@ -406,6 +406,86 @@ test('A 的进度请求在飞时刷新到新版本：落定后补核对，不留
   page.destroy();
 });
 
+test('首次选择时刷新到新版本：页面还没有详情也要登记待核对，落定后补上', async () => {
+  // 交错时序：首次点击 A（V2 详情在飞、页面还没有 selectedId/detail）→ 列表刷新到 V3。
+  // 若核对在「页面还没有详情」处直接返回，就永远漏掉这次更新。
+  let releaseDetail;
+  const gate = new Promise((resolve) => { releaseDetail = resolve; });
+  const oldVersion = mockTask.current_version_id;
+  const newVersion = 'version-first-v3';
+  const newRun = {...copy(runOf(mockTask.latest_run_id)), run_id: 'run-first-v3', version_id: newVersion};
+  let listRow = {...copy(mockTask)};
+  let detailRow = {...copy(mockTask), versions: [{version_id: oldVersion, number: 2}]};
+  let detailCalls = 0;
+  const client = {
+    async me() { return {display_name: '演示账号'}; },
+    async listTasks() { return {items: [copy(listRow)], next_cursor: null}; },
+    async getTask() {
+      detailCalls += 1;
+      // 第一次请求在发出时就取走 V2 快照（模拟「V2 详情在飞」），返回时列表已变成 V3。
+      const snapshot = copy(detailRow);
+      if (detailCalls === 1) { await gate; }
+      return snapshot;
+    },
+    async getRun(id) { return copy(id === newRun.run_id ? newRun : runOf(mockTask.latest_run_id)); },
+  };
+  const {page, summaryHost} = mount({client});
+  await page.ready;
+  const selecting = page.tasks.selectTask(mockTask.task_id);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(page.getState().detail, null, '首屏此时还没有详情');
+
+  // 另一个标签页更新到 V3，列表刷新成功
+  listRow = {...listRow, current_version_id: newVersion, current_version_number: 3, latest_run_id: newRun.run_id};
+  detailRow = {...copy(listRow), versions: [{version_id: newVersion, number: 3}]};
+  await page.tasks.load();
+  releaseDetail();
+  await selecting;
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(detailCalls, 2, '落定后必须补核对并重读详情');
+  assert.match(summaryHost.textContent, /当前版本 V3/, '不能停在首次选择时的 V2');
+  page.destroy();
+});
+
+test('改选失败后恢复上一个选择，后续刷新仍能核对更新（不留永久待核对）', async () => {
+  const oldVersion = mockTask.current_version_id;
+  const newVersion = 'version-after-fail-v3';
+  const newRun = {...copy(runOf(mockTask.latest_run_id)), run_id: 'run-after-fail-v3', version_id: newVersion};
+  let listRow = {...copy(mockTask)};
+  let detailRow = {...copy(mockTask), versions: [{version_id: oldVersion, number: 2}]};
+  let detailCalls = 0;
+  const client = {
+    async me() { return {display_name: '演示账号'}; },
+    async listTasks() { return {items: [copy(listRow), copy(expertTask)], next_cursor: null}; },
+    async getTask(id) {
+      detailCalls += 1;
+      if (id === expertTask.task_id) throw {status: 403, message: '当前操作不允许'};
+      return copy(detailRow);
+    },
+    async getRun(id) { return copy(id === newRun.run_id ? newRun : runOf(mockTask.latest_run_id)); },
+  };
+  const mounted = mount({client});
+  await mounted.page.ready;
+  await mounted.page.selectTask(mockTask.task_id);
+  assert.match(mounted.summaryHost.textContent, /当前版本 V2/);
+
+  // 改选 B 失败：组件回到 A，页面仍显示 A，列表给出错误提示且不再把 B 当已选。
+  await mounted.page.tasks.selectTask(expertTask.task_id);
+  assert.equal(mounted.page.tasks.getState().selectedId, mockTask.task_id, '失败后应恢复到上一个选择');
+  assert.equal(mounted.page.tasks.getState().selectionError?.status, 403);
+  assert.equal(mounted.page.getState().selectedId, mockTask.task_id);
+  assert.match(mounted.summaryHost.textContent, /当前版本 V2/);
+
+  // 之后列表刷新到 V3：核对必须照常生效（不能因为之前登记过待核对就永久卡住）
+  listRow = {...listRow, current_version_id: newVersion, current_version_number: 3, latest_run_id: newRun.run_id};
+  detailRow = {...copy(listRow), versions: [{version_id: newVersion, number: 3}]};
+  await mounted.page.tasks.load();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.match(mounted.summaryHost.textContent, /当前版本 V3/, '失败恢复后仍要能核对到新版本');
+  mounted.page.destroy();
+});
+
 test('列表刷新但任务未变时，不重复读详情（避免每次刷新都闪一下右侧）', async () => {
   let getTaskCount = 0;
   const client = {

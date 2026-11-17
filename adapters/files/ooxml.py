@@ -134,6 +134,9 @@ def _xml(data: bytes, *, part: str) -> ET.Element:
         return ET.fromstring(data)
     except ET.ParseError as exc:
         raise OoxmlError("malformed_xml", f"部件 XML 无法解析：{part}（{exc}）") from exc
+    except LookupError as exc:
+        # XML 声明里的未知编码：同样属于无法解析的部件，不能冒成 500。
+        raise OoxmlError("malformed_xml", f"部件 XML 声明了不支持的编码：{part}（{exc}）") from exc
 
 
 def _text(element: ET.Element | None) -> str:

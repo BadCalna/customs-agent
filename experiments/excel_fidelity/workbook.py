@@ -34,6 +34,9 @@ def xml(data: bytes) -> ET.Element:
     except ET.ParseError as exc:
         # 损坏的部件属于输入文件问题：转成结构化校验错误，让入口返回 422 而不是 500。
         raise CorruptPartError(f"workbook part is not well-formed XML: {exc}") from exc
+    except LookupError as exc:
+        # XML 声明里出现未知/不可用编码时，ElementTree 抛的是 LookupError（不是 ParseError）。
+        raise CorruptPartError(f"workbook part declares an unsupported encoding: {exc}") from exc
 
 
 def sha256(data: bytes) -> str:

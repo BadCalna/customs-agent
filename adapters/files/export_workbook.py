@@ -43,6 +43,10 @@ def _xml(data: bytes, *, part: str = "部件") -> ET.Element:
     except ET.ParseError as exc:
         raise ExportError("source_workbook_invalid",
                           f"原件中的 {part} 不是合法 XML，无法安全导出（{exc}）") from exc
+    except LookupError as exc:
+        # 未知编码（encoding="unknown-codec" 等）：ElementTree 抛 LookupError，同样按输入问题处理。
+        raise ExportError("source_workbook_invalid",
+                          f"原件中的 {part} 声明了不支持的编码，无法安全导出（{exc}）") from exc
 
 
 @dataclass(frozen=True)
