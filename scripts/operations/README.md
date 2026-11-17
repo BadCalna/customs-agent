@@ -23,14 +23,25 @@
 - 停写前记录运行服务；除 db/redis 外全部停止（含 worker 和未来写入者），只 `start` 原运行服务，不 `up` 意外启动原来关闭服务。
   文件归档始终使用一次性 app 容器，绝不 exec 已停止的 app。SIGTERM/SIGINT 走恢复 finally；SIGKILL/主机掉电仍需按 services-before 证据人工处理。
 - 整个 deployment 的 backup/restore/verify/drill 使用非阻塞排他锁，防止并发操作；不同备份目录或切换 app 库名不绕过同 Compose 项目锁。
+  锁路径固定为 `/tmp/customs-operations-<uid>/`，不读取登录/cron 的 `TMPDIR`，避免跨会话绕过。
 - 演练成功才默认清理；任何阶段失败保留隔离目标、JSON 状态及终端日志。`--keep` 让成功演练也保留。
 - 清单包含数据库实际 current_database/OID、Django 实际文件根/inode、全部 introspected 表
   （含 `django_migrations`，仅排除 `django_session`）、表行数及逐行稳定 SHA256 内容指纹、文件路径/大小/SHA256。
   直接从 cursor 逐批读取并保留 datetime 六位微秒，不用 dumpdata；每行哈希排序避免物理行序差异。
   指纹的排序占 O(行数) 内存；dump、tar 和介质 SHA256 均流式。新恢复契约不接受缺指纹/缺文件清单降级。
   独立 compare_counts 可读取旧版行数清单，但明确警告仅行数验证，不能作为新版恢复验收通过依据。
-- 合法空原件目录允许（`files: []`、`file_count: 0`）；不存在目录或缺 `files` 字段失败。
+- 合法空原件目录允许（`files: []`、`file_count: 0`）；备份源目录不存在或缺 `files` 字段失败。
+  灾难恢复允许生产原件目录已丢失：仍保护其 canonical 路径与祖先/后代，持久卷边界必须存在，
+  restore/verify 的隔离目标仍必须是真实存在/新建的合法目录。
   备份源库名和恢复库名本就不同，不拿两者相等当验收条件，只验证实际目标身份。
+- PostgreSQL 清单另含 `sequences`（last_value/is_called、类型/start/increment/min/max/cache/cycle/owned列）
+  和 `database_schema`（关系/视图定义、列类型/default/null/identity/generated/collation、constraint、index 定义与状态）。
+  定义不纳入数据库名、OID 或 owner，确保跨恢复目标稳定；列序用逻辑位置，忽略 DROP 列后的物理 attnum 空洞。
+  仅对 PG 已知无 typmod varchar 字面量 ARRAY → text[] 的 dump/restore 改写作窄规范，保留其它 cast 与字段值。
+  sequence CACHE>1 保留服务端持久 last_value/is_called，
+  不承诺保留已断开连接的客户端预取号段；当前真实 PG 回归验证 Django 默认 CACHE 1。
+  当前明确支持 `public` 应用 schema；存在其他用户 schema 关系即 fail closed，避免只验部分表却宣称完整。
+  不涵盖角色/ACL、扩展实现、存储过程 body、触发器 body、RLS/策略的完整语义审计，不声称任意 PostgreSQL 对象全量等价。
 
 云端部署、备份恢复与演练的操作说明在 [deploy/README.md](../../deploy/README.md)；
 这里只说明脚本本身怎么用、边界在哪。

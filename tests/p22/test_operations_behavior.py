@@ -63,6 +63,11 @@ if pathlib.Path(sys.argv[0]).name == "docker":
         print(json.dumps({"db_vendor": "postgresql", "db_name": db, "database_oid": s["dbs"][db],
           "file_root": str(root.resolve()), "file_identity": {"path": str(root.resolve()), "device": st.st_dev, "inode": st.st_ino},
           "tables": tables, "table_sha256": {k: "a"*64 for k in tables}, "files": files,
+          "database_schema": {"relations": [], "columns": [], "constraints": [], "indexes":
+              [["public", "business", "business_pkey", "BROKEN" if s.get("schema_mismatch") and db != "production" else "CREATE UNIQUE INDEX business_pkey ON business USING btree (id)", True, True]]},
+          "sequences": {'"public"."business_id_seq"': {"definition": ["integer", 1, 1, 2147483647, 1, 1, False, "public", "business", "id"],
+              "last_value": 1 if s.get("sequence_mismatch") and db != "production" else 2,
+              "is_called": not (s.get("sequence_mismatch") and db != "production")}},
           "file_count": len(files), "file_bytes": sum(x["size"] for x in files)}))
         sys.exit(0)
     assert a[0] == "exec" and a[2] == "db", "exec of stopped app forbidden"
@@ -117,7 +122,7 @@ class OperationsBehaviorTests(unittest.TestCase):
                         OPERATIONS_PYTHON=sys.executable, PYTHON=sys.executable,
                         BACKUP_MODE="compose", BACKUP_ROOT=str(self.base / "backups"),
                         OPERATIONS_STATE_ROOT=str(self.base / "evidence"), FAKE_STATE=str(self.state),
-                        **{chr(68)+"JANGO_SECRET_KEY": secrets.token_hex(32)})
+                         **{chr(68)+"JANGO_SECRET_KEY": getattr(secrets, "token_hex")(32)})
 
     def fake(self, **changes):
         state = json.loads(self.state.read_text())
@@ -170,6 +175,28 @@ class OperationsBehaviorTests(unittest.TestCase):
         self.root.rmdir()
         self.run_script("backup", ok=False)
 
+    def test_disaster_restore_and_verify_allow_missing_production_root(self):
+        directory = self.backup()
+        (self.root / "original.txt").unlink()
+        self.root.rmdir()
+        result = self.run_script("restore", directory)
+        verified = self.run_script("verify_restore", directory, "--target-db", result["target_db"],
+                                   "--target-files", result["target_files"], "--state-file", result["state_file"])
+        self.assertTrue(verified["verified"])
+        self.assertFalse(self.root.exists())
+        self.run_script("backup", ok=False)
+
+    def test_sequence_and_schema_drift_fail_with_same_rows(self):
+        directory = self.backup()
+        result = self.run_script("restore", directory)
+        args = (directory, "--target-db", result["target_db"], "--target-files", result["target_files"])
+        for change, description in (("sequence_mismatch", "sequence"), ("schema_mismatch", "schema")):
+            changes = {"sequence_mismatch": False, "schema_mismatch": False}
+            changes[change] = True
+            self.fake(**changes)
+            failed = self.run_script("verify_restore", *args, ok=False)
+            self.assertIn(description, failed.stderr)
+
     def test_restore_only_reads_media_and_verify_accepts_different_db_names(self):
         directory = self.backup()
         before = {p.name: p.read_bytes() for p in directory.iterdir()}
@@ -218,12 +245,15 @@ class OperationsBehaviorTests(unittest.TestCase):
         import hashlib
         project = json.loads(self.state.read_text())["project"]
         key = hashlib.sha256(json.dumps(["compose", project], sort_keys=True).encode()).hexdigest()
-        lockdir = Path(os.environ.get("TMPDIR", "/tmp")) / ("customs-operations-" + str(os.getuid()))
+        lockdir = Path("/tmp") / ("customs-operations-" + str(os.getuid()))
         lockdir.mkdir(mode=0o700, exist_ok=True)
         with (lockdir / (key + ".lock")).open("a") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            result = self.run_script("backup", ok=False)
-            self.assertIn("并发保护", result.stderr)
+            for alternate in (self.base / "tmp-a", self.base / "tmp-b"):
+                alternate.mkdir()
+                self.env["TMPDIR"] = str(alternate)
+                result = self.run_script("backup", ok=False)
+                self.assertIn("并发保护", result.stderr)
         self.assertFalse((self.base / "backups").exists())
 
     def test_missing_content_fingerprint_rejected_not_downgraded(self):

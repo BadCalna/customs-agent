@@ -58,11 +58,33 @@
 - 冻结实现后显式全仓回归：**928 项通过（15 项仅 PostgreSQL 专项跳过）**；日志 `/tmp/p22-followup-full-suite.log`，22.892 秒。
 - 最终 native `drill.sh`（不加 keep）再次 `status=passed, kept=false`；主控再查 `pg_database` 与目录，确认只清理本次恢复库/目录，源库/源原件保留。
 - 最终 P22 集成：**64 项通过**，16.395 秒，含真实 shell subprocess 的 fake Docker/PG 流程、SQLite 清单回归和 Host/CSRF 行为用例；日志 `/tmp/p22-followup-specialist-final.log`。
+- 隔离 PostgreSQL 后端全仓亦已运行（精确次数见下轮日志核对）；不把 SQLite 的15跳过等同于PG失败。
 - `manage.py check` 无问题；`makemigrations --check --dry-run` 无变化；`git diff --check` 无空白错误。
 
 ## 对抗性审查
 
-待修复提交固定后交独立 reviewer；作者自验不算独立审核。发现问题先补测试、修复，再复审并更新精确 head。
+### 第一轮（head 5221a1e）结论：不通过，进入修复
+
+两名未参与实现的独立审查员分别审 operations 与 deploy，固定读取 `5221a1e`，不修改源文件。不是 GitHub 人类 reviewer approval，不能冒充平台审批。
+
+- **O-01 P2**：原件源根已丢失时，restore/verify 仍强制其存在，灾备被阻断。审查员在独立 audit_ PostgreSQL 库真实复现。
+- **O-02 P2**：仅校验表数据和附件漏掉序列状态。恢复库 `setval(...,1,false)` 后 verify 仍返回 true，而 INSERT 立即主键重复；应补序列与 schema 元数据校验。
+- **O-03 P2**：锁路径取 TMPDIR，不同环境的同一 deployment 可绕过互斥；审查员真实同机竞争复现。
+- **D-01 P2**：README HTTPS 只复制配置而未明确替换 nginx 挂载，照文档会仍加载 HTTP。
+- **D-02 P2**：旧卷根曾授 app，重建镜像不能修已有卷属主；升级说明缺精确 root 所有权迁移。
+- **D-03 P2**：新服务器恢复直接 exec db，缺先启动并等待 db healthy 的步骤。
+
+以上六项均接受为本轮必须闭环的问题，先补行为/文档回归后复审。两个附加建议：所有 Compose 命令统一显式 env-file（宿主shell同名变量仍需排查），合理 Host 后缀点兼容性留作改进；均不伪造真实 Compose 复现。
+
+### 第二轮修复（尚待固定新 head 复审）
+
+- D-01/D-02/D-03 已补：HTTPS 挂载替换、旧卷 root 所有权迁移、灾备先构建镜像/启动 db 等待 healthy 后再恢复；部署文档回归 17 项通过。
+- O-01/O-02/O-03 已补行为测试，独立审查员在真实 PostgreSQL 复测三项均闭合：缺源根可恢复，sequence/constraint篡改被拒，不同TMPDIR竞争仍被拒。
+- 主控完整 Django 迁移库复跑又发现正常 dump/restore 的物理 attnum、CHECK ARRAY cast 改写会产生假差异。改用逻辑列顺序与受限 builtin varchar字面量数组规范后，真实应用库恢复通过。
+- 随后独立复审抓出规范化器可能修改 SQL 字符串值、把不同 CHECK 判成相同的 P2。新增 SQL lexer 跳过单/双引号、E-string、dollarquote与注释，保持字面量原文；精确反例已加回归，待独立复验确认。
+- 此次审查总共发现并跟进7项P2（含新增规范化器问题）；不隐藏中间失败，不拿旧测试结果替代最终head。
+- 初版 head 5221a1e 两种后端全仓均跑过 928 项；SQLite 15 项 PG专项跳过，隔离 PostgreSQL **928 项全过无跳过**（24.984秒）。这只是第一轮 head 的证据，不作为第二轮最终结果。
+- 最终精确 head、专项/全仓计数与独立复审结论仍待补齐。
 
 ## 仍未验证（不得当作通过）
 

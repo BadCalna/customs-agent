@@ -225,6 +225,34 @@ class NginxAndIgnoreTests(unittest.TestCase):
         self.assertIn("./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro",
                       read(DEPLOY / "docker-compose.yml"))
 
+    def test_readme_activates_tls_config_and_preserves_static_volume(self):
+        guide = read(DEPLOY / "README.md")
+        tls = guide.split("## 7. 域名与 HTTPS", 1)[1].split("## 8.", 1)[0]
+        self.assertIn("./nginx/https.conf:/etc/nginx/conf.d/default.conf:ro", tls)
+        self.assertIn("static:/usr/share/nginx/static:ro", tls)
+        self.assertIn("必须替换", tls)
+        self.assertIn("--force-recreate app web", tls)
+
+    def test_readme_old_volume_permissions_and_disaster_db_bootstrap(self):
+        guide = read(DEPLOY / "README.md")
+        upgrade = guide.split("### 8.1 升级", 1)[1].split("### 8.2", 1)[0]
+        for command in ("--user 0", "chown 0:0 /srv/customs", "chmod 0755 /srv/customs",
+                        "chown 10001:10001 /srv/customs/files /srv/customs/restores"):
+            self.assertIn(command, upgrade)
+        recovery = guide.split("### 9.4 恢复到独立新环境", 1)[1].split("## 10.", 1)[0]
+        self.assertLess(recovery.index("up -d --wait db"), recovery.index("scripts/operations/restore.sh"))
+        self.assertIn("--no-deps app", recovery)
+        self.assertIn("run --rm --no-deps app python manage.py collectstatic --noinput", recovery)
+        self.assertLess(recovery.index("collectstatic --noinput"), recovery.index("up -d --no-deps web"))
+        self.assertNotIn("python manage.py migrate", recovery)
+        self.assertNotIn("up -d --build", recovery)
+
+    def test_documented_compose_commands_use_explicit_env_file(self):
+        guide = read(DEPLOY / "README.md")
+        for line in guide.splitlines():
+            if "docker compose -f deploy/docker-compose.yml" in line:
+                self.assertIn("--env-file deploy/.env", line)
+
     def test_dockerignore_secret_paths_at_any_depth_and_examples(self):
         text = read(REPO_ROOT / ".dockerignore")
         for prefix in ("", "deploy/", "nested/deeper/"):

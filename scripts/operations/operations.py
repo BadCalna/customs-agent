@@ -173,7 +173,7 @@ class Runner:
         key = hashlib.sha256(json.dumps([self.mode, self.deployment if self.mode == "compose" else
                                         [self.env.get("CUSTOMS_PG_HOST", "127.0.0.1"), self.env.get("CUSTOMS_PG_PORT", "5432")]],
                                        sort_keys=True).encode()).hexdigest()
-        lockdir = Path(os.environ.get("TMPDIR", "/tmp")) / ("customs-operations-" + str(os.getuid()))
+        lockdir = Path("/tmp") / ("customs-operations-" + str(os.getuid()))
         lockdir.mkdir(mode=0o700, exist_ok=True)
         if lockdir.is_symlink() or lockdir.stat().st_uid != os.getuid() or lockdir.stat().st_mode & 0o077:
             raise ValueError("不安全的锁目录")
@@ -189,8 +189,8 @@ class Runner:
 
     def counts(self, db, files):
         payload = validate(json.loads(self.app("table_counts.py", ["--files-root", str(files)], target_db=db, target_files=files)))
-        if "table_sha256" not in payload:
-            raise ValueError("清单缺少逐行数据库内容指纹")
+        if any(key not in payload for key in ("table_sha256", "database_schema", "sequences")):
+            raise ValueError("清单缺少逐行数据库内容指纹/schema/sequence 状态")
         oid = self.oid(db)
         if payload["db_vendor"] != "postgresql" or payload["db_name"] != db or oid is None or payload.get("database_oid") != oid:
             raise ValueError("实际连接的数据库身份不是请求目标")
@@ -267,8 +267,8 @@ class Runner:
             if path.is_symlink() or not path.is_file() or sha256_file(path) != digest:
                 raise ValueError("备份清单不一致: " + name)
         expected = load(directory / "counts.json")
-        if "table_sha256" not in expected or not expected.get("file_identity"):
-            raise ValueError("新版备份必须包含逐行内容指纹与文件根身份，禁止静默降为行数校验")
+        if any(key not in expected for key in ("table_sha256", "database_schema", "sequences")) or not expected.get("file_identity"):
+            raise ValueError("新版备份必须包含逐行内容指纹/schema/sequence 与文件根身份，禁止静默降为行数校验")
         return directory
 
     def restore(self, directory, db=None, files=None, preserve_failure=False):

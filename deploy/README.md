@@ -128,6 +128,9 @@ git check-ignore -v deploy/.env deploy/backups/probe/db.dump deploy/.state/probe
 
 ## 4. 首次启动
 
+全部运维/启动命令统一显式 `--env-file deploy/.env`，避免仓库根开发 `.env` 成为 Compose 插值源。shell 中已导出的同名变量仍有更高优先级：运行前应清理意外的 `CUSTOMS_*` 导出值，核对实际配置但不要把含密钥的 config 输出粘到工单。
+
+
 镜像只授权 UID 10001 写入 `/srv/customs/files`、`/srv/customs/restores`、`/app/staticfiles`，代码与卷根保持 root 所有。**命名卷只有首次创建才继承镜像目录**：已有旧卷升级前须由运维检查并预建 `/srv/customs/restores`（属主 10001:10001），不能假定重建镜像会自动修正旧卷权限。自定义文件根也须位于持久卷的严格子目录、预建并授权；不能把文件根设置为卷根。
 
 ```bash
@@ -137,10 +140,10 @@ cd /srv/customs-agent
 docker compose -f deploy/docker-compose.yml --env-file deploy/.env config >/dev/null && echo "compose 配置 OK"
 
 # 4.2 构建并启动（首次会拉镜像 + 装依赖，5～15 分钟）
-docker compose -f deploy/docker-compose.yml up -d --build
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --build
 
 # 4.3 看启动顺序是否按预期：db 健康 → migrate 跑完 → app 健康 → web 起来
-docker compose -f deploy/docker-compose.yml ps
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env ps
 ```
 
 启动后 `ps` 里应看到 `db`(healthy)、`app`(healthy)、`web`(healthy)，`migrate` 状态是 `exited (0)`——
@@ -148,7 +151,7 @@ docker compose -f deploy/docker-compose.yml ps
 
 ```bash
 # 4.4 迁移是否真的执行过
-docker compose -f deploy/docker-compose.yml logs migrate | tail -20
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env logs migrate | tail -20
 ```
 
 ---
@@ -184,15 +187,15 @@ curl -sS -o /dev/null -w '%{http_code}\n' "$BASE/workbench/"      # 期望 404
 
 ```bash
 # 6.1 建管理员（交互式，密码自己输入，不要写进任何文件）
-docker compose -f deploy/docker-compose.yml run --rm app python manage.py createsuperuser
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env run --rm app python manage.py createsuperuser
 
 # 6.2 需要演示任务结构时再建演示数据（可选）
-docker compose -f deploy/docker-compose.yml run --rm app python manage.py seed_demo
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env run --rm app python manage.py seed_demo
 
 # 6.3 立即改掉演示账号的密码（每个账号一次），用强口令
-docker compose -f deploy/docker-compose.yml run --rm app python manage.py changepassword supplier_a
-docker compose -f deploy/docker-compose.yml run --rm app python manage.py changepassword operator_a
-docker compose -f deploy/docker-compose.yml run --rm app python manage.py changepassword expert
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env run --rm app python manage.py changepassword supplier_a
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env run --rm app python manage.py changepassword operator_a
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env run --rm app python manage.py changepassword expert
 ```
 
 给测试人员的规矩（建议直接写进通知）：
@@ -214,8 +217,11 @@ docker compose -f deploy/docker-compose.yml run --rm app python manage.py change
    ```yaml
    ports: ["${CUSTOMS_HTTPS_PORT:-443}:443"]  # 保留原有 HTTP 端口映射与卷，新增此项
    volumes:
+     - static:/usr/share/nginx/static:ro
      - ./certs:/etc/nginx/certs:ro
+     - ./nginx/https.conf:/etc/nginx/conf.d/default.conf:ro
    ```
+   **必须替换**原来的 `./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro` 挂载为 `https.conf`；不能只复制文件后仍挂 HTTP 配置，也不要同时挂两份到同一个目标。保留 static 卷和 HTTP 端口映射，另加 HTTPS 443 映射。
 4. `deploy/.env` 里设置：
    ```ini
    CUSTOMS_HTTPS=1
@@ -223,7 +229,7 @@ docker compose -f deploy/docker-compose.yml run --rm app python manage.py change
    CUSTOMS_ALLOWED_HOSTS=test.example.com
    ```
 5. 修改环境变量后重建 **app 与 web**（只重建 web 不会让 Django 重新读环境变量）：
-   `docker compose -f deploy/docker-compose.yml up -d --no-deps --force-recreate app web`。
+   `docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --no-deps --force-recreate app web`。
    用 `BASE=https://test.example.com` 重新执行第 5 节；HTTP `/nginx-health` 仍保持 200。
 
 **CSRF 常见坑**：`CUSTOMS_CSRF_TRUSTED_ORIGINS` 必须与浏览器地址栏的协议 + 域名完全一致
@@ -234,7 +240,7 @@ docker compose -f deploy/docker-compose.yml run --rm app python manage.py change
 ## 8. 日常操作
 
 ```bash
-DC="docker compose -f deploy/docker-compose.yml"
+DC="docker compose -f deploy/docker-compose.yml --env-file deploy/.env"
 cd /srv/customs-agent
 
 $DC ps                      # 状态
@@ -248,6 +254,25 @@ $DC down -v                 # 连卷一起删 —— 会丢数据，只在确认
 
 ### 8.1 升级（按顺序做，别跳）
 
+若从 PR #24 旧镜像升级，其 files 卷根曾整体授予 app。重建镜像不会更改旧卷元数据。**仅首次升级**先确认没有写入者、挂载的确是本部署 files 卷，再执行以下精确目录权限迁移；禁止递归 chown 全卷，避免破坏备份恢复证据：
+
+```bash
+# 已先完成备份并确认可恢复，再停写；启用队列时也停止worker。
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env stop app web
+# --no-deps 不拉起业务；只有这个受控迁移步骤用root。
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env run --rm --no-deps --user 0 app sh -eu -c '
+  test ! -L /srv/customs
+  test ! -L /srv/customs/files
+  test ! -L /srv/customs/restores
+  mkdir -p /srv/customs/files /srv/customs/restores
+  chown 0:0 /srv/customs
+  chmod 0755 /srv/customs
+  chown 10001:10001 /srv/customs/files /srv/customs/restores
+  chmod 0700 /srv/customs/files /srv/customs/restores
+'
+# 上述步骤不在本机无Docker环境实跑；必须在目标环境验证。
+```
+
 ```bash
 cd /srv/customs-agent
 
@@ -258,10 +283,10 @@ scripts/operations/backup.sh --label before-upgrade
 git fetch origin && git checkout main && git pull --ff-only
 
 # 3) 重新构建并滚动重启（migrate 会自动先跑，app 等它成功后启动）
-docker compose -f deploy/docker-compose.yml up -d --build
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --build
 
 # 4) 按第 5 节复检；再确认本次升级是否新增迁移
-docker compose -f deploy/docker-compose.yml logs migrate | tail -20
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env logs migrate | tail -20
 ```
 
 ### 8.2 回退（代码回退 + 数据回退，两件事分开）
@@ -271,7 +296,7 @@ docker compose -f deploy/docker-compose.yml logs migrate | tail -20
 ```bash
 cd /srv/customs-agent
 git checkout <上一个已知good的提交或标签>
-docker compose -f deploy/docker-compose.yml up -d --build
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --build
 ```
 
 > 数据库里已经执行过的新迁移**不会**自动撤销。Django 容忍“库里有代码里没有的迁移记录”，
@@ -281,7 +306,7 @@ docker compose -f deploy/docker-compose.yml up -d --build
 
 ```bash
 # 1) 停写
-docker compose -f deploy/docker-compose.yml stop app web
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env stop app web
 # P13 启用后还须停止所有 worker/其他外部写入者；本轮不代替业务侧停写协调。
 
 # 2) 把升级前的备份恢复到一个新库 + 新目录（脚本拒绝覆盖已存在的目标）
@@ -296,7 +321,7 @@ scripts/operations/verify_restore.sh deploy/backups/<那个备份> \
 #    CUSTOMS_PG_NAME=customs_agent_restore_20261117xxxxxx
 #    CUSTOMS_FILE_ROOT=/srv/customs/restores/restore-20261117xxxxxx
 #    改完重建 app（不要动 db 容器）
-docker compose -f deploy/docker-compose.yml up -d --no-deps --force-recreate app web
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --no-deps --force-recreate app web
 # 不要重建 migrate/db，不要自动把新代码迁移施加到刚恢复的旧库；代码版本必须与备份兼容。
 ```
 
@@ -352,13 +377,22 @@ scripts/operations/drill.sh --keep
 ### 9.4 恢复到独立新环境（换机器 / 换服务器）
 
 ```bash
-# 新服务器上：装 Docker、克隆代码、写 deploy/.env（同第 2、3 节）
-scripts/operations/backup.sh ...            # 老环境先备份
-# 把整个备份目录拷到新服务器（scp/对象存储都可以），然后：
+# 新服务器上：装 Docker、Python>=3.12、克隆代码、写 deploy/.env（同第 2、3 节）
+# 先构建应用镜像，但不启动app/web，不要先执行migrate修改恢复库。
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env build app
+# 运维脚本会exec db，必须先启动数据库并等待健康（Compose>=2.20）。
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --wait db
+# 用一次性容器按8.1的精确目录步骤确认files/restores已在持久卷中初始化且UID10001可写。
+# 把老环境完整备份目录拷到新服务器（含COMPLETE、manifest等），然后：
 scripts/operations/restore.sh /path/to/backup-dir
-scripts/operations/verify_restore.sh /path/to/backup-dir --target-db ... --target-files ...
-# 改 deploy/.env 指向恢复出来的库/目录，up -d，再跑第 5 节 + 抽查一条业务数据：
-#   任务列表 → V1/V2 → 商品行 → 附图能打开 → 提交快照 → 专家决定 → 历史日志
+scripts/operations/verify_restore.sh /path/to/backup-dir --target-db ... --target-files ... --state-file ...
+# 校验通过且代码与备份结构兼容后，改deploy/.env指向恢复库/目录。
+# 只收集静态文件，不执行migrate；新机static空卷否则管理后台样式会404。
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env run --rm --no-deps app python manage.py collectstatic --noinput
+# 无migrate健康前置的灾备启动，显式不要重跑migrate/db：
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --no-deps app
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --no-deps web
+# app/web健康后，再跑第5节 + 任务→版本→附件→提交快照→专家决定→历史日志抽查。
 ```
 
 ---

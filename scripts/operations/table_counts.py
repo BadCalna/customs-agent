@@ -13,6 +13,7 @@ from decimal import Decimal
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import sys
 from uuid import UUID
@@ -57,9 +58,17 @@ def database_inventory():
     from django.db import connection
     counts, fingerprints = {}, {}
     with connection.cursor() as cursor:
-        tables = sorted(set(connection.introspection.table_names(cursor)) - SKIP_TABLES)
+        if connection.vendor == "postgresql":
+            cursor.execute("""SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+                WHERE n.nspname='public' AND c.relkind IN ('r','p') ORDER BY c.relname""")
+            tables = [row[0] for row in cursor.fetchall() if row[0] not in SKIP_TABLES]
+        else:
+            tables = sorted(set(connection.introspection.table_names(cursor)) - SKIP_TABLES)
         for table in tables:
-            cursor.execute(f"SELECT * FROM {connection.ops.quote_name(table)}")
+            qualified = connection.ops.quote_name(table)
+            if connection.vendor == "postgresql":
+                qualified = '"public".' + qualified
+            cursor.execute(f"SELECT * FROM {qualified}")
             columns = [column[0] for column in cursor.description]
             rows = []
             while True:
@@ -79,6 +88,137 @@ def database_inventory():
         else:
             name = str(connection.settings_dict["NAME"])
     return counts, fingerprints, str(name), oid
+
+
+def normalize_pg_definition(definition):
+    """Normalize only PG dump's known varchar-literal ARRAY -> text rewrite.
+
+    varchar WITHOUT typmod to text is lossless. Keep all casts elsewhere,
+    including numeric casts, bounded varchar and business expressions.
+    """
+    quoted = r"'(?:[^']|'')*'"
+    literal = quoted + r"::character varying"
+    pattern = re.compile(rf"ARRAY\[(?P<items>{literal}(?:::\btext\b)?(?:, {literal}(?:::\btext\b)?)*)\](?P<outer>::text\[\])?")
+    item_pattern = re.compile(rf"(?P<quoted>{quoted})::character varying(?P<text>::text)?")
+    output, i = [], 0
+    while i < len(definition):
+        start = i
+        char = definition[i]
+        if definition.startswith("--", i):
+            end = definition.find("\n", i + 2)
+            i = len(definition) if end < 0 else end
+        elif definition.startswith("/*", i):
+            i, depth = i + 2, 1
+            while i < len(definition) and depth:
+                if definition.startswith("/*", i):
+                    depth, i = depth + 1, i + 2
+                elif definition.startswith("*/", i):
+                    depth, i = depth - 1, i + 2
+                else:
+                    i += 1
+        elif char in ("'", '"'):
+            escape = char == "'" and i > 0 and definition[i - 1] in "eE" and (i < 2 or not (definition[i - 2].isalnum() or definition[i - 2] in "_$"))
+            i += 1
+            while i < len(definition):
+                if escape and definition[i] == "\\":
+                    i += 2
+                elif definition[i] == char:
+                    if i + 1 < len(definition) and definition[i + 1] == char:
+                        i += 2
+                    else:
+                        i += 1
+                        break
+                else:
+                    i += 1
+        elif char == "$" and (tag := re.match(r"\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$", definition[i:])):
+            delimiter = tag.group(0)
+            end = definition.find(delimiter, i + len(delimiter))
+            i = len(definition) if end < 0 else end + len(delimiter)
+        else:
+            # Only a code-token ARRAY start can match. Never scan its literals
+            # again, or rewrite cast-looking text inside those literals.
+            match = pattern.match(definition, i) if (i == 0 or not (definition[i - 1].isalnum() or definition[i - 1] in "_$")) else None
+            if match:
+                items = list(item_pattern.finditer(match.group("items")))
+                if match.group("outer") or any(item.group("text") for item in items):
+                    output.append("ARRAY[" + ", ".join(item.group("quoted") + "::text" for item in items) + "]")
+                else:
+                    output.append(match.group(0))
+                i = match.end()
+                continue
+            i += 1
+        output.append(definition[start:i])
+    return "".join(output)
+
+
+def postgres_metadata(connection):
+    """Portable logical definitions/state, never OIDs, owner or database name.
+
+    Scope: user relations, columns/defaults/types/nullability/identity, constraints,
+    indexes and sequence definitions/ownership/state. Not a role/ACL/extension or
+    stored-procedure body audit. Session table schema is included (rows aren't).
+    """
+    schema = {}
+    namespace = "n.nspname NOT IN ('pg_catalog','information_schema') AND n.nspname !~ '^pg_toast' AND n.nspname !~ '^pg_temp'"
+    queries = {
+        "relations": f"""SELECT n.nspname,c.relname,c.relkind::text,
+            CASE WHEN c.relkind IN ('v','m') THEN pg_get_viewdef(c.oid,true) ELSE NULL END
+            FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+            WHERE {namespace} AND c.relkind IN ('r','p','v','m','f') ORDER BY 1,2""",
+        "columns": f"""SELECT n.nspname,c.relname,a.attnum,a.attname,
+            format_type(a.atttypid,a.atttypmod),a.attnotnull,a.attidentity::text,a.attgenerated::text,
+            pg_get_expr(d.adbin,d.adrelid),coll.collname
+            FROM pg_attribute a JOIN pg_class c ON c.oid=a.attrelid
+            JOIN pg_namespace n ON n.oid=c.relnamespace
+            LEFT JOIN pg_attrdef d ON d.adrelid=c.oid AND d.adnum=a.attnum
+            LEFT JOIN pg_collation coll ON coll.oid=a.attcollation
+            WHERE {namespace} AND c.relkind IN ('r','p','v','m','f') AND a.attnum>0 AND NOT a.attisdropped
+            ORDER BY 1,2,3""",
+        "constraints": f"""SELECT n.nspname,c.relname,k.conname,k.contype::text,
+            pg_get_constraintdef(k.oid,true),k.convalidated,k.condeferrable,k.condeferred
+            FROM pg_constraint k JOIN pg_class c ON c.oid=k.conrelid
+            JOIN pg_namespace n ON n.oid=c.relnamespace WHERE {namespace} ORDER BY 1,2,3""",
+        "indexes": f"""SELECT n.nspname,c.relname,ic.relname,pg_get_indexdef(i.indexrelid),
+            i.indisvalid,i.indisready
+            FROM pg_index i JOIN pg_class c ON c.oid=i.indrelid
+            JOIN pg_class ic ON ic.oid=i.indexrelid JOIN pg_namespace n ON n.oid=c.relnamespace
+            WHERE {namespace} ORDER BY 1,2,3""",
+    }
+    sequences = {}
+    with connection.cursor() as cursor:
+        cursor.execute(f"""SELECT n.nspname,c.relname FROM pg_class c
+            JOIN pg_namespace n ON n.oid=c.relnamespace
+            WHERE {namespace} AND n.nspname <> 'public' AND c.relkind IN ('r','p','v','m','f','S')""")
+        unsupported = cursor.fetchall()
+        if unsupported:
+            raise ValueError(f"暂不支持 public 以外的用户关系，拒绝不完整验收: {unsupported}")
+        for category, sql in queries.items():
+            cursor.execute(sql)
+            schema[category] = [list(row) for row in cursor.fetchall()]
+            if category == "columns":
+                # Physical attnum gaps from dropped columns are not logical schema.
+                schema[category] = [row[:2] + [position] + row[3:] for position, row in enumerate(schema[category])]
+            elif category == "constraints":
+                for row in schema[category]:
+                    row[4] = normalize_pg_definition(row[4])
+        cursor.execute(f"""SELECT n.nspname,c.relname,format_type(s.seqtypid,NULL),s.seqstart,
+            s.seqincrement,s.seqmax,s.seqmin,s.seqcache,s.seqcycle,tn.nspname,t.relname,a.attname
+            FROM pg_sequence s JOIN pg_class c ON c.oid=s.seqrelid
+            JOIN pg_namespace n ON n.oid=c.relnamespace
+            LEFT JOIN pg_depend dep ON dep.classid='pg_class'::regclass AND dep.objid=c.oid
+              AND dep.refclassid='pg_class'::regclass AND dep.deptype IN ('a','i')
+            LEFT JOIN pg_class t ON t.oid=dep.refobjid
+            LEFT JOIN pg_namespace tn ON tn.oid=t.relnamespace
+            LEFT JOIN pg_attribute a ON a.attrelid=t.oid AND a.attnum=dep.refobjsubid
+            WHERE {namespace} ORDER BY 1,2""")
+        definitions = cursor.fetchall()
+        for row in definitions:
+            namespace_name, name, *definition = row
+            qualified = connection.ops.quote_name(namespace_name) + "." + connection.ops.quote_name(name)
+            cursor.execute(f"SELECT last_value,is_called FROM {qualified}")
+            last_value, is_called = cursor.fetchone()
+            sequences[qualified] = {"definition": list(definition), "last_value": last_value, "is_called": is_called}
+    return schema, sequences
 
 
 def table_counts():
@@ -116,6 +256,8 @@ def main(argv=None):
     payload = {"generated_at": datetime.now(timezone.utc).isoformat(),
                "db_vendor": connection.vendor, "db_name": db_name, "database_oid": oid,
                "tables": counts, "table_sha256": fingerprints}
+    if connection.vendor == "postgresql":
+        payload["database_schema"], payload["sequences"] = postgres_metadata(connection)
     if args.files_root:
         root = Path(args.files_root).resolve()
         if root != Path(settings.CUSTOMS_FILE_ROOT).resolve():

@@ -23,9 +23,13 @@ def related(a, b):
 
 def validate(root, target=None, base=None):
     root = canonical(root)
-    if base is not None and canonical(base) not in root.parents:
-        raise ValueError("实际文件根不在持久卷/隔离边界内")
-    if not root.is_dir() or root == Path("/"):
+    if base is not None:
+        boundary = canonical(base)
+        if not boundary.is_dir() or boundary not in root.parents:
+            raise ValueError("持久卷/隔离边界不存在或实际文件根越界")
+    # A disaster may have removed production originals. Only source operations
+    # need them; target isolation checks still protect their canonical pathname.
+    if root == Path("/") or (target is None and not root.is_dir()):
         raise ValueError(f"文件根目录不存在或不安全: {root}")
     if target is None:
         return root, None

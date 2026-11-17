@@ -27,6 +27,24 @@ def validate(payload):
     if hashes is not None and (not isinstance(hashes, dict) or set(hashes) != set(tables)
                               or any(not digest(v) for v in hashes.values())):
         raise ValueError("无效 table_sha256")
+    schema = payload.get("database_schema")
+    if schema is not None:
+        if not isinstance(schema, dict) or set(schema) != {"relations", "columns", "constraints", "indexes"}:
+            raise ValueError("无效 database_schema")
+        widths = {"relations": 4, "columns": 10, "constraints": 8, "indexes": 6}
+        if any(not isinstance(rows, list) or any(not isinstance(row, list) or len(row) != widths[key] for row in rows)
+               for key, rows in schema.items()):
+            raise ValueError("无效 schema 定义条目")
+    sequences = payload.get("sequences")
+    if sequences is not None:
+        if not isinstance(sequences, dict):
+            raise ValueError("无效 sequences")
+        for name, seq in sequences.items():
+            if (not isinstance(name, str) or not name or not isinstance(seq, dict)
+                    or set(seq) != {"definition", "last_value", "is_called"}
+                    or type(seq["last_value"]) is not int or type(seq["is_called"]) is not bool
+                    or not isinstance(seq["definition"], list) or len(seq["definition"]) != 10):
+                raise ValueError("无效 sequence 定义/状态")
     files = payload.get("files")
     if not isinstance(files, list):
         raise ValueError("缺少/无效 files")
@@ -79,6 +97,9 @@ def compare(expected, actual):
             problems.append("数据库逐行内容指纹不同")
     else:
         print("警告：此旧备份仅验证数据库行数，不证明字段内容完整一致")
+    for key, description in (("database_schema", "数据库 schema 定义"), ("sequences", "数据库 sequence 定义/状态")):
+        if key in expected and expected[key] != actual.get(key):
+            problems.append(description + "不同")
     exp_files = {f["path"]: f for f in expected["files"]}
     act_files = {f["path"]: f for f in actual["files"]}
     if exp_files != act_files:

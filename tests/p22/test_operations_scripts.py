@@ -213,6 +213,71 @@ class TableCountsHelperTests(unittest.TestCase):
         self.assertEqual(payload["tables"]["django_migrations"], 1)
         self.assertIn("django_migrations", payload["table_sha256"])
 
+    def test_pg_check_normalization_is_narrow_and_preserves_meaningful_casts(self):
+        before = "CHECK (role::text = ANY (ARRAY['operator'::character varying, 'expert'::character varying]::text[]))"
+        after = "CHECK (role::text = ANY (ARRAY['operator'::character varying::text, 'expert'::character varying::text]))"
+        self.assertEqual(self.module.normalize_pg_definition(before), self.module.normalize_pg_definition(after))
+        for expression in ("CHECK (x::integer > 1)", "CHECK (role::text = ANY (ARRAY['x'::character varying(2)]::text[]))",
+                           "CHECK (x = ANY (ARRAY[1::integer,2::integer]))"):
+            self.assertEqual(self.module.normalize_pg_definition(expression), expression)
+        different = after.replace("expert", "admin")
+        self.assertNotEqual(self.module.normalize_pg_definition(before), self.module.normalize_pg_definition(different))
+
+    def test_pg_normalization_never_modifies_sql_literals_identifiers_or_comments(self):
+        normalize = self.module.normalize_pg_definition
+        attack_a = "CHECK(v<>'ARRAY[''''::character varying]::text[]'::text)"
+        attack_b = "CHECK(v<>'ARRAY[''''::text]'::text)"
+        self.assertEqual(normalize(attack_a), attack_a)
+        self.assertEqual(normalize(attack_b), attack_b)
+        self.assertNotEqual(normalize(attack_a), normalize(attack_b))
+        sql_array = "ARRAY['x'::character varying]::text[]"
+        for text in ("'" + sql_array.replace("'", "''") + "'", '$tag$' + sql_array + '$tag$',
+                     '$$' + sql_array + '$$', '"' + sql_array + '"', '-- ' + sql_array,
+                     '/* outer /* nested */ ' + sql_array + ' */',
+                     r"E'escaped\' ARRAY[''x''::character varying]::text[]'"):
+            self.assertEqual(normalize(text), text)
+        # Cast-looking bytes INSIDE a genuine ARRAY operand must also stay exact.
+        a = "ARRAY['literal ::character varying'::character varying]::text[]"
+        b = "ARRAY['literal ::character varying'::character varying::text]"
+        self.assertEqual(normalize(a), normalize(b))
+        self.assertIn("'literal ::character varying'", normalize(a))
+        self.assertEqual(normalize("/* " + sql_array + " */ " + sql_array),
+                         "/* " + sql_array + " */ ARRAY['x'::text]")
+
+    def test_postgres_catalog_captures_sequence_state_and_logical_schema(self):
+        from types import SimpleNamespace
+        class Cursor:
+            def __enter__(self): return self
+            def __exit__(self, *args): pass
+            def execute(self, sql): self.sql = sql
+            def fetchall(self):
+                if "n.nspname <> 'public'" in self.sql: return []
+                if "FROM pg_sequence" in self.sql:
+                    return [("public", "business_id_seq", "integer", 1, 1, 2147483647, 1, 1, False, "public", "business", "id")]
+                if "FROM pg_index" in self.sql:
+                    return [("public", "business", "business_pkey", "CREATE UNIQUE INDEX business_pkey ON public.business USING btree (id)", True, True)]
+                return []
+            def fetchone(self):
+                self_test.assertIn('SELECT last_value,is_called FROM "public"."business_id_seq"', self.sql)
+                return (1, False)
+        self_test = self
+        connection = SimpleNamespace(cursor=Cursor, ops=SimpleNamespace(quote_name=lambda s: '"' + s.replace('"','""') + '"'))
+        schema, sequences = self.module.postgres_metadata(connection)
+        self.assertEqual(sequences['"public"."business_id_seq"']["is_called"], False)
+        self.assertEqual(sequences['"public"."business_id_seq"']["last_value"], 1)
+        self.assertEqual(len(schema["indexes"]), 1)
+        self.assertNotIn("oid", json.dumps(schema).lower())
+
+    def test_postgres_catalog_fails_closed_on_other_user_schema(self):
+        from types import SimpleNamespace
+        from unittest.mock import MagicMock
+        cursor = MagicMock()
+        cursor.fetchall.return_value = [("private_schema", "unverified_table")]
+        connection = SimpleNamespace(cursor=MagicMock())
+        connection.cursor.return_value.__enter__.return_value = cursor
+        with self.assertRaisesRegex(ValueError, "public"):
+            self.module.postgres_metadata(connection)
+
     def test_staging_directory_is_excluded(self):
         (self.root / "incoming").mkdir()
         (self.root / "incoming" / "half.bin").write_bytes(b"partial")
