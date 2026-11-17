@@ -8,14 +8,77 @@ import {renderCommodityList} from './components/commodity-list.js';
 import {renderCommodityCard} from './components/commodity-card.js';
 import {createReviewActions} from './components/review-actions.js';
 
+/** Bind P11 to immutable review scope; browsing a commodity never replaces an expert draft. */
+export function createWorkbenchReview({host, client, getContext, getUser, getSession}) {
+  let panel=null, scopeKey='', dataKey='';
+  function clear() {panel?.destroy();panel=null;scopeKey=dataKey='';host.replaceChildren();}
+  function binding(s, role) {
+    if (!s.task || s.versionId!==s.task.current_version_id || !['operator','expert'].includes(role)) return null;
+    const version=s.task.versions.find(v=>v.version_id===s.versionId);
+    let submission=null, items=[];
+    if (role==='expert') {
+      submission=s.history?.versions.find(v=>v.version_id===s.versionId)?.submissions.find(x=>x.submission_id===s.run?.submission_id);
+      if (!submission || submission.status!=='pending' || s.run?.kind!=='expert_check' || !s.run.is_current) return null;
+      if (s.loading) return {notice:'正在读取本版本商品信息，完成后显示整批审核表单。'};
+      const byId=new Map(s.items.map(item=>[item.item_id,item]));
+      const rows=submission.items.map(row=>({row,item:byId.get(row.item_id)}));
+      if (!rows.length || byId.size!==s.items.length || rows.some(({item})=>
+        !item || item.task_id!==s.taskId || item.version_id!==s.versionId || !item.name?.trim() ||
+        !item.source_location?.sheet_name || !Number.isSafeInteger(item.source_location.row_number) || item.source_location.row_number<1)) {
+        return {notice:'提交中的部分商品缺少本版本品名或来源位置，请刷新任务详情后再审核。'};
+      }
+      // Enrich labels only. All submitted HS, confirmation IDs and revisions remain the snapshot's values.
+      submission={...submission,items:rows.map(({row,item})=>({...row,name:item.name,source_location:{...item.source_location}}))};
+      items=rows.map(({item})=>({...item,facts:{name:item.name}}));
+    } else {
+      if (s.error || !s.card) return null;
+      items=[s.card];
+    }
+    const scope=role==='expert' ? [role,s.taskId,s.versionId,submission.submission_id]
+      : [role,s.taskId,s.versionId,s.card.item_id,s.card.revision,s.task.revision,s.runId];
+    return {scope:JSON.stringify(scope),submissionId:submission?.submission_id,itemId:role==='operator'?s.card.item_id:null,
+      data:{task:{...s.task,allowed_actions:s.task.allowed_actions.filter(a=>role==='operator'?a!=='submission.create':true)},
+        version,items,submission,expert_check:s.run?{run_id:s.run.run_id,status:s.run.status}:null}};
+  }
+  function render(s) {
+    const role=getUser()?.role, next=binding(s,role);
+    if (!next || next.notice) {
+      clear();if(next?.notice)host.innerHTML=`<p role="status">${esc(next.notice)}</p>`;return;
+    }
+    const signature=JSON.stringify(next.data), sessionScope=JSON.stringify([getSession(),next.scope]);
+    if (panel && sessionScope===scopeKey) {
+      // Data updates within the same submission preserve P11's draft. Commodity selection is absent here.
+      if (signature!==dataKey) {dataKey=signature;panel.update(next.data);}return;
+    }
+    clear();scopeKey=sessionScope;dataKey=signature;
+    const bound={taskId:s.taskId,versionId:s.versionId,itemId:next.itemId,submissionId:next.submissionId,
+      ctx:getContext(),ticket:getSession(),scope:next.scope};
+    let decisionAttempt=null;
+    function stillCurrent() {
+      const ctx=getContext();
+      return getSession()===bound.ticket && ctx===bound.ctx && binding(ctx.store.get(),getUser()?.role)?.scope===bound.scope;
+    }
+    panel=createReviewActions({role,data:next.data,api:{
+      confirm:payload=>client.confirmItem(bound.versionId,bound.itemId,payload),
+      submit:()=>Promise.reject(new Error('请使用本批次提交入口，避免只提交选中商品')),
+      decide:payload=>{
+        const signature=JSON.stringify(payload);if(decisionAttempt?.signature!==signature)decisionAttempt={signature,key:crypto.randomUUID()};
+        return client.decideSubmission(bound.submissionId,payload,decisionAttempt.key);
+      }},onChanged:()=>{if(stillCurrent())void bound.ctx.openTask(bound.taskId);},
+      onConflict:()=>{if(stillCurrent())return bound.ctx.openTask(bound.taskId);}});
+    panel.mount(host);
+  }
+  return {render,clear,destroy:clear};
+}
+
 export async function mountWorkbench(root) {
   const api = createClient({mode:'live'});
   let user = null, context = null, tasks = null, progress = null, exports = null, review = null;
-  let unsubscribe = null, alive = true, session = 0, runKey = '', cardKey = null, reviewKey = '', submitIntent = null, submitting = false;
+  let unsubscribe = null, alive = true, session = 0, runKey = '', cardKey = null, submitIntent = null, submitting = false;
   const $ = selector => root.querySelector(selector);
   function reset() {
     session++; unsubscribe?.(); tasks?.destroy(); progress?.destroy(); exports?.destroy(); context?.destroy(); review?.destroy();
-    context=tasks=progress=exports=review=null;unsubscribe=null;runKey='';cardKey=null;reviewKey='';submitIntent=null;submitting=false;
+    context=tasks=progress=exports=review=null;unsubscribe=null;runKey='';cardKey=null;submitIntent=null;submitting=false;
   }
   function gate(error = null) {
     reset(); user=null;
@@ -34,33 +97,7 @@ export async function mountWorkbench(root) {
     const ticket=session;
     try{return await value(...args);}catch(error){if(ticket===session)expire(error);throw error;}
   }:value;}});
-  function clearReview() {review?.destroy();review=null;reviewKey='';$('#wb-review')?.replaceChildren();}
-  function renderReview(s) {
-    const current=s.versionId===s.task?.current_version_id;
-    const selected=s.history?.versions.find(v=>v.version_id===s.versionId);
-    const submission=selected?.submissions.find(x=>x.submission_id===s.run?.submission_id);
-    const target=user?.role==='expert' ? submission?.submission_id : s.card?.item_id;
-    const key=JSON.stringify([s.taskId,s.versionId,target,s.card?.revision,s.task?.revision,s.runId,s.run?.is_current,!!s.error,user?.role]);
-    if(key===reviewKey)return;
-    clearReview();reviewKey=key;
-    if(!current || !s.task || s.error || !['operator','expert'].includes(user?.role))return;
-    if(user.role==='operator' && !s.card)return;
-    if(user.role==='expert' && (!submission || submission.status!=='pending' || s.run?.kind!=='expert_check' || !s.run.is_current))return;
-    // One selected item per confirmation adapter: P11 confirm payload deliberately omits item_id.
-    const bound={taskId:s.taskId,versionId:s.versionId,runId:s.runId,itemId:s.card?.item_id,submissionId:submission?.submission_id,ctx:context,ticket:session};
-    let decisionAttempt=null;
-    const stillCurrent=()=>session===bound.ticket && context===bound.ctx && context?.store.get().taskId===bound.taskId && context?.store.get().versionId===bound.versionId && context?.store.get().runId===bound.runId && (user?.role==='expert' || context?.store.get().itemId===bound.itemId);
-    review=createReviewActions({role:user.role, data:{task:{...s.task,allowed_actions:s.task.allowed_actions.filter(a=>user.role==='operator'?a!=='submission.create':true)},
-      version:s.task.versions.find(v=>v.version_id===s.versionId),items:s.card?[s.card]:[],submission,
-      expert_check:s.run ? {run_id:s.run.run_id,status:s.run.status} : null},api:{
-      confirm:payload=>client.confirmItem(bound.versionId,bound.itemId,payload),
-      submit:()=>Promise.reject(new Error('请使用本批次提交入口，避免只提交选中商品')),
-      decide:payload=>{
-        const signature=JSON.stringify(payload);if(decisionAttempt?.signature!==signature)decisionAttempt={signature,key:crypto.randomUUID()};
-        return client.decideSubmission(bound.submissionId,payload,decisionAttempt.key);
-      }},onChanged:()=>{if(stillCurrent())void context.openTask(bound.taskId);},onConflict:()=>{if(stillCurrent())return context.openTask(bound.taskId);}});
-    review.mount($('#wb-review'));
-  }
+  function clearReview() {review?.clear();}
   function render(s) {
     if(!alive||!user||!context)return;
     $('#wb-title').textContent=s.task?.title || (s.loading?'正在读取任务…':'选择左侧任务');
@@ -94,7 +131,7 @@ export async function mountWorkbench(root) {
     if(!s.card)$('#wb-source').textContent='';
     $('#wb-submit').hidden=user.role!=='operator';
     $('#wb-submit').disabled=submitting||s.loading||!!s.error||!s.items.length||s.versionId!==s.task?.current_version_id||!s.task.allowed_actions.includes('submission.create');
-    renderReview(s);
+    review.render(s);
   }
   async function submitBatch() {
     if(submitting||!context)return;
@@ -122,6 +159,7 @@ export async function mountWorkbench(root) {
       <div class="wb-goods"><section aria-label="本版本商品" id="wb-items"></section><section id="wb-card" tabindex="-1" aria-label="商品卡片"></section></div><p id="wb-source"></p>
       <button class="btn primary" id="wb-submit" hidden>提交本批次专家审核</button><p id="wb-write-note" role="status"></p><div id="wb-review"></div></section></main>`;
     context=createWorkbenchContext(client);
+    review=createWorkbenchReview({host:$('#wb-review'),client,getContext:()=>context,getUser:()=>user,getSession:()=>session});
     exports=createExportActions($('#wb-exports'),{client});
     progress=createRunProgress($('#wb-progress'),{client,onStateChange:p=>context?.acceptProgress(p),onSelectItem:async identity=>{
       const ctx=context;await ctx.selectItem(identity.item_id,identity);
