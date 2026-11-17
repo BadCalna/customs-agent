@@ -1686,6 +1686,8 @@ def validate_history_queries(
                         "diff_keys": candidate.diff_keys,
                         "key_attribute_conflict": candidate.key_attribute_conflict,
                         "version_status": candidate.version_status.value,
+                        "needs_review": candidate.needs_review,
+                        "blocking_issue_codes": candidate.blocking_issue_codes,
                         "reference_only": candidate.reference_only,
                     }
                     for candidate in result.candidates
@@ -1772,6 +1774,7 @@ def render_markdown_report(report: Mapping[str, Any]) -> str:
                     ("跨来源业务重复", totals.get("records_duplicate_business_content", 0)),
                     ("变化", totals.get("records_changed", 0)),
                     ("批内重复", totals.get("records_duplicate_within_batch", 0)),
+                    ("采集痕迹更新", totals.get("records_provenance_updated", 0)),
                     ("输出总记录", totals.get("records_total_in_output", 0)),
                     ("图片状态", totals.get("image_status", {})),
                 ],
@@ -1854,7 +1857,9 @@ def render_markdown_report(report: Mapping[str, Any]) -> str:
                             f"{row.get('source', {}).get('filename')}!{row.get('source', {}).get('sheet')}@{row.get('source', {}).get('row')}",
                             row.get("status"),
                             severity,
-                            "; ".join(str(issue.get("code")) for issue in issues),
+                            "; ".join(
+                                dict.fromkeys(str(issue.get("code")) for issue in issues)
+                            ),
                             ",".join(row.get("missing_fields", [])),
                         ),
                     )

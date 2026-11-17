@@ -707,6 +707,10 @@ class HistorySearchSource:
             )
 
         success_records = [record for record in snapshot.records if _is_success_record(record)]
+        review_in_snapshot = sum(1 for record in success_records if _needs_review(record))
+        success_summary = (
+            f"符合成功口径 {len(success_records)} 条，其中待核异常 {review_in_snapshot} 条"
+        )
         candidates = [
             candidate
             for record in success_records
@@ -722,7 +726,7 @@ class HistorySearchSource:
                 evidence_status=EvidenceStatus.NOT_FOUND,
                 reason=(
                     f"检索执行成功，未取得达到阈值 {self.min_score:.2f} 的历史参考记录"
-                    f"（扫描 {len(snapshot.records)} 条，其中明确成功 {len(success_records)} 条）；"
+                    f"（扫描 {len(snapshot.records)} 条，{success_summary}）；"
                     f"这是没查到，不是查询失败"
                 ),
                 query=prepared,
@@ -745,7 +749,7 @@ class HistorySearchSource:
             evidence_status=EvidenceStatus.OBTAINED,
             reason=(
                 f"检索到 {len(candidates)} 条历史参考记录"
-                f"（扫描 {len(snapshot.records)} 条，其中明确成功 {len(success_records)} 条）"
+                f"（扫描 {len(snapshot.records)} 条，{success_summary}）"
                 f"{gap_note}{review_note}；历史成功码仅作参考，不能作为当前归类结论"
             ),
             query=prepared,

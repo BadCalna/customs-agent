@@ -564,7 +564,7 @@ class SuccessOutcomeFilterTest(SimpleTestCase):
             HistoryQuery(name="不锈钢法兰盘")
         )
         self.assertIs(result.outcome, HistorySearchOutcome.NO_MATCH)
-        self.assertIn("明确成功 0 条", result.reason)
+        self.assertIn("符合成功口径 0 条", result.reason)
 
     def test_only_explicit_success_values_are_eligible(self):
         base = JsonHistoryStore(RECORDS_PATH).load().records[0].model_dump()
@@ -577,4 +577,4 @@ class SuccessOutcomeFilterTest(SimpleTestCase):
         )
         eligible = {c.record_id for c in result.candidates}
         self.assertEqual(eligible, {"SYN-approved", "SYN-passed", "SYN-放行", "SYN-通过"})
-        self.assertIn("明确成功 4 条", result.reason)
+        self.assertIn("符合成功口径 4 条", result.reason)
