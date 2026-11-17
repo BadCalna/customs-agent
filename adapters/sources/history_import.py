@@ -1342,7 +1342,7 @@ def import_history_templates(request: ImportRequest) -> ImportOutcome:
                             raise ValueError("同名图片已存在且内容不同，拒绝覆盖")
                         if not target.exists():
                             target.write_bytes(row_image.data)
-                        image_output_path = str(target.relative_to(request.out_dir))
+                        image_output_path = target.relative_to(request.out_dir).as_posix()
                     except (OSError, ValueError) as image_error:
                         image_copy_failures.append(
                             {

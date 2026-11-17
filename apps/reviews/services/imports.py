@@ -6,6 +6,7 @@
 import hashlib
 import logging
 from pathlib import Path
+from django.conf import settings
 
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
@@ -92,6 +93,8 @@ def upload(user, *, filename, data, key, task_id=None, expected_current_version_
     # 重试已登记的版本不受后来版本变化影响，但每次先校验归属。
     replay = idempotency.begin(user, ACTION, key, payload)
     if replay is not None:
+        if settings.EXECUTOR_MODE == "rq":
+            return queue_import(replay["import_id"], replay=True)
         return finish_import(replay["import_id"], replay=True)
     mapping = parse(data, filename)
     staged = files.stage_version_original(data, filename=filename)
@@ -129,6 +132,9 @@ def upload(user, *, filename, data, key, task_id=None, expected_current_version_
                 run = Run.objects.create(task=task, version=version, kind=Run.Kind.PRECHECK, status=Run.Status.QUEUED)
                 job = ImportJob.objects.create(version=version, precheck=run, sha256=digest, stage_token=staged.token)
                 job_id = str(job.pk)
+                if settings.EXECUTOR_MODE == "rq":
+                    from apps.runs.services import schedule_run
+                    schedule_run(run)
                 AuditEvent.objects.create(task=task, version=version, actor=user, action="version.created",
                                           details={"number": number, "sha256": digest, "import_id": job_id, "result_mode": "mock"})
                 idempotency.store(user, ACTION, key, payload, {"import_id": job_id})
@@ -136,10 +142,39 @@ def upload(user, *, filename, data, key, task_id=None, expected_current_version_
     finally:
         if not reserved:
             storage.discard_staged(files.storage_root(), staged.token)
+    if settings.EXECUTOR_MODE == "rq":
+        return import_response(ImportJob.objects.select_related("version__task").get(pk=job_id), replay=replay is not None)
     return finish_import(job_id, replay=replay is not None, mapping=mapping)
 
 
-def finish_import(job_id, *, replay=False, mapping=None):
+@transaction.atomic
+def queue_import(job_id, *, replay=False):
+    """Explicit retry of an exhausted import reuses its version and run."""
+    from apps.runs.models import RunWork
+    from apps.runs.services import register_run
+    from apps.runs.dispatch import safe_dispatch
+    initial = ImportJob.objects.select_related("version").get(pk=job_id)
+    Task.objects.select_for_update().get(pk=initial.version.task_id)
+    job = ImportJob.objects.select_for_update().select_related("version__task", "precheck").get(pk=job_id)
+    work = register_run(job.precheck)
+    work = RunWork.objects.select_for_update().get(pk=work.pk)
+    if job.status != "succeeded" and job.version.task.versions.filter(number__gt=job.version.number).exists():
+        raise ApiError(409, "stale_version", "旧版本导入不可覆盖当前版本")
+    if job.status == "failed" and work.state == "done":
+        AuditEvent.objects.create(task=job.version.task, version=job.version, actor=job.version.uploaded_by,
+            action="import.retried", details={"import_id": str(job.pk), "previous_error": job.error,
+                                             "previous_attempts": work.import_attempts})
+        work.state, work.import_attempts, work.last_error = "pending", 0, ""
+        work.available_at, work.dispatched_at, work.token, work.lease_until = timezone.now(), None, None, None
+        work.save()
+        job.status, job.error = "staged", {}
+        job.save(update_fields=["status", "error", "updated_at"])
+        Run.objects.filter(pk=job.precheck_id).update(status="queued", finished_at=None)
+    transaction.on_commit(lambda: safe_dispatch(str(job.precheck_id)))
+    return import_response(job, replay=replay)
+
+
+def finish_import(job_id, *, replay=False, mapping=None, defer_precheck=False):
     """系统入口。调用方负责授权；CLI 仅供本机恢复。锁序 Task -> ImportJob -> Run。"""
     job = ImportJob.objects.select_related("version__task", "precheck").get(pk=job_id)
     try:
@@ -181,12 +216,17 @@ def finish_import(job_id, *, replay=False, mapping=None):
                 Submission.objects.filter(task=task, status=Submission.Status.PENDING).exclude(version=version).update(status=Submission.Status.SUPERSEDED)
                 job.precheck.status = Run.Status.QUEUED
                 job.precheck.save(update_fields=["status"])
-                run = execute_precheck(version, triggered_by=version.uploaded_by, run=job.precheck)
+                if defer_precheck:
+                    run = job.precheck
+                    run.is_current = True
+                    run.save(update_fields=["is_current"])
+                else:
+                    run = execute_precheck(version, triggered_by=version.uploaded_by, run=job.precheck)
                 job.report = mapping.as_dict()
                 job.error = {}
                 job.status = ImportJob.Status.SUCCEEDED
                 job.save(update_fields=["report", "error", "status", "updated_at"])
-                task.stage = Task.Stage.AWAITING_CONFIRMATION
+                task.stage = Task.Stage.PRECHECKING if defer_precheck else Task.Stage.AWAITING_CONFIRMATION
                 task.save(update_fields=["stage", "updated_at"])
                 AuditEvent.objects.create(task=task, version=version, actor=version.uploaded_by, action="import.succeeded",
                                           details={"import_id": str(job.pk), "precheck_id": str(run.pk), "result_mode": "mock"})
@@ -228,6 +268,6 @@ def import_response(job, *, replay=False):
             "item_count": version.items.count(), "member_count": ItemMember.objects.filter(item__version=version).count(),
             "image_counts": {s: images.filter(status=s).count() for s in ItemImage.Status.values},
             "precheck_run_id": str(job.precheck_id), "precheck_status": Run.objects.get(pk=job.precheck_id).status,
-            "result_mode": "mock", "executor_mode": "inline",
+            "result_mode": "mock", "executor_mode": settings.EXECUTOR_MODE,
             "assignment_status": "claimed" if task.assignments.filter(role=Role.OPERATOR).exists() else "unclaimed",
             "original_download_url": f"/api/v1/files/{version.pk}", "idempotent_replay": replay}

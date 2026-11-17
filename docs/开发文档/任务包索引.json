@@ -634,7 +634,7 @@
         "更新：D4 执行状态、D6 worker 操作、D5 并发记录；回交：交接/P13.md。"
       ],
       "verification_command": "make test TASK=P13",
-      "status": "待开始"
+      "status": "本机模块自验通过，待评审/页面验收，见交接/P13.md；Linux/生产队列未验收"
     },
     {
       "id": "P14",

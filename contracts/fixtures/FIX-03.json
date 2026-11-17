@@ -3,7 +3,8 @@
     "allowed_actions": [
       "confirmation.write",
       "read",
-      "submission.create"
+      "submission.create",
+      "task.return"
     ],
     "business_confirmed_hs": {
       "source_id": null,
@@ -57,7 +58,7 @@
         "dispimg_id": "DISPIMG_8",
         "download_url": null,
         "error_message": "mock：DISPIMG 嵌入资源缺失",
-        "image_id": "6c8eb8b5-90d3-405c-933c-41018e2d91df",
+        "image_id": "4863de85-1c03-478a-bbfe-b37a290d7ff7",
         "source_cell": "H8",
         "source_sheet": "申报要素",
         "status": "read_failed"
@@ -72,11 +73,11 @@
         "suggested_role": "supplier"
       }
     ],
-    "item_id": "219e35bb-0959-4255-aee1-ea1f861c7af7",
+    "item_id": "2c5390e1-77eb-49ba-8dde-0aca4afd8360",
     "latest_expert_check": null,
-    "latest_run_id": "2aa163f3-c390-4a69-9c4a-e6162e1df3ac",
+    "latest_run_id": "252d68f5-c774-4ae6-887b-d6c50b561fe6",
     "precheck_suggested_hs": {
-      "source_id": "2aa163f3-c390-4a69-9c4a-e6162e1df3ac",
+      "source_id": "252d68f5-c774-4ae6-887b-d6c50b561fe6",
       "value": "8544422900"
     },
     "result_mode": "mock",
@@ -91,18 +92,19 @@
       "source_id": null,
       "value": null
     },
-    "task_id": "8c5aed88-fe80-4618-9997-82891376ad96",
+    "task_id": "403b3e26-e7bc-4b50-bd42-97a24a721ec9",
     "task_stage": "awaiting_confirmation",
-    "version_id": "d1051286-aecb-47e1-a614-1f53ed7aef65"
+    "version_id": "c48496bc-5e2a-4ab2-888a-b1342d95fb6e"
   },
-  "contract_version": "1.1.0",
+  "contract_version": "1.2.0",
   "notes": "read_failed 与 absent 分开，保留来源单元格与失败原因；related_cards 为确无图片的对照。",
   "related_cards": [
     {
       "allowed_actions": [
         "confirmation.write",
         "read",
-        "submission.create"
+        "submission.create",
+        "task.return"
       ],
       "business_confirmed_hs": {
         "source_id": null,
@@ -161,11 +163,11 @@
           "suggested_role": null
         }
       ],
-      "item_id": "8d537008-3a2b-4173-9abe-2de00e75f93a",
+      "item_id": "333b3b94-d0a1-4ce7-a5ba-6b6d2066a5fd",
       "latest_expert_check": null,
-      "latest_run_id": "2aa163f3-c390-4a69-9c4a-e6162e1df3ac",
+      "latest_run_id": "252d68f5-c774-4ae6-887b-d6c50b561fe6",
       "precheck_suggested_hs": {
-        "source_id": "2aa163f3-c390-4a69-9c4a-e6162e1df3ac",
+        "source_id": "252d68f5-c774-4ae6-887b-d6c50b561fe6",
         "value": "8544422900"
       },
       "result_mode": "mock",
@@ -180,9 +182,9 @@
         "source_id": null,
         "value": null
       },
-      "task_id": "8c5aed88-fe80-4618-9997-82891376ad96",
+      "task_id": "403b3e26-e7bc-4b50-bd42-97a24a721ec9",
       "task_stage": "awaiting_confirmation",
-      "version_id": "d1051286-aecb-47e1-a614-1f53ed7aef65"
+      "version_id": "c48496bc-5e2a-4ab2-888a-b1342d95fb6e"
     }
   ],
   "scenario": "FIX-03",

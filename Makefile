@@ -5,7 +5,7 @@ MANAGE := $(PYTHON) manage.py
 BIND ?= 127.0.0.1:8000
 export TASK
 
-.PHONY: setup migrate seed-demo seed-contracts contracts demo-components workbench dev check test test-contracts \
+.PHONY: setup migrate seed-demo seed-contracts contracts demo-components workbench dev check test test-contracts worker dispatcher \
         pg-init pg-start pg-stop pg-status db-backup db-copy check-postgres
 setup:
 	$(UV) sync --locked
@@ -40,6 +40,13 @@ test-contracts:
 
 dev:
 	$(MANAGE) runserver $(BIND)
+
+QUEUE ?= customs
+worker:
+	$(MANAGE) rqworker $(QUEUE)
+
+dispatcher:
+	$(MANAGE) dispatch_runs --watch
 
 workbench:
 	@echo "工作台独立演示入口：http://$(BIND)/workbench/（现有首页不变）"

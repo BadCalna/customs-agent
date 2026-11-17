@@ -47,7 +47,7 @@ class SchemaDriftTest(SimpleTestCase):
         self.assertEqual(json.loads(path.read_text()), current)
 
     def test_contract_version_constant(self):
-        self.assertEqual(CONTRACT_VERSION, "1.1.0")
+        self.assertEqual(CONTRACT_VERSION, "1.2.0")
 
 
 class EnumAlignmentTest(SimpleTestCase):

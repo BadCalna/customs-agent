@@ -16,7 +16,7 @@ def run_progress(run) -> RunProgress:
     return RunProgress(total=sum(counts.values()), **counts)
 
 
-def run_to_detail(run) -> RunDetail:
+def run_to_detail(run, user=None) -> RunDetail:
     items = []
     evidence: dict[str, EvidenceEntry] = {}
     for row in run.items.select_related("item").all():
@@ -31,11 +31,17 @@ def run_to_detail(run) -> RunDetail:
             evidence_status=result.get("evidence_status"),
             issues=result.get("issues", []),
             error_message=row.error_message,
-            attempts=int(result.get("attempts", 1)),
+            attempts=row.attempt_records.count() if result.get("origin_run_id") else int(result.get("attempts", 0 if row.status == "queued" else 1)),
+            origin_run_id=result.get("origin_run_id"),
+            attempt_history=[{"number": a.number, "status": a.status, "input_hash": a.input_hash,
+                "error_code": a.error_code, "started_at": iso(a.started_at), "finished_at": iso(a.finished_at)}
+                for a in row.attempt_records.all()],
         ))
         for entry in result.get("evidence", []):
             parsed = EvidenceEntry(**entry)
             evidence[parsed.evidence_id] = parsed
+    from .services import retry_capability
+    retry_ids = retry_capability(user, run)
     return RunDetail(
         run_id=str(run.pk),
         task_id=str(run.task_id),
@@ -44,6 +50,9 @@ def run_to_detail(run) -> RunDetail:
         kind=run.kind,
         status=run.status,
         is_current=run.is_current,
+        parent_run_id=str(run.parent_run_id) if run.parent_run_id else None,
+        retry_allowed=bool(retry_ids),
+        retry_item_ids=retry_ids,
         result_mode=result_mode(),
         progress=run_progress(run),
         items=items,

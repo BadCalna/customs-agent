@@ -39,7 +39,7 @@ function rowHtml(item, selected, retryEnabled, kind) {
     ${failed ? `<p class="p08-technical">技术失败：${esc(item.error_message || "服务端未提供错误原因")}</p>` :
       item.status === "succeeded" ? `<p class="p08-business">${esc(businessText)}</p>` : ""}
     ${(item.issues || []).map(i => `<p class="p08-issue">${esc(i.message)}${i.missing ? `；待补：${esc(i.missing)}` : ""}</p>`).join("")}
-    <small>已尝试 ${esc(item.attempts ?? "—")} 次${item.suggested_hs ? ` · ${suggestionLabel} ${esc(item.suggested_hs)}` : ""}</small></li>`;
+    <small>本轮已尝试 ${esc(item.attempts ?? "—")} 次${item.origin_run_id ? ' · 沿用前次结果' : ''}${item.suggested_hs ? ` · ${suggestionLabel} ${esc(item.suggested_hs)}` : ""}</small></li>`;
 }
 
 export function renderRunProgress(host, state, {retryConnected = false} = {}) {
@@ -96,7 +96,9 @@ export function createRunProgress(host, {client, onRetry = null, retryAllowed = 
       if (!alive || generation !== epoch || ticket !== request) return;
       if (!matches(run, context)) throw new Error("执行记录不属于所选任务或版本，已停止更新");
       const view = progressView(run);
-      state = {...state, run, loading: false, selected: state.selected.filter(id => view.failureIds.includes(id))};
+      state = {...state, run, loading: false,
+        retryAllowed: typeof run.retry_allowed === "boolean" ? run.retry_allowed : state.retryAllowed,
+        selected: state.selected.filter(id => view.failureIds.includes(id) && (!Array.isArray(run.retry_item_ids) || run.retry_item_ids.includes(id)))};
       draw();
       if (view.active && context.isVersionCurrent) timer = scheduler.setTimeout(() => { timer = null; void refresh(); }, Math.max(250, intervalMs));
     } catch (error) {

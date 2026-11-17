@@ -59,6 +59,7 @@ class TaskPage(Schema):
 
 
 class TaskDetail(TaskListEntry):
+    precheck_allowed: bool = False
     versions: list[VersionEntry] = Field(default_factory=list)
     current_submission_id: str | None = None
     current_submission_status: SubmissionStatus | None = None

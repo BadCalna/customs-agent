@@ -8,6 +8,7 @@ import uuid
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.utils import timezone
 
 from apps.model_guards import FixedInputModel, protect_from_direct_delete
 
@@ -23,7 +24,7 @@ def _related_or_none(obj, name):
 
 
 class Run(FixedInputModel):
-    fixed_input_fields = ("task", "version", "kind", "submission")
+    fixed_input_fields = ("task", "version", "kind", "submission", "parent_run")
 
     class Kind(models.TextChoices):
         PRECHECK = "precheck", "业务员预审"
@@ -57,6 +58,8 @@ class Run(FixedInputModel):
         related_name="triggered_runs", verbose_name="触发人",
         help_text="自动触发为空，手动重新预审/重试记录操作人。",
     )
+    parent_run = models.ForeignKey("self", on_delete=models.PROTECT, null=True, blank=True,
+                                   related_name="retry_runs", verbose_name="重试来源执行")
     created_at = models.DateTimeField("创建时间", auto_now_add=True)
     started_at = models.DateTimeField("开始时间", null=True, blank=True)
     finished_at = models.DateTimeField("结束时间", null=True, blank=True)
@@ -70,6 +73,10 @@ class Run(FixedInputModel):
         ]
 
     def clean(self):
+        parent = _related_or_none(self, "parent_run")
+        if parent and (parent.task_id != self.task_id or parent.version_id != self.version_id
+                       or parent.kind != self.kind or parent.submission_id != self.submission_id):
+            raise ValidationError("重试来源必须属于同任务、同版本、同类型和同提交。")
         version = _related_or_none(self, "version")
         if version is not None and self.task_id and version.task_id != self.task_id:
             raise ValidationError("分析执行的文件版本必须属于该任务，不能跨任务引用。")
@@ -146,3 +153,43 @@ class RunItem(FixedInputModel):
 # 随任务级联清理仍允许，避免整库/整任务清理完全不可用。
 for _model in (Run, RunItem):
     protect_from_direct_delete(_model)
+
+
+class RunWork(models.Model):
+    """事务内持久待运行凭据。Redis 只负责通知，数据库租约与 token 决定写入权。"""
+
+    run = models.OneToOneField(Run, on_delete=models.CASCADE, primary_key=True, related_name="work")
+    state = models.CharField(max_length=16, default="pending")
+    token = models.UUIDField(null=True, blank=True)
+    lease_until = models.DateTimeField(null=True, blank=True)
+    available_at = models.DateTimeField(default=timezone.now)
+    dispatched_at = models.DateTimeField(null=True, blank=True)
+    import_attempts = models.PositiveIntegerField(default=0)
+    last_error = models.CharField(max_length=200, blank=True, default="")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [models.Index(fields=["state", "available_at"], name="idx_work_state_due")]
+
+
+class RunAttempt(FixedInputModel):
+    """每次真正调用引擎的记录；失败、中断与过期输出分别保留。"""
+
+    fixed_input_fields = ("row", "number", "token")
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    row = models.ForeignKey(RunItem, on_delete=models.CASCADE, related_name="attempt_records")
+    number = models.PositiveIntegerField()
+    token = models.UUIDField()
+    status = models.CharField(max_length=16, default="running")
+    input_hash = models.CharField(max_length=64, blank=True)
+    result = models.JSONField(default=dict)
+    error_code = models.CharField(max_length=100, blank=True)
+    started_at = models.DateTimeField(auto_now_add=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta(FixedInputModel.Meta):
+        ordering = ["row_id", "number"]
+        constraints = [models.UniqueConstraint(fields=["row", "number"], name="uniq_row_attempt_number")]
+
+
+protect_from_direct_delete(RunAttempt)

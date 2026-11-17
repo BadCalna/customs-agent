@@ -14,7 +14,10 @@
       "type": "object"
     },
     "executor_mode": {
-      "const": "inline",
+      "enum": [
+        "inline",
+        "rq"
+      ],
       "title": "Executor Mode",
       "type": "string"
     },

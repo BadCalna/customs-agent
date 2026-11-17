@@ -272,11 +272,13 @@ def task_to_entry(user, task) -> TaskListEntry:
 
 
 def task_to_detail(user, task) -> TaskDetail:
+    from apps.runs.services import precheck_capability
     entry = task_to_entry(user, task)
     current_version = task.versions.order_by("-number").first()
     submission = task.submissions.filter(version=current_version).order_by("-created_at").first()
     return TaskDetail(
         **entry.model_dump(),
+        precheck_allowed=precheck_capability(user, task),
         versions=[_version_entry(v, current_version.pk if current_version else None) for v in task.versions.all()],
         current_submission_id=str(submission.pk) if submission else None,
         current_submission_status=submission.status if submission else None,

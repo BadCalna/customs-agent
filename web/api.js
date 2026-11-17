@@ -151,6 +151,16 @@ function createLiveAdapter(baseUrl) {
     getRun(runId) {
       return raw("GET", `/runs/${encodeURIComponent(runId)}`);
     },
+    async startPrecheck(versionId, payload, key) {
+      csrf = readCookie("csrftoken") || await ensureCsrf();
+      return raw("POST", `/versions/${encodeURIComponent(versionId)}/prechecks`, {body: payload,
+        headers: {"X-CSRFToken": csrf, "Idempotency-Key": key}});
+    },
+    async retryRun(runId, itemIds, key) {
+      csrf = readCookie("csrftoken") || await ensureCsrf();
+      return raw("POST", `/runs/${encodeURIComponent(runId)}/retries`, {body: {item_ids: itemIds},
+        headers: {"X-CSRFToken": csrf, "Idempotency-Key": key}});
+    },
   };
 }
 
@@ -182,6 +192,8 @@ function createFixtureAdapter(url) {
     async listClaimable() { throw new ApiError(501, "live_required", "认领仅支持 live API"); },
     async claimTask() { throw new ApiError(501, "live_required", "认领仅支持 live API"); },
     async getImport() { throw new ApiError(501, "live_required", "解析报告仅支持 live API"); },
+    async startPrecheck() { throw new ApiError(501, "live_required", "后台重新预审仅支持 live API"); },
+    async retryRun() { throw new ApiError(501, "live_required", "真实失败行重试仅支持 live API"); },
 
     // fixture 模式没有真实身份，明确返回演示身份；页面必须显示"不校验权限"标记。
     async me() {

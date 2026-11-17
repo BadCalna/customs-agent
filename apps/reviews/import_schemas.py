@@ -17,7 +17,7 @@ class ImportOut(Schema):
     precheck_run_id: str
     precheck_status: str
     result_mode: Literal["mock"]
-    executor_mode: Literal["inline"]
+    executor_mode: Literal["inline", "rq"]
     assignment_status: Literal["claimed", "unclaimed"]
     original_download_url: str
     idempotent_replay: bool = False

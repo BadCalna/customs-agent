@@ -1,5 +1,50 @@
 {
   "$defs": {
+    "AttemptEntry": {
+      "properties": {
+        "error_code": {
+          "default": "",
+          "title": "Error Code",
+          "type": "string"
+        },
+        "finished_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Finished At"
+        },
+        "input_hash": {
+          "default": "",
+          "title": "Input Hash",
+          "type": "string"
+        },
+        "number": {
+          "title": "Number",
+          "type": "integer"
+        },
+        "started_at": {
+          "title": "Started At",
+          "type": "string"
+        },
+        "status": {
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "number",
+        "status",
+        "started_at"
+      ],
+      "title": "AttemptEntry",
+      "type": "object"
+    },
     "ComparisonStatus": {
       "description": "D4 第 2 节六类比较结论，优先级按声明顺序递减。",
       "enum": [
@@ -120,10 +165,17 @@
     }
   },
   "properties": {
+    "attempt_history": {
+      "items": {
+        "$ref": "#/$defs/AttemptEntry"
+      },
+      "title": "Attempt History",
+      "type": "array"
+    },
     "attempts": {
-      "default": 1,
-      "description": "已尝试次数，重试另计",
-      "minimum": 1,
+      "default": 0,
+      "description": "本执行行实际调用次数；排队未调用为 0",
+      "minimum": 0,
       "title": "Attempts",
       "type": "integer"
     },
@@ -177,6 +229,18 @@
     "item_id": {
       "title": "Item Id",
       "type": "string"
+    },
+    "origin_run_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Origin Run Id"
     },
     "source_location": {
       "$ref": "#/$defs/SourceLocation"

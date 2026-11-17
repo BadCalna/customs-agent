@@ -62,7 +62,7 @@ from apps.reviews.schemas import (
 )
 from apps.reviews.serializers import item_to_card, item_to_list_entry, task_to_detail
 from apps.runs.models import Run
-from apps.runs.schemas import RunDetail, RunItemEntry
+from apps.runs.schemas import AttemptEntry, PrecheckIn, RetryIn, RunCreated, RunDetail, RunItemEntry
 from apps.runs.serializers import run_to_detail
 
 from apps.reviews.import_schemas import ImportOut, ImportDetail, ClaimableEntry, ClaimablePage, ClaimOut
@@ -73,7 +73,7 @@ SCHEMAS = {
     "expert": [ExpertFinding, ExpertCheckRef],
     "tasks": [VersionEntry, TaskListEntry, TaskPage, TaskDetail],
     "items": [ItemListEntry, ItemPage, ItemFacts, ItemCard],
-    "runs": [RunItemEntry, RunDetail],
+    "runs": [RunItemEntry, RunDetail, AttemptEntry, PrecheckIn, RetryIn, RunCreated],
     "confirmations": [ConfirmationIn, ConfirmationOut],
     "submissions": [SubmissionIn, SubmissionLineIn, SubmissionLineOut, SubmissionOut, WithdrawalOut],
     "decisions": [DecisionIn, DecisionLineIn, DecisionLineOut, DecisionOut, TaskReturnIn, TaskReturnOut],
@@ -203,7 +203,7 @@ def build_fixtures(main: Task, recode: Task) -> dict[str, FixtureDoc]:
         ),
         "FIX-05": FixtureDoc(
             scenario="FIX-05", title="部分运行失败",
-            notes="其他行成功、失败行带技术错误原因；等待补料不计入 progress.failed。重试端点当前为 501。",
+            notes="其他行成功、失败行带技术错误原因；等待补料不计入 progress.failed。rq 模式正式重试入口由服务端 retry_allowed 授权；本固定演示无操作人，不授予重试。",
             card=card(11), run=run_to_detail(run_v2),
         ),
         "FIX-06": FixtureDoc(
@@ -219,7 +219,7 @@ def build_fixtures(main: Task, recode: Task) -> dict[str, FixtureDoc]:
         ),
         "FIX-08": FixtureDoc(
             scenario="FIX-08", title="修订冲突",
-            notes="expected_revision 与 Idempotency-Key 由 P09/P10 实现，本样例固定 409 响应形状；当前写端点返回 501。",
+            notes="expected_revision 与 Idempotency-Key 由正式写端点校验；本样例固定 409 响应形状。",
             error=_error("conflict", "商品修订已变化，请刷新后重试", "FIX-08"),
         ),
         "FIX-09": FixtureDoc(

@@ -1,0 +1,58 @@
+{
+  "$defs": {
+    "RunStatus": {
+      "description": "技术执行状态。部分行失败由 ``progress.failed`` 表达，不改写本状态。",
+      "enum": [
+        "queued",
+        "running",
+        "succeeded",
+        "failed",
+        "superseded"
+      ],
+      "title": "RunStatus",
+      "type": "string"
+    }
+  },
+  "properties": {
+    "idempotent_replay": {
+      "default": false,
+      "title": "Idempotent Replay",
+      "type": "boolean"
+    },
+    "parent_run_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Parent Run Id"
+    },
+    "run_id": {
+      "title": "Run Id",
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/RunStatus"
+    },
+    "task_id": {
+      "title": "Task Id",
+      "type": "string"
+    },
+    "version_id": {
+      "title": "Version Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "run_id",
+    "task_id",
+    "version_id",
+    "status"
+  ],
+  "title": "RunCreated",
+  "type": "object"
+}

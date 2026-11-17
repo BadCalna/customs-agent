@@ -1,250 +1,11 @@
 {
   "cards": {
-    "0b85d8fd-d804-4d9b-8751-4d7ad0f00253": {
+    "1b3306b7-c9cd-4148-875a-226e47c309cd": {
       "allowed_actions": [
         "confirmation.write",
         "read",
-        "submission.create"
-      ],
-      "business_confirmed_hs": {
-        "source_id": null,
-        "value": null
-      },
-      "comparison_status": "needs_confirmation",
-      "confidence": null,
-      "evidence": [
-        {
-          "document": "MOCK-ONLY",
-          "effective_from": null,
-          "effective_to": null,
-          "evidence_id": "mock-not_found",
-          "excerpt": null,
-          "issued_at": null,
-          "locator": "合成样例，无真实条款",
-          "note": "缺事实，未进行有效检索",
-          "query": {
-            "mode": "mock"
-          },
-          "retrieved_at": "2026-11-14T00:00:00+08:00",
-          "scope": null,
-          "source_type": "synthetic",
-          "status": "not_found",
-          "title": "mock 合成依据（非真实法规）",
-          "url": null
-        }
-      ],
-      "evidence_status": "not_found",
-      "expert_final_hs": {
-        "source_id": null,
-        "value": null
-      },
-      "expert_suggested_hs": {
-        "source_id": null,
-        "value": null
-      },
-      "facts": {
-        "attributes": {
-          "品名": "镍合金板（缺用途）",
-          "规格型号": "SPEC-7"
-        },
-        "name": "镍合金板（缺用途）",
-        "supplier_elements_raw": "品名:镍合金板（缺用途）|规格型号:SPEC-7",
-        "supplier_hs_raw": "8544422900",
-        "supplier_tax_rate_raw": ""
-      },
-      "image_status": "absent",
-      "images": [],
-      "issues": [
-        {
-          "code": "MISSING_USAGE",
-          "field": "attributes.usage",
-          "message": "请补充具体用途",
-          "missing": "具体用途",
-          "suggested_role": "supplier"
-        }
-      ],
-      "item_id": "0b85d8fd-d804-4d9b-8751-4d7ad0f00253",
-      "latest_expert_check": null,
-      "latest_run_id": "2aa163f3-c390-4a69-9c4a-e6162e1df3ac",
-      "precheck_suggested_hs": {
-        "source_id": "2aa163f3-c390-4a69-9c4a-e6162e1df3ac",
-        "value": null
-      },
-      "result_mode": "mock",
-      "revision": 1,
-      "source_location": {
-        "cells": "A7:H7",
-        "row_number": 7,
-        "sheet_name": "申报要素"
-      },
-      "submission_status": null,
-      "submitted_hs": {
-        "source_id": null,
-        "value": null
-      },
-      "task_id": "8c5aed88-fe80-4618-9997-82891376ad96",
-      "task_stage": "awaiting_confirmation",
-      "version_id": "d1051286-aecb-47e1-a614-1f53ed7aef65"
-    },
-    "0c0c1fb0-df9a-40c8-b157-65c15258e536": {
-      "allowed_actions": [
-        "confirmation.write",
-        "read",
-        "submission.create"
-      ],
-      "business_confirmed_hs": {
-        "source_id": null,
-        "value": null
-      },
-      "comparison_status": null,
-      "confidence": null,
-      "evidence": [],
-      "evidence_status": null,
-      "expert_final_hs": {
-        "source_id": null,
-        "value": null
-      },
-      "expert_suggested_hs": {
-        "source_id": null,
-        "value": null
-      },
-      "facts": {
-        "attributes": {
-          "品名": "铜制管件（技术失败行）",
-          "规格型号": "SPEC-11"
-        },
-        "name": "铜制管件（技术失败行）",
-        "supplier_elements_raw": "品名:铜制管件（技术失败行）|规格型号:SPEC-11",
-        "supplier_hs_raw": "8544422900",
-        "supplier_tax_rate_raw": ""
-      },
-      "image_status": "absent",
-      "images": [],
-      "issues": [],
-      "item_id": "0c0c1fb0-df9a-40c8-b157-65c15258e536",
-      "latest_expert_check": null,
-      "latest_run_id": "2aa163f3-c390-4a69-9c4a-e6162e1df3ac",
-      "precheck_suggested_hs": {
-        "source_id": "2aa163f3-c390-4a69-9c4a-e6162e1df3ac",
-        "value": null
-      },
-      "result_mode": "mock",
-      "revision": 1,
-      "source_location": {
-        "cells": "A11:H11",
-        "row_number": 11,
-        "sheet_name": "申报要素"
-      },
-      "submission_status": null,
-      "submitted_hs": {
-        "source_id": null,
-        "value": null
-      },
-      "task_id": "8c5aed88-fe80-4618-9997-82891376ad96",
-      "task_stage": "awaiting_confirmation",
-      "version_id": "d1051286-aecb-47e1-a614-1f53ed7aef65"
-    },
-    "219e35bb-0959-4255-aee1-ea1f861c7af7": {
-      "allowed_actions": [
-        "confirmation.write",
-        "read",
-        "submission.create"
-      ],
-      "business_confirmed_hs": {
-        "source_id": null,
-        "value": null
-      },
-      "comparison_status": "needs_confirmation",
-      "confidence": 0.62,
-      "evidence": [
-        {
-          "document": "MOCK-ONLY",
-          "effective_from": null,
-          "effective_to": null,
-          "evidence_id": "mock-obtained",
-          "excerpt": null,
-          "issued_at": null,
-          "locator": "合成样例，无真实条款",
-          "note": "mock 合成依据，仅用于演示",
-          "query": {
-            "mode": "mock"
-          },
-          "retrieved_at": "2026-11-14T00:00:00+08:00",
-          "scope": null,
-          "source_type": "synthetic",
-          "status": "obtained",
-          "title": "mock 合成依据（非真实法规）",
-          "url": null
-        }
-      ],
-      "evidence_status": "obtained",
-      "expert_final_hs": {
-        "source_id": null,
-        "value": null
-      },
-      "expert_suggested_hs": {
-        "source_id": null,
-        "value": null
-      },
-      "facts": {
-        "attributes": {
-          "品名": "镍合金带（附图读取失败）",
-          "规格型号": "SPEC-8"
-        },
-        "name": "镍合金带（附图读取失败）",
-        "supplier_elements_raw": "品名:镍合金带（附图读取失败）|规格型号:SPEC-8",
-        "supplier_hs_raw": "8544422900",
-        "supplier_tax_rate_raw": ""
-      },
-      "image_status": "read_failed",
-      "images": [
-        {
-          "dispimg_id": "DISPIMG_8",
-          "download_url": null,
-          "error_message": "mock：DISPIMG 嵌入资源缺失",
-          "image_id": "6c8eb8b5-90d3-405c-933c-41018e2d91df",
-          "source_cell": "H8",
-          "source_sheet": "申报要素",
-          "status": "read_failed"
-        }
-      ],
-      "issues": [
-        {
-          "code": "IMAGE_READ_FAILED",
-          "field": "images",
-          "message": "附图读取失败，可见事实不足",
-          "missing": "附图内容",
-          "suggested_role": "supplier"
-        }
-      ],
-      "item_id": "219e35bb-0959-4255-aee1-ea1f861c7af7",
-      "latest_expert_check": null,
-      "latest_run_id": "2aa163f3-c390-4a69-9c4a-e6162e1df3ac",
-      "precheck_suggested_hs": {
-        "source_id": "2aa163f3-c390-4a69-9c4a-e6162e1df3ac",
-        "value": "8544422900"
-      },
-      "result_mode": "mock",
-      "revision": 1,
-      "source_location": {
-        "cells": "A8:H8",
-        "row_number": 8,
-        "sheet_name": "申报要素"
-      },
-      "submission_status": null,
-      "submitted_hs": {
-        "source_id": null,
-        "value": null
-      },
-      "task_id": "8c5aed88-fe80-4618-9997-82891376ad96",
-      "task_stage": "awaiting_confirmation",
-      "version_id": "d1051286-aecb-47e1-a614-1f53ed7aef65"
-    },
-    "5a8855a1-76c9-43a4-8f18-216e84df2d5c": {
-      "allowed_actions": [
-        "confirmation.write",
-        "read",
-        "submission.create"
+        "submission.create",
+        "task.return"
       ],
       "business_confirmed_hs": {
         "source_id": null,
@@ -298,18 +59,18 @@
           "dispimg_id": "DISPIMG_5",
           "download_url": null,
           "error_message": "",
-          "image_id": "77b386c4-f247-45cd-8b85-870833b4c182",
+          "image_id": "09806dee-dbcb-45aa-983c-c2e84841c7c5",
           "source_cell": "H5",
           "source_sheet": "申报要素",
           "status": "available"
         }
       ],
       "issues": [],
-      "item_id": "5a8855a1-76c9-43a4-8f18-216e84df2d5c",
+      "item_id": "1b3306b7-c9cd-4148-875a-226e47c309cd",
       "latest_expert_check": null,
-      "latest_run_id": "2aa163f3-c390-4a69-9c4a-e6162e1df3ac",
+      "latest_run_id": "252d68f5-c774-4ae6-887b-d6c50b561fe6",
       "precheck_suggested_hs": {
-        "source_id": "2aa163f3-c390-4a69-9c4a-e6162e1df3ac",
+        "source_id": "252d68f5-c774-4ae6-887b-d6c50b561fe6",
         "value": "8544422900"
       },
       "result_mode": "mock",
@@ -324,307 +85,16 @@
         "source_id": null,
         "value": null
       },
-      "task_id": "8c5aed88-fe80-4618-9997-82891376ad96",
+      "task_id": "403b3e26-e7bc-4b50-bd42-97a24a721ec9",
       "task_stage": "awaiting_confirmation",
-      "version_id": "d1051286-aecb-47e1-a614-1f53ed7aef65"
+      "version_id": "c48496bc-5e2a-4ab2-888a-b1342d95fb6e"
     },
-    "5ab44d7a-e050-4416-8c28-66ad29c94780": {
+    "20e55580-7963-4a06-bca6-f9b2dd759fd3": {
       "allowed_actions": [
         "confirmation.write",
         "read",
-        "submission.create"
-      ],
-      "business_confirmed_hs": {
-        "source_id": "2922c60f-04f8-4734-be06-7b68e59dd93f",
-        "value": "8544422900"
-      },
-      "comparison_status": "consistent",
-      "confidence": 0.62,
-      "evidence": [
-        {
-          "document": "MOCK-ONLY",
-          "effective_from": null,
-          "effective_to": null,
-          "evidence_id": "mock-obtained",
-          "excerpt": null,
-          "issued_at": null,
-          "locator": "合成样例，无真实条款",
-          "note": "mock 合成依据，仅用于演示",
-          "query": {
-            "mode": "mock"
-          },
-          "retrieved_at": "2026-11-14T00:00:00+08:00",
-          "scope": null,
-          "source_type": "synthetic",
-          "status": "obtained",
-          "title": "mock 合成依据（非真实法规）",
-          "url": null
-        }
-      ],
-      "evidence_status": "obtained",
-      "expert_final_hs": {
-        "source_id": "03fc2839-5f40-4d96-88ae-ecd82130622d",
-        "value": "8536901900"
-      },
-      "expert_suggested_hs": {
-        "source_id": "c5412410-961f-4d35-abca-3673f85cd206",
-        "value": null
-      },
-      "facts": {
-        "attributes": {
-          "品名": "不锈钢制无缝管（改码样例）",
-          "规格型号": "SPEC-3"
-        },
-        "name": "不锈钢制无缝管（改码样例）",
-        "supplier_elements_raw": "品名:不锈钢制无缝管（改码样例）|规格型号:SPEC-3",
-        "supplier_hs_raw": "8544422900",
-        "supplier_tax_rate_raw": ""
-      },
-      "image_status": "available",
-      "images": [
-        {
-          "dispimg_id": "DISPIMG_3",
-          "download_url": null,
-          "error_message": "",
-          "image_id": "76809b4d-8b53-4d8e-9490-cca2ca560ef3",
-          "source_cell": "H3",
-          "source_sheet": "申报要素",
-          "status": "available"
-        }
-      ],
-      "issues": [],
-      "item_id": "5ab44d7a-e050-4416-8c28-66ad29c94780",
-      "latest_expert_check": {
-        "findings": [
-          {
-            "aspect": "elements",
-            "evidence_ids": [
-              "mock-obtained"
-            ],
-            "reason": "mock：申报要素与提交码不一致，建议另行核对",
-            "verdict": "conflict"
-          },
-          {
-            "aspect": "images",
-            "evidence_ids": [],
-            "reason": "mock：图片事实未核，不视为无风险",
-            "verdict": "unknown"
-          },
-          {
-            "aspect": "tax",
-            "evidence_ids": [],
-            "reason": "mock：退税率未接真实来源，保持待核",
-            "verdict": "unknown"
-          },
-          {
-            "aspect": "regulatory",
-            "evidence_ids": [],
-            "reason": "mock：监管条件未接真实来源，保持待核",
-            "verdict": "unknown"
-          }
-        ],
-        "run_id": "c5412410-961f-4d35-abca-3673f85cd206",
-        "submission_id": "d57727bf-76ba-4fda-aec7-98748921ea83",
-        "target_hs": "8544422900"
-      },
-      "latest_run_id": "6e0250f3-5f03-4b1a-88c7-f7eff2917a5c",
-      "precheck_suggested_hs": {
-        "source_id": "6e0250f3-5f03-4b1a-88c7-f7eff2917a5c",
-        "value": "8544422900"
-      },
-      "result_mode": "mock",
-      "revision": 1,
-      "source_location": {
-        "cells": "A3:H3",
-        "row_number": 3,
-        "sheet_name": "申报要素"
-      },
-      "submission_status": "approved",
-      "submitted_hs": {
-        "source_id": "d57727bf-76ba-4fda-aec7-98748921ea83",
-        "value": "8544422900"
-      },
-      "task_id": "b935ddbf-8d10-43e7-8398-0fcaa9dc7544",
-      "task_stage": "approved",
-      "version_id": "4b5befef-af8c-4c96-938e-fd8b04975d18"
-    },
-    "8d537008-3a2b-4173-9abe-2de00e75f93a": {
-      "allowed_actions": [
-        "confirmation.write",
-        "read",
-        "submission.create"
-      ],
-      "business_confirmed_hs": {
-        "source_id": null,
-        "value": null
-      },
-      "comparison_status": "inconsistent",
-      "confidence": 0.62,
-      "evidence": [
-        {
-          "document": "MOCK-ONLY",
-          "effective_from": null,
-          "effective_to": null,
-          "evidence_id": "mock-obtained",
-          "excerpt": null,
-          "issued_at": null,
-          "locator": "合成样例，无真实条款",
-          "note": "mock 合成依据，仅用于演示",
-          "query": {
-            "mode": "mock"
-          },
-          "retrieved_at": "2026-11-14T00:00:00+08:00",
-          "scope": null,
-          "source_type": "synthetic",
-          "status": "obtained",
-          "title": "mock 合成依据（非真实法规）",
-          "url": null
-        }
-      ],
-      "evidence_status": "obtained",
-      "expert_final_hs": {
-        "source_id": null,
-        "value": null
-      },
-      "expert_suggested_hs": {
-        "source_id": null,
-        "value": null
-      },
-      "facts": {
-        "attributes": {
-          "品名": "不锈钢制焊接管（不一致样例）",
-          "规格型号": "SPEC-6"
-        },
-        "name": "不锈钢制焊接管（不一致样例）",
-        "supplier_elements_raw": "品名:不锈钢制焊接管（不一致样例）|规格型号:SPEC-6",
-        "supplier_hs_raw": "7306290000",
-        "supplier_tax_rate_raw": ""
-      },
-      "image_status": "absent",
-      "images": [],
-      "issues": [
-        {
-          "code": "HS_MISMATCH",
-          "field": "supplier_hs_raw",
-          "message": "建议编码与原码不一致",
-          "missing": null,
-          "suggested_role": null
-        }
-      ],
-      "item_id": "8d537008-3a2b-4173-9abe-2de00e75f93a",
-      "latest_expert_check": null,
-      "latest_run_id": "2aa163f3-c390-4a69-9c4a-e6162e1df3ac",
-      "precheck_suggested_hs": {
-        "source_id": "2aa163f3-c390-4a69-9c4a-e6162e1df3ac",
-        "value": "8544422900"
-      },
-      "result_mode": "mock",
-      "revision": 1,
-      "source_location": {
-        "cells": "A6:H6",
-        "row_number": 6,
-        "sheet_name": "申报要素"
-      },
-      "submission_status": null,
-      "submitted_hs": {
-        "source_id": null,
-        "value": null
-      },
-      "task_id": "8c5aed88-fe80-4618-9997-82891376ad96",
-      "task_stage": "awaiting_confirmation",
-      "version_id": "d1051286-aecb-47e1-a614-1f53ed7aef65"
-    },
-    "9c7c5d4d-3d1f-4a96-9b4b-6e0153cf1b5a": {
-      "allowed_actions": [
-        "confirmation.write",
-        "read",
-        "submission.create"
-      ],
-      "business_confirmed_hs": {
-        "source_id": null,
-        "value": null
-      },
-      "comparison_status": "needs_confirmation",
-      "confidence": null,
-      "evidence": [
-        {
-          "document": "MOCK-ONLY",
-          "effective_from": null,
-          "effective_to": null,
-          "evidence_id": "mock-query_failed",
-          "excerpt": null,
-          "issued_at": null,
-          "locator": "合成样例，无真实条款",
-          "note": "mock 模拟的来源查询失败",
-          "query": {
-            "mode": "mock"
-          },
-          "retrieved_at": "2026-11-14T00:00:00+08:00",
-          "scope": null,
-          "source_type": "synthetic",
-          "status": "query_failed",
-          "title": "mock 合成依据（非真实法规）",
-          "url": null
-        }
-      ],
-      "evidence_status": "query_failed",
-      "expert_final_hs": {
-        "source_id": null,
-        "value": null
-      },
-      "expert_suggested_hs": {
-        "source_id": null,
-        "value": null
-      },
-      "facts": {
-        "attributes": {
-          "品名": "铝制型材（查询失败）",
-          "规格型号": "SPEC-12"
-        },
-        "name": "铝制型材（查询失败）",
-        "supplier_elements_raw": "品名:铝制型材（查询失败）|规格型号:SPEC-12",
-        "supplier_hs_raw": "8544422900",
-        "supplier_tax_rate_raw": ""
-      },
-      "image_status": "absent",
-      "images": [],
-      "issues": [
-        {
-          "code": "SOURCE_QUERY_FAILED",
-          "field": null,
-          "message": "税则来源查询失败，依据待核",
-          "missing": null,
-          "suggested_role": null
-        }
-      ],
-      "item_id": "9c7c5d4d-3d1f-4a96-9b4b-6e0153cf1b5a",
-      "latest_expert_check": null,
-      "latest_run_id": "2aa163f3-c390-4a69-9c4a-e6162e1df3ac",
-      "precheck_suggested_hs": {
-        "source_id": "2aa163f3-c390-4a69-9c4a-e6162e1df3ac",
-        "value": "8544422900"
-      },
-      "result_mode": "mock",
-      "revision": 1,
-      "source_location": {
-        "cells": "A12:H12",
-        "row_number": 12,
-        "sheet_name": "申报要素"
-      },
-      "submission_status": null,
-      "submitted_hs": {
-        "source_id": null,
-        "value": null
-      },
-      "task_id": "8c5aed88-fe80-4618-9997-82891376ad96",
-      "task_stage": "awaiting_confirmation",
-      "version_id": "d1051286-aecb-47e1-a614-1f53ed7aef65"
-    },
-    "b65a7529-417e-4f86-a3d7-d7c859bd2ca4": {
-      "allowed_actions": [
-        "confirmation.write",
-        "read",
-        "submission.create"
+        "submission.create",
+        "task.return"
       ],
       "business_confirmed_hs": {
         "source_id": null,
@@ -683,11 +153,11 @@
           "suggested_role": null
         }
       ],
-      "item_id": "b65a7529-417e-4f86-a3d7-d7c859bd2ca4",
+      "item_id": "20e55580-7963-4a06-bca6-f9b2dd759fd3",
       "latest_expert_check": null,
-      "latest_run_id": "2aa163f3-c390-4a69-9c4a-e6162e1df3ac",
+      "latest_run_id": "252d68f5-c774-4ae6-887b-d6c50b561fe6",
       "precheck_suggested_hs": {
-        "source_id": "2aa163f3-c390-4a69-9c4a-e6162e1df3ac",
+        "source_id": "252d68f5-c774-4ae6-887b-d6c50b561fe6",
         "value": "8544422900"
       },
       "result_mode": "mock",
@@ -702,21 +172,22 @@
         "source_id": null,
         "value": null
       },
-      "task_id": "8c5aed88-fe80-4618-9997-82891376ad96",
+      "task_id": "403b3e26-e7bc-4b50-bd42-97a24a721ec9",
       "task_stage": "awaiting_confirmation",
-      "version_id": "d1051286-aecb-47e1-a614-1f53ed7aef65"
+      "version_id": "c48496bc-5e2a-4ab2-888a-b1342d95fb6e"
     },
-    "cacf692d-f8f1-4e08-bcc9-81c5becd3a83": {
+    "2c5390e1-77eb-49ba-8dde-0aca4afd8360": {
       "allowed_actions": [
         "confirmation.write",
         "read",
-        "submission.create"
+        "submission.create",
+        "task.return"
       ],
       "business_confirmed_hs": {
         "source_id": null,
         "value": null
       },
-      "comparison_status": "consistent",
+      "comparison_status": "needs_confirmation",
       "confidence": 0.62,
       "evidence": [
         {
@@ -750,39 +221,47 @@
       },
       "facts": {
         "attributes": {
-          "品名": "不锈钢制无缝管（一致样例）",
-          "规格型号": "SPEC-5"
+          "品名": "镍合金带（附图读取失败）",
+          "规格型号": "SPEC-8"
         },
-        "name": "不锈钢制无缝管（一致样例）",
-        "supplier_elements_raw": "品名:不锈钢制无缝管（一致样例）|规格型号:SPEC-5",
+        "name": "镍合金带（附图读取失败）",
+        "supplier_elements_raw": "品名:镍合金带（附图读取失败）|规格型号:SPEC-8",
         "supplier_hs_raw": "8544422900",
         "supplier_tax_rate_raw": ""
       },
-      "image_status": "available",
+      "image_status": "read_failed",
       "images": [
         {
-          "dispimg_id": "DISPIMG_5",
+          "dispimg_id": "DISPIMG_8",
           "download_url": null,
-          "error_message": "",
-          "image_id": "54a12bd4-63fa-4cad-aeba-9d85c0542035",
-          "source_cell": "H5",
+          "error_message": "mock：DISPIMG 嵌入资源缺失",
+          "image_id": "4863de85-1c03-478a-bbfe-b37a290d7ff7",
+          "source_cell": "H8",
           "source_sheet": "申报要素",
-          "status": "available"
+          "status": "read_failed"
         }
       ],
-      "issues": [],
-      "item_id": "cacf692d-f8f1-4e08-bcc9-81c5becd3a83",
+      "issues": [
+        {
+          "code": "IMAGE_READ_FAILED",
+          "field": "images",
+          "message": "附图读取失败，可见事实不足",
+          "missing": "附图内容",
+          "suggested_role": "supplier"
+        }
+      ],
+      "item_id": "2c5390e1-77eb-49ba-8dde-0aca4afd8360",
       "latest_expert_check": null,
-      "latest_run_id": "f8681831-7480-424d-8cc3-e91faad5d10b",
+      "latest_run_id": "252d68f5-c774-4ae6-887b-d6c50b561fe6",
       "precheck_suggested_hs": {
-        "source_id": "f8681831-7480-424d-8cc3-e91faad5d10b",
+        "source_id": "252d68f5-c774-4ae6-887b-d6c50b561fe6",
         "value": "8544422900"
       },
       "result_mode": "mock",
       "revision": 1,
       "source_location": {
-        "cells": "A5:H5",
-        "row_number": 5,
+        "cells": "A8:H8",
+        "row_number": 8,
         "sheet_name": "申报要素"
       },
       "submission_status": null,
@@ -790,15 +269,75 @@
         "source_id": null,
         "value": null
       },
-      "task_id": "8c5aed88-fe80-4618-9997-82891376ad96",
+      "task_id": "403b3e26-e7bc-4b50-bd42-97a24a721ec9",
       "task_stage": "awaiting_confirmation",
-      "version_id": "7839299e-a828-4468-bd66-30e9f76333db"
+      "version_id": "c48496bc-5e2a-4ab2-888a-b1342d95fb6e"
     },
-    "dc8d2647-9ac5-4829-aafe-f9cd354ad112": {
+    "31333839-7f75-4778-8606-14858ed5360d": {
       "allowed_actions": [
         "confirmation.write",
         "read",
-        "submission.create"
+        "submission.create",
+        "task.return"
+      ],
+      "business_confirmed_hs": {
+        "source_id": null,
+        "value": null
+      },
+      "comparison_status": null,
+      "confidence": null,
+      "evidence": [],
+      "evidence_status": null,
+      "expert_final_hs": {
+        "source_id": null,
+        "value": null
+      },
+      "expert_suggested_hs": {
+        "source_id": null,
+        "value": null
+      },
+      "facts": {
+        "attributes": {
+          "品名": "铜制管件（技术失败行）",
+          "规格型号": "SPEC-11"
+        },
+        "name": "铜制管件（技术失败行）",
+        "supplier_elements_raw": "品名:铜制管件（技术失败行）|规格型号:SPEC-11",
+        "supplier_hs_raw": "8544422900",
+        "supplier_tax_rate_raw": ""
+      },
+      "image_status": "absent",
+      "images": [],
+      "issues": [],
+      "item_id": "31333839-7f75-4778-8606-14858ed5360d",
+      "latest_expert_check": null,
+      "latest_run_id": "252d68f5-c774-4ae6-887b-d6c50b561fe6",
+      "precheck_suggested_hs": {
+        "source_id": "252d68f5-c774-4ae6-887b-d6c50b561fe6",
+        "value": null
+      },
+      "result_mode": "mock",
+      "revision": 1,
+      "source_location": {
+        "cells": "A11:H11",
+        "row_number": 11,
+        "sheet_name": "申报要素"
+      },
+      "submission_status": null,
+      "submitted_hs": {
+        "source_id": null,
+        "value": null
+      },
+      "task_id": "403b3e26-e7bc-4b50-bd42-97a24a721ec9",
+      "task_stage": "awaiting_confirmation",
+      "version_id": "c48496bc-5e2a-4ab2-888a-b1342d95fb6e"
+    },
+    "333b3b94-d0a1-4ce7-a5ba-6b6d2066a5fd": {
+      "allowed_actions": [
+        "confirmation.write",
+        "read",
+        "submission.create",
+        "task.return"
       ],
       "business_confirmed_hs": {
         "source_id": null,
@@ -857,11 +396,11 @@
           "suggested_role": null
         }
       ],
-      "item_id": "dc8d2647-9ac5-4829-aafe-f9cd354ad112",
+      "item_id": "333b3b94-d0a1-4ce7-a5ba-6b6d2066a5fd",
       "latest_expert_check": null,
-      "latest_run_id": "f8681831-7480-424d-8cc3-e91faad5d10b",
+      "latest_run_id": "252d68f5-c774-4ae6-887b-d6c50b561fe6",
       "precheck_suggested_hs": {
-        "source_id": "f8681831-7480-424d-8cc3-e91faad5d10b",
+        "source_id": "252d68f5-c774-4ae6-887b-d6c50b561fe6",
         "value": "8544422900"
       },
       "result_mode": "mock",
@@ -876,15 +415,137 @@
         "source_id": null,
         "value": null
       },
-      "task_id": "8c5aed88-fe80-4618-9997-82891376ad96",
+      "task_id": "403b3e26-e7bc-4b50-bd42-97a24a721ec9",
       "task_stage": "awaiting_confirmation",
-      "version_id": "7839299e-a828-4468-bd66-30e9f76333db"
+      "version_id": "c48496bc-5e2a-4ab2-888a-b1342d95fb6e"
     },
-    "fa53bafa-681e-45ae-87fa-7c8f1266bebc": {
+    "48aad4f1-bae9-43ac-92ae-fb176dc01690": {
       "allowed_actions": [
         "confirmation.write",
         "read",
-        "submission.create"
+        "submission.create",
+        "task.return"
+      ],
+      "business_confirmed_hs": {
+        "source_id": "4a1924ad-f0b3-4d41-be5a-f591dee19f2c",
+        "value": "8544422900"
+      },
+      "comparison_status": "consistent",
+      "confidence": 0.62,
+      "evidence": [
+        {
+          "document": "MOCK-ONLY",
+          "effective_from": null,
+          "effective_to": null,
+          "evidence_id": "mock-obtained",
+          "excerpt": null,
+          "issued_at": null,
+          "locator": "合成样例，无真实条款",
+          "note": "mock 合成依据，仅用于演示",
+          "query": {
+            "mode": "mock"
+          },
+          "retrieved_at": "2026-11-14T00:00:00+08:00",
+          "scope": null,
+          "source_type": "synthetic",
+          "status": "obtained",
+          "title": "mock 合成依据（非真实法规）",
+          "url": null
+        }
+      ],
+      "evidence_status": "obtained",
+      "expert_final_hs": {
+        "source_id": "d101d2bc-9c14-4baf-ad92-484f90af4053",
+        "value": "8536901900"
+      },
+      "expert_suggested_hs": {
+        "source_id": "f8c7d559-c6c1-455a-8816-f06765c57362",
+        "value": null
+      },
+      "facts": {
+        "attributes": {
+          "品名": "不锈钢制无缝管（改码样例）",
+          "规格型号": "SPEC-3"
+        },
+        "name": "不锈钢制无缝管（改码样例）",
+        "supplier_elements_raw": "品名:不锈钢制无缝管（改码样例）|规格型号:SPEC-3",
+        "supplier_hs_raw": "8544422900",
+        "supplier_tax_rate_raw": ""
+      },
+      "image_status": "available",
+      "images": [
+        {
+          "dispimg_id": "DISPIMG_3",
+          "download_url": null,
+          "error_message": "",
+          "image_id": "773ad074-16d6-4c79-bf8a-d5d164b012e8",
+          "source_cell": "H3",
+          "source_sheet": "申报要素",
+          "status": "available"
+        }
+      ],
+      "issues": [],
+      "item_id": "48aad4f1-bae9-43ac-92ae-fb176dc01690",
+      "latest_expert_check": {
+        "findings": [
+          {
+            "aspect": "elements",
+            "evidence_ids": [
+              "mock-obtained"
+            ],
+            "reason": "mock：申报要素与提交码不一致，建议另行核对",
+            "verdict": "conflict"
+          },
+          {
+            "aspect": "images",
+            "evidence_ids": [],
+            "reason": "mock：图片事实未核，不视为无风险",
+            "verdict": "unknown"
+          },
+          {
+            "aspect": "tax",
+            "evidence_ids": [],
+            "reason": "mock：退税率未接真实来源，保持待核",
+            "verdict": "unknown"
+          },
+          {
+            "aspect": "regulatory",
+            "evidence_ids": [],
+            "reason": "mock：监管条件未接真实来源，保持待核",
+            "verdict": "unknown"
+          }
+        ],
+        "run_id": "f8c7d559-c6c1-455a-8816-f06765c57362",
+        "submission_id": "df54a579-68ce-4281-8a3d-986fac1f19ef",
+        "target_hs": "8544422900"
+      },
+      "latest_run_id": "f1f2b44b-a5ef-4b34-8d2b-40dc3188a2f0",
+      "precheck_suggested_hs": {
+        "source_id": "f1f2b44b-a5ef-4b34-8d2b-40dc3188a2f0",
+        "value": "8544422900"
+      },
+      "result_mode": "mock",
+      "revision": 1,
+      "source_location": {
+        "cells": "A3:H3",
+        "row_number": 3,
+        "sheet_name": "申报要素"
+      },
+      "submission_status": "approved",
+      "submitted_hs": {
+        "source_id": "df54a579-68ce-4281-8a3d-986fac1f19ef",
+        "value": "8544422900"
+      },
+      "task_id": "97f2e7ec-6ab5-46c3-b49a-253724ecd1a9",
+      "task_stage": "approved",
+      "version_id": "5f9f24df-4970-42f6-b600-a720b7f65b9b"
+    },
+    "545b34e8-6d04-4d3d-85e7-721e9a108804": {
+      "allowed_actions": [
+        "confirmation.write",
+        "read",
+        "submission.create",
+        "task.return"
       ],
       "business_confirmed_hs": {
         "source_id": null,
@@ -943,11 +604,11 @@
           "suggested_role": null
         }
       ],
-      "item_id": "fa53bafa-681e-45ae-87fa-7c8f1266bebc",
+      "item_id": "545b34e8-6d04-4d3d-85e7-721e9a108804",
       "latest_expert_check": null,
-      "latest_run_id": "2aa163f3-c390-4a69-9c4a-e6162e1df3ac",
+      "latest_run_id": "252d68f5-c774-4ae6-887b-d6c50b561fe6",
       "precheck_suggested_hs": {
-        "source_id": "2aa163f3-c390-4a69-9c4a-e6162e1df3ac",
+        "source_id": "252d68f5-c774-4ae6-887b-d6c50b561fe6",
         "value": "8544422900"
       },
       "result_mode": "mock",
@@ -962,21 +623,415 @@
         "source_id": null,
         "value": null
       },
-      "task_id": "8c5aed88-fe80-4618-9997-82891376ad96",
+      "task_id": "403b3e26-e7bc-4b50-bd42-97a24a721ec9",
       "task_stage": "awaiting_confirmation",
-      "version_id": "d1051286-aecb-47e1-a614-1f53ed7aef65"
+      "version_id": "c48496bc-5e2a-4ab2-888a-b1342d95fb6e"
+    },
+    "68f75c02-7c38-4dc4-85dd-e9e2e306c667": {
+      "allowed_actions": [
+        "confirmation.write",
+        "read",
+        "submission.create",
+        "task.return"
+      ],
+      "business_confirmed_hs": {
+        "source_id": null,
+        "value": null
+      },
+      "comparison_status": "needs_confirmation",
+      "confidence": null,
+      "evidence": [
+        {
+          "document": "MOCK-ONLY",
+          "effective_from": null,
+          "effective_to": null,
+          "evidence_id": "mock-not_found",
+          "excerpt": null,
+          "issued_at": null,
+          "locator": "合成样例，无真实条款",
+          "note": "缺事实，未进行有效检索",
+          "query": {
+            "mode": "mock"
+          },
+          "retrieved_at": "2026-11-14T00:00:00+08:00",
+          "scope": null,
+          "source_type": "synthetic",
+          "status": "not_found",
+          "title": "mock 合成依据（非真实法规）",
+          "url": null
+        }
+      ],
+      "evidence_status": "not_found",
+      "expert_final_hs": {
+        "source_id": null,
+        "value": null
+      },
+      "expert_suggested_hs": {
+        "source_id": null,
+        "value": null
+      },
+      "facts": {
+        "attributes": {
+          "品名": "镍合金板（缺用途）",
+          "规格型号": "SPEC-7"
+        },
+        "name": "镍合金板（缺用途）",
+        "supplier_elements_raw": "品名:镍合金板（缺用途）|规格型号:SPEC-7",
+        "supplier_hs_raw": "8544422900",
+        "supplier_tax_rate_raw": ""
+      },
+      "image_status": "absent",
+      "images": [],
+      "issues": [
+        {
+          "code": "MISSING_USAGE",
+          "field": "attributes.usage",
+          "message": "请补充具体用途",
+          "missing": "具体用途",
+          "suggested_role": "supplier"
+        }
+      ],
+      "item_id": "68f75c02-7c38-4dc4-85dd-e9e2e306c667",
+      "latest_expert_check": null,
+      "latest_run_id": "252d68f5-c774-4ae6-887b-d6c50b561fe6",
+      "precheck_suggested_hs": {
+        "source_id": "252d68f5-c774-4ae6-887b-d6c50b561fe6",
+        "value": null
+      },
+      "result_mode": "mock",
+      "revision": 1,
+      "source_location": {
+        "cells": "A7:H7",
+        "row_number": 7,
+        "sheet_name": "申报要素"
+      },
+      "submission_status": null,
+      "submitted_hs": {
+        "source_id": null,
+        "value": null
+      },
+      "task_id": "403b3e26-e7bc-4b50-bd42-97a24a721ec9",
+      "task_stage": "awaiting_confirmation",
+      "version_id": "c48496bc-5e2a-4ab2-888a-b1342d95fb6e"
+    },
+    "80094e34-ea8a-4250-9ffc-2e21829c3882": {
+      "allowed_actions": [
+        "confirmation.write",
+        "read",
+        "submission.create",
+        "task.return"
+      ],
+      "business_confirmed_hs": {
+        "source_id": null,
+        "value": null
+      },
+      "comparison_status": "inconsistent",
+      "confidence": 0.62,
+      "evidence": [
+        {
+          "document": "MOCK-ONLY",
+          "effective_from": null,
+          "effective_to": null,
+          "evidence_id": "mock-obtained",
+          "excerpt": null,
+          "issued_at": null,
+          "locator": "合成样例，无真实条款",
+          "note": "mock 合成依据，仅用于演示",
+          "query": {
+            "mode": "mock"
+          },
+          "retrieved_at": "2026-11-14T00:00:00+08:00",
+          "scope": null,
+          "source_type": "synthetic",
+          "status": "obtained",
+          "title": "mock 合成依据（非真实法规）",
+          "url": null
+        }
+      ],
+      "evidence_status": "obtained",
+      "expert_final_hs": {
+        "source_id": null,
+        "value": null
+      },
+      "expert_suggested_hs": {
+        "source_id": null,
+        "value": null
+      },
+      "facts": {
+        "attributes": {
+          "品名": "不锈钢制焊接管（不一致样例）",
+          "规格型号": "SPEC-6"
+        },
+        "name": "不锈钢制焊接管（不一致样例）",
+        "supplier_elements_raw": "品名:不锈钢制焊接管（不一致样例）|规格型号:SPEC-6",
+        "supplier_hs_raw": "7306290000",
+        "supplier_tax_rate_raw": ""
+      },
+      "image_status": "absent",
+      "images": [],
+      "issues": [
+        {
+          "code": "HS_MISMATCH",
+          "field": "supplier_hs_raw",
+          "message": "建议编码与原码不一致",
+          "missing": null,
+          "suggested_role": null
+        }
+      ],
+      "item_id": "80094e34-ea8a-4250-9ffc-2e21829c3882",
+      "latest_expert_check": null,
+      "latest_run_id": "22f6d771-3f6a-4cb7-9d97-4b4d0b83070c",
+      "precheck_suggested_hs": {
+        "source_id": "22f6d771-3f6a-4cb7-9d97-4b4d0b83070c",
+        "value": "8544422900"
+      },
+      "result_mode": "mock",
+      "revision": 1,
+      "source_location": {
+        "cells": "A6:H6",
+        "row_number": 6,
+        "sheet_name": "申报要素"
+      },
+      "submission_status": null,
+      "submitted_hs": {
+        "source_id": null,
+        "value": null
+      },
+      "task_id": "403b3e26-e7bc-4b50-bd42-97a24a721ec9",
+      "task_stage": "awaiting_confirmation",
+      "version_id": "4e599c20-fad1-40a8-983a-3860e80645f7"
+    },
+    "ad764084-9f8d-4640-bb3d-db0458b51163": {
+      "allowed_actions": [
+        "confirmation.write",
+        "read",
+        "submission.create",
+        "task.return"
+      ],
+      "business_confirmed_hs": {
+        "source_id": null,
+        "value": null
+      },
+      "comparison_status": "needs_confirmation",
+      "confidence": null,
+      "evidence": [
+        {
+          "document": "MOCK-ONLY",
+          "effective_from": null,
+          "effective_to": null,
+          "evidence_id": "mock-query_failed",
+          "excerpt": null,
+          "issued_at": null,
+          "locator": "合成样例，无真实条款",
+          "note": "mock 模拟的来源查询失败",
+          "query": {
+            "mode": "mock"
+          },
+          "retrieved_at": "2026-11-14T00:00:00+08:00",
+          "scope": null,
+          "source_type": "synthetic",
+          "status": "query_failed",
+          "title": "mock 合成依据（非真实法规）",
+          "url": null
+        }
+      ],
+      "evidence_status": "query_failed",
+      "expert_final_hs": {
+        "source_id": null,
+        "value": null
+      },
+      "expert_suggested_hs": {
+        "source_id": null,
+        "value": null
+      },
+      "facts": {
+        "attributes": {
+          "品名": "铝制型材（查询失败）",
+          "规格型号": "SPEC-12"
+        },
+        "name": "铝制型材（查询失败）",
+        "supplier_elements_raw": "品名:铝制型材（查询失败）|规格型号:SPEC-12",
+        "supplier_hs_raw": "8544422900",
+        "supplier_tax_rate_raw": ""
+      },
+      "image_status": "absent",
+      "images": [],
+      "issues": [
+        {
+          "code": "SOURCE_QUERY_FAILED",
+          "field": null,
+          "message": "税则来源查询失败，依据待核",
+          "missing": null,
+          "suggested_role": null
+        }
+      ],
+      "item_id": "ad764084-9f8d-4640-bb3d-db0458b51163",
+      "latest_expert_check": null,
+      "latest_run_id": "252d68f5-c774-4ae6-887b-d6c50b561fe6",
+      "precheck_suggested_hs": {
+        "source_id": "252d68f5-c774-4ae6-887b-d6c50b561fe6",
+        "value": "8544422900"
+      },
+      "result_mode": "mock",
+      "revision": 1,
+      "source_location": {
+        "cells": "A12:H12",
+        "row_number": 12,
+        "sheet_name": "申报要素"
+      },
+      "submission_status": null,
+      "submitted_hs": {
+        "source_id": null,
+        "value": null
+      },
+      "task_id": "403b3e26-e7bc-4b50-bd42-97a24a721ec9",
+      "task_stage": "awaiting_confirmation",
+      "version_id": "c48496bc-5e2a-4ab2-888a-b1342d95fb6e"
+    },
+    "d66e3317-0bc5-4578-9fdc-2764f893c411": {
+      "allowed_actions": [
+        "confirmation.write",
+        "read",
+        "submission.create",
+        "task.return"
+      ],
+      "business_confirmed_hs": {
+        "source_id": null,
+        "value": null
+      },
+      "comparison_status": "consistent",
+      "confidence": 0.62,
+      "evidence": [
+        {
+          "document": "MOCK-ONLY",
+          "effective_from": null,
+          "effective_to": null,
+          "evidence_id": "mock-obtained",
+          "excerpt": null,
+          "issued_at": null,
+          "locator": "合成样例，无真实条款",
+          "note": "mock 合成依据，仅用于演示",
+          "query": {
+            "mode": "mock"
+          },
+          "retrieved_at": "2026-11-14T00:00:00+08:00",
+          "scope": null,
+          "source_type": "synthetic",
+          "status": "obtained",
+          "title": "mock 合成依据（非真实法规）",
+          "url": null
+        }
+      ],
+      "evidence_status": "obtained",
+      "expert_final_hs": {
+        "source_id": null,
+        "value": null
+      },
+      "expert_suggested_hs": {
+        "source_id": null,
+        "value": null
+      },
+      "facts": {
+        "attributes": {
+          "品名": "不锈钢制无缝管（一致样例）",
+          "规格型号": "SPEC-5"
+        },
+        "name": "不锈钢制无缝管（一致样例）",
+        "supplier_elements_raw": "品名:不锈钢制无缝管（一致样例）|规格型号:SPEC-5",
+        "supplier_hs_raw": "8544422900",
+        "supplier_tax_rate_raw": ""
+      },
+      "image_status": "available",
+      "images": [
+        {
+          "dispimg_id": "DISPIMG_5",
+          "download_url": null,
+          "error_message": "",
+          "image_id": "8da3de64-6bf0-4526-9907-099eb456f443",
+          "source_cell": "H5",
+          "source_sheet": "申报要素",
+          "status": "available"
+        }
+      ],
+      "issues": [],
+      "item_id": "d66e3317-0bc5-4578-9fdc-2764f893c411",
+      "latest_expert_check": null,
+      "latest_run_id": "22f6d771-3f6a-4cb7-9d97-4b4d0b83070c",
+      "precheck_suggested_hs": {
+        "source_id": "22f6d771-3f6a-4cb7-9d97-4b4d0b83070c",
+        "value": "8544422900"
+      },
+      "result_mode": "mock",
+      "revision": 1,
+      "source_location": {
+        "cells": "A5:H5",
+        "row_number": 5,
+        "sheet_name": "申报要素"
+      },
+      "submission_status": null,
+      "submitted_hs": {
+        "source_id": null,
+        "value": null
+      },
+      "task_id": "403b3e26-e7bc-4b50-bd42-97a24a721ec9",
+      "task_stage": "awaiting_confirmation",
+      "version_id": "4e599c20-fad1-40a8-983a-3860e80645f7"
     }
   },
-  "contract_version": "1.1.0",
+  "contract_version": "1.2.0",
   "items": {
-    "4b5befef-af8c-4c96-938e-fd8b04975d18": [
+    "4e599c20-fad1-40a8-983a-3860e80645f7": [
+      {
+        "business_confirmed_hs": null,
+        "comparison_status": "consistent",
+        "expert_final_hs": null,
+        "image_status": "available",
+        "item_id": "d66e3317-0bc5-4578-9fdc-2764f893c411",
+        "latest_run_id": "22f6d771-3f6a-4cb7-9d97-4b4d0b83070c",
+        "name": "不锈钢制无缝管（一致样例）",
+        "precheck_suggested_hs": "8544422900",
+        "result_mode": "mock",
+        "revision": 1,
+        "source_location": {
+          "cells": "A5:H5",
+          "row_number": 5,
+          "sheet_name": "申报要素"
+        },
+        "submitted_hs": null,
+        "supplier_hs_raw": "8544422900",
+        "task_id": "403b3e26-e7bc-4b50-bd42-97a24a721ec9",
+        "version_id": "4e599c20-fad1-40a8-983a-3860e80645f7"
+      },
+      {
+        "business_confirmed_hs": null,
+        "comparison_status": "inconsistent",
+        "expert_final_hs": null,
+        "image_status": "absent",
+        "item_id": "80094e34-ea8a-4250-9ffc-2e21829c3882",
+        "latest_run_id": "22f6d771-3f6a-4cb7-9d97-4b4d0b83070c",
+        "name": "不锈钢制焊接管（不一致样例）",
+        "precheck_suggested_hs": "8544422900",
+        "result_mode": "mock",
+        "revision": 1,
+        "source_location": {
+          "cells": "A6:H6",
+          "row_number": 6,
+          "sheet_name": "申报要素"
+        },
+        "submitted_hs": null,
+        "supplier_hs_raw": "7306290000",
+        "task_id": "403b3e26-e7bc-4b50-bd42-97a24a721ec9",
+        "version_id": "4e599c20-fad1-40a8-983a-3860e80645f7"
+      }
+    ],
+    "5f9f24df-4970-42f6-b600-a720b7f65b9b": [
       {
         "business_confirmed_hs": "8544422900",
         "comparison_status": "consistent",
         "expert_final_hs": "8536901900",
         "image_status": "available",
-        "item_id": "5ab44d7a-e050-4416-8c28-66ad29c94780",
-        "latest_run_id": "6e0250f3-5f03-4b1a-88c7-f7eff2917a5c",
+        "item_id": "48aad4f1-bae9-43ac-92ae-fb176dc01690",
+        "latest_run_id": "f1f2b44b-a5ef-4b34-8d2b-40dc3188a2f0",
         "name": "不锈钢制无缝管（改码样例）",
         "precheck_suggested_hs": "8544422900",
         "result_mode": "mock",
@@ -988,18 +1043,18 @@
         },
         "submitted_hs": "8544422900",
         "supplier_hs_raw": "8544422900",
-        "task_id": "b935ddbf-8d10-43e7-8398-0fcaa9dc7544",
-        "version_id": "4b5befef-af8c-4c96-938e-fd8b04975d18"
+        "task_id": "97f2e7ec-6ab5-46c3-b49a-253724ecd1a9",
+        "version_id": "5f9f24df-4970-42f6-b600-a720b7f65b9b"
       }
     ],
-    "7839299e-a828-4468-bd66-30e9f76333db": [
+    "c48496bc-5e2a-4ab2-888a-b1342d95fb6e": [
       {
         "business_confirmed_hs": null,
         "comparison_status": "consistent",
         "expert_final_hs": null,
         "image_status": "available",
-        "item_id": "cacf692d-f8f1-4e08-bcc9-81c5becd3a83",
-        "latest_run_id": "f8681831-7480-424d-8cc3-e91faad5d10b",
+        "item_id": "1b3306b7-c9cd-4148-875a-226e47c309cd",
+        "latest_run_id": "252d68f5-c774-4ae6-887b-d6c50b561fe6",
         "name": "不锈钢制无缝管（一致样例）",
         "precheck_suggested_hs": "8544422900",
         "result_mode": "mock",
@@ -1011,16 +1066,16 @@
         },
         "submitted_hs": null,
         "supplier_hs_raw": "8544422900",
-        "task_id": "8c5aed88-fe80-4618-9997-82891376ad96",
-        "version_id": "7839299e-a828-4468-bd66-30e9f76333db"
+        "task_id": "403b3e26-e7bc-4b50-bd42-97a24a721ec9",
+        "version_id": "c48496bc-5e2a-4ab2-888a-b1342d95fb6e"
       },
       {
         "business_confirmed_hs": null,
         "comparison_status": "inconsistent",
         "expert_final_hs": null,
         "image_status": "absent",
-        "item_id": "dc8d2647-9ac5-4829-aafe-f9cd354ad112",
-        "latest_run_id": "f8681831-7480-424d-8cc3-e91faad5d10b",
+        "item_id": "333b3b94-d0a1-4ce7-a5ba-6b6d2066a5fd",
+        "latest_run_id": "252d68f5-c774-4ae6-887b-d6c50b561fe6",
         "name": "不锈钢制焊接管（不一致样例）",
         "precheck_suggested_hs": "8544422900",
         "result_mode": "mock",
@@ -1032,60 +1087,16 @@
         },
         "submitted_hs": null,
         "supplier_hs_raw": "7306290000",
-        "task_id": "8c5aed88-fe80-4618-9997-82891376ad96",
-        "version_id": "7839299e-a828-4468-bd66-30e9f76333db"
-      }
-    ],
-    "d1051286-aecb-47e1-a614-1f53ed7aef65": [
-      {
-        "business_confirmed_hs": null,
-        "comparison_status": "consistent",
-        "expert_final_hs": null,
-        "image_status": "available",
-        "item_id": "5a8855a1-76c9-43a4-8f18-216e84df2d5c",
-        "latest_run_id": "2aa163f3-c390-4a69-9c4a-e6162e1df3ac",
-        "name": "不锈钢制无缝管（一致样例）",
-        "precheck_suggested_hs": "8544422900",
-        "result_mode": "mock",
-        "revision": 1,
-        "source_location": {
-          "cells": "A5:H5",
-          "row_number": 5,
-          "sheet_name": "申报要素"
-        },
-        "submitted_hs": null,
-        "supplier_hs_raw": "8544422900",
-        "task_id": "8c5aed88-fe80-4618-9997-82891376ad96",
-        "version_id": "d1051286-aecb-47e1-a614-1f53ed7aef65"
-      },
-      {
-        "business_confirmed_hs": null,
-        "comparison_status": "inconsistent",
-        "expert_final_hs": null,
-        "image_status": "absent",
-        "item_id": "8d537008-3a2b-4173-9abe-2de00e75f93a",
-        "latest_run_id": "2aa163f3-c390-4a69-9c4a-e6162e1df3ac",
-        "name": "不锈钢制焊接管（不一致样例）",
-        "precheck_suggested_hs": "8544422900",
-        "result_mode": "mock",
-        "revision": 1,
-        "source_location": {
-          "cells": "A6:H6",
-          "row_number": 6,
-          "sheet_name": "申报要素"
-        },
-        "submitted_hs": null,
-        "supplier_hs_raw": "7306290000",
-        "task_id": "8c5aed88-fe80-4618-9997-82891376ad96",
-        "version_id": "d1051286-aecb-47e1-a614-1f53ed7aef65"
+        "task_id": "403b3e26-e7bc-4b50-bd42-97a24a721ec9",
+        "version_id": "c48496bc-5e2a-4ab2-888a-b1342d95fb6e"
       },
       {
         "business_confirmed_hs": null,
         "comparison_status": "needs_confirmation",
         "expert_final_hs": null,
         "image_status": "absent",
-        "item_id": "0b85d8fd-d804-4d9b-8751-4d7ad0f00253",
-        "latest_run_id": "2aa163f3-c390-4a69-9c4a-e6162e1df3ac",
+        "item_id": "68f75c02-7c38-4dc4-85dd-e9e2e306c667",
+        "latest_run_id": "252d68f5-c774-4ae6-887b-d6c50b561fe6",
         "name": "镍合金板（缺用途）",
         "precheck_suggested_hs": null,
         "result_mode": "mock",
@@ -1097,16 +1108,16 @@
         },
         "submitted_hs": null,
         "supplier_hs_raw": "8544422900",
-        "task_id": "8c5aed88-fe80-4618-9997-82891376ad96",
-        "version_id": "d1051286-aecb-47e1-a614-1f53ed7aef65"
+        "task_id": "403b3e26-e7bc-4b50-bd42-97a24a721ec9",
+        "version_id": "c48496bc-5e2a-4ab2-888a-b1342d95fb6e"
       },
       {
         "business_confirmed_hs": null,
         "comparison_status": "needs_confirmation",
         "expert_final_hs": null,
         "image_status": "read_failed",
-        "item_id": "219e35bb-0959-4255-aee1-ea1f861c7af7",
-        "latest_run_id": "2aa163f3-c390-4a69-9c4a-e6162e1df3ac",
+        "item_id": "2c5390e1-77eb-49ba-8dde-0aca4afd8360",
+        "latest_run_id": "252d68f5-c774-4ae6-887b-d6c50b561fe6",
         "name": "镍合金带（附图读取失败）",
         "precheck_suggested_hs": "8544422900",
         "result_mode": "mock",
@@ -1118,16 +1129,16 @@
         },
         "submitted_hs": null,
         "supplier_hs_raw": "8544422900",
-        "task_id": "8c5aed88-fe80-4618-9997-82891376ad96",
-        "version_id": "d1051286-aecb-47e1-a614-1f53ed7aef65"
+        "task_id": "403b3e26-e7bc-4b50-bd42-97a24a721ec9",
+        "version_id": "c48496bc-5e2a-4ab2-888a-b1342d95fb6e"
       },
       {
         "business_confirmed_hs": null,
         "comparison_status": "supplier_missing",
         "expert_final_hs": null,
         "image_status": "absent",
-        "item_id": "b65a7529-417e-4f86-a3d7-d7c859bd2ca4",
-        "latest_run_id": "2aa163f3-c390-4a69-9c4a-e6162e1df3ac",
+        "item_id": "20e55580-7963-4a06-bca6-f9b2dd759fd3",
+        "latest_run_id": "252d68f5-c774-4ae6-887b-d6c50b561fe6",
         "name": "钢制紧固件（原码未填）",
         "precheck_suggested_hs": "8544422900",
         "result_mode": "mock",
@@ -1139,16 +1150,16 @@
         },
         "submitted_hs": null,
         "supplier_hs_raw": "",
-        "task_id": "8c5aed88-fe80-4618-9997-82891376ad96",
-        "version_id": "d1051286-aecb-47e1-a614-1f53ed7aef65"
+        "task_id": "403b3e26-e7bc-4b50-bd42-97a24a721ec9",
+        "version_id": "c48496bc-5e2a-4ab2-888a-b1342d95fb6e"
       },
       {
         "business_confirmed_hs": null,
         "comparison_status": "supplier_invalid",
         "expert_final_hs": null,
         "image_status": "absent",
-        "item_id": "fa53bafa-681e-45ae-87fa-7c8f1266bebc",
-        "latest_run_id": "2aa163f3-c390-4a69-9c4a-e6162e1df3ac",
+        "item_id": "545b34e8-6d04-4d3d-85e7-721e9a108804",
+        "latest_run_id": "252d68f5-c774-4ae6-887b-d6c50b561fe6",
         "name": "钢制法兰（原码异常）",
         "precheck_suggested_hs": "8544422900",
         "result_mode": "mock",
@@ -1160,16 +1171,16 @@
         },
         "submitted_hs": null,
         "supplier_hs_raw": "ABC",
-        "task_id": "8c5aed88-fe80-4618-9997-82891376ad96",
-        "version_id": "d1051286-aecb-47e1-a614-1f53ed7aef65"
+        "task_id": "403b3e26-e7bc-4b50-bd42-97a24a721ec9",
+        "version_id": "c48496bc-5e2a-4ab2-888a-b1342d95fb6e"
       },
       {
         "business_confirmed_hs": null,
         "comparison_status": null,
         "expert_final_hs": null,
         "image_status": "absent",
-        "item_id": "0c0c1fb0-df9a-40c8-b157-65c15258e536",
-        "latest_run_id": "2aa163f3-c390-4a69-9c4a-e6162e1df3ac",
+        "item_id": "31333839-7f75-4778-8606-14858ed5360d",
+        "latest_run_id": "252d68f5-c774-4ae6-887b-d6c50b561fe6",
         "name": "铜制管件（技术失败行）",
         "precheck_suggested_hs": null,
         "result_mode": "mock",
@@ -1181,16 +1192,16 @@
         },
         "submitted_hs": null,
         "supplier_hs_raw": "8544422900",
-        "task_id": "8c5aed88-fe80-4618-9997-82891376ad96",
-        "version_id": "d1051286-aecb-47e1-a614-1f53ed7aef65"
+        "task_id": "403b3e26-e7bc-4b50-bd42-97a24a721ec9",
+        "version_id": "c48496bc-5e2a-4ab2-888a-b1342d95fb6e"
       },
       {
         "business_confirmed_hs": null,
         "comparison_status": "needs_confirmation",
         "expert_final_hs": null,
         "image_status": "absent",
-        "item_id": "9c7c5d4d-3d1f-4a96-9b4b-6e0153cf1b5a",
-        "latest_run_id": "2aa163f3-c390-4a69-9c4a-e6162e1df3ac",
+        "item_id": "ad764084-9f8d-4640-bb3d-db0458b51163",
+        "latest_run_id": "252d68f5-c774-4ae6-887b-d6c50b561fe6",
         "name": "铝制型材（查询失败）",
         "precheck_suggested_hs": "8544422900",
         "result_mode": "mock",
@@ -1202,16 +1213,128 @@
         },
         "submitted_hs": null,
         "supplier_hs_raw": "8544422900",
-        "task_id": "8c5aed88-fe80-4618-9997-82891376ad96",
-        "version_id": "d1051286-aecb-47e1-a614-1f53ed7aef65"
+        "task_id": "403b3e26-e7bc-4b50-bd42-97a24a721ec9",
+        "version_id": "c48496bc-5e2a-4ab2-888a-b1342d95fb6e"
       }
     ]
   },
   "runs": {
-    "2aa163f3-c390-4a69-9c4a-e6162e1df3ac": {
-      "created_at": "2026-11-14T14:19:49.860405+00:00",
+    "22f6d771-3f6a-4cb7-9d97-4b4d0b83070c": {
+      "created_at": "2026-11-17T09:28:03.209009+00:00",
       "engine_version": "mock-1.0.0",
       "evidence": [
+        {
+          "document": "MOCK-ONLY",
+          "effective_from": null,
+          "effective_to": null,
+          "evidence_id": "mock-obtained",
+          "excerpt": null,
+          "issued_at": null,
+          "locator": "合成样例，无真实条款",
+          "note": "mock 合成依据，仅用于演示",
+          "query": {
+            "mode": "mock"
+          },
+          "retrieved_at": "2026-11-14T00:00:00+08:00",
+          "scope": null,
+          "source_type": "synthetic",
+          "status": "obtained",
+          "title": "mock 合成依据（非真实法规）",
+          "url": null
+        }
+      ],
+      "finished_at": "2026-11-17T09:28:03.221039+00:00",
+      "is_current": true,
+      "items": [
+        {
+          "attempt_history": [],
+          "attempts": 1,
+          "comparison_status": "inconsistent",
+          "confidence": 0.62,
+          "error_message": "",
+          "evidence_status": "obtained",
+          "issues": [
+            {
+              "code": "HS_MISMATCH",
+              "field": "supplier_hs_raw",
+              "message": "建议编码与原码不一致",
+              "missing": null,
+              "suggested_role": null
+            }
+          ],
+          "item_id": "80094e34-ea8a-4250-9ffc-2e21829c3882",
+          "origin_run_id": null,
+          "source_location": {
+            "cells": "A6:H6",
+            "row_number": 6,
+            "sheet_name": "申报要素"
+          },
+          "status": "succeeded",
+          "suggested_hs": "8544422900"
+        },
+        {
+          "attempt_history": [],
+          "attempts": 1,
+          "comparison_status": "consistent",
+          "confidence": 0.62,
+          "error_message": "",
+          "evidence_status": "obtained",
+          "issues": [],
+          "item_id": "d66e3317-0bc5-4578-9fdc-2764f893c411",
+          "origin_run_id": null,
+          "source_location": {
+            "cells": "A5:H5",
+            "row_number": 5,
+            "sheet_name": "申报要素"
+          },
+          "status": "succeeded",
+          "suggested_hs": "8544422900"
+        }
+      ],
+      "kind": "precheck",
+      "parent_run_id": null,
+      "progress": {
+        "failed": 0,
+        "queued": 0,
+        "running": 0,
+        "succeeded": 2,
+        "total": 2
+      },
+      "prompt_version": "mock-none",
+      "result_mode": "mock",
+      "retry_allowed": false,
+      "retry_item_ids": [],
+      "rules_version": "d4-0.1",
+      "run_id": "22f6d771-3f6a-4cb7-9d97-4b4d0b83070c",
+      "started_at": "2026-11-17T09:28:03.207626+00:00",
+      "status": "succeeded",
+      "submission_id": null,
+      "task_id": "403b3e26-e7bc-4b50-bd42-97a24a721ec9",
+      "version_id": "4e599c20-fad1-40a8-983a-3860e80645f7"
+    },
+    "252d68f5-c774-4ae6-887b-d6c50b561fe6": {
+      "created_at": "2026-11-17T09:28:03.228947+00:00",
+      "engine_version": "mock-1.0.0",
+      "evidence": [
+        {
+          "document": "MOCK-ONLY",
+          "effective_from": null,
+          "effective_to": null,
+          "evidence_id": "mock-obtained",
+          "excerpt": null,
+          "issued_at": null,
+          "locator": "合成样例，无真实条款",
+          "note": "mock 合成依据，仅用于演示",
+          "query": {
+            "mode": "mock"
+          },
+          "retrieved_at": "2026-11-14T00:00:00+08:00",
+          "scope": null,
+          "source_type": "synthetic",
+          "status": "obtained",
+          "title": "mock 合成依据（非真实法规）",
+          "url": null
+        },
         {
           "document": "MOCK-ONLY",
           "effective_from": null,
@@ -1235,25 +1358,6 @@
           "document": "MOCK-ONLY",
           "effective_from": null,
           "effective_to": null,
-          "evidence_id": "mock-obtained",
-          "excerpt": null,
-          "issued_at": null,
-          "locator": "合成样例，无真实条款",
-          "note": "mock 合成依据，仅用于演示",
-          "query": {
-            "mode": "mock"
-          },
-          "retrieved_at": "2026-11-14T00:00:00+08:00",
-          "scope": null,
-          "source_type": "synthetic",
-          "status": "obtained",
-          "title": "mock 合成依据（非真实法规）",
-          "url": null
-        },
-        {
-          "document": "MOCK-ONLY",
-          "effective_from": null,
-          "effective_to": null,
           "evidence_id": "mock-query_failed",
           "excerpt": null,
           "issued_at": null,
@@ -1270,81 +1374,19 @@
           "url": null
         }
       ],
-      "finished_at": "2026-11-14T14:19:49.864596+00:00",
+      "finished_at": "2026-11-17T09:28:03.259380+00:00",
       "is_current": true,
       "items": [
         {
-          "attempts": 1,
-          "comparison_status": "needs_confirmation",
-          "confidence": null,
-          "error_message": "",
-          "evidence_status": "not_found",
-          "issues": [
-            {
-              "code": "MISSING_USAGE",
-              "field": "attributes.usage",
-              "message": "请补充具体用途",
-              "missing": "具体用途",
-              "suggested_role": "supplier"
-            }
-          ],
-          "item_id": "0b85d8fd-d804-4d9b-8751-4d7ad0f00253",
-          "source_location": {
-            "cells": "A7:H7",
-            "row_number": 7,
-            "sheet_name": "申报要素"
-          },
-          "status": "succeeded",
-          "suggested_hs": null
-        },
-        {
-          "attempts": 1,
-          "comparison_status": null,
-          "confidence": null,
-          "error_message": "mock 模拟的技术失败：上游模型超时",
-          "evidence_status": null,
-          "issues": [],
-          "item_id": "0c0c1fb0-df9a-40c8-b157-65c15258e536",
-          "source_location": {
-            "cells": "A11:H11",
-            "row_number": 11,
-            "sheet_name": "申报要素"
-          },
-          "status": "failed",
-          "suggested_hs": null
-        },
-        {
-          "attempts": 1,
-          "comparison_status": "needs_confirmation",
-          "confidence": 0.62,
-          "error_message": "",
-          "evidence_status": "obtained",
-          "issues": [
-            {
-              "code": "IMAGE_READ_FAILED",
-              "field": "images",
-              "message": "附图读取失败，可见事实不足",
-              "missing": "附图内容",
-              "suggested_role": "supplier"
-            }
-          ],
-          "item_id": "219e35bb-0959-4255-aee1-ea1f861c7af7",
-          "source_location": {
-            "cells": "A8:H8",
-            "row_number": 8,
-            "sheet_name": "申报要素"
-          },
-          "status": "succeeded",
-          "suggested_hs": "8544422900"
-        },
-        {
+          "attempt_history": [],
           "attempts": 1,
           "comparison_status": "consistent",
           "confidence": 0.62,
           "error_message": "",
           "evidence_status": "obtained",
           "issues": [],
-          "item_id": "5a8855a1-76c9-43a4-8f18-216e84df2d5c",
+          "item_id": "1b3306b7-c9cd-4148-875a-226e47c309cd",
+          "origin_run_id": null,
           "source_location": {
             "cells": "A5:H5",
             "row_number": 5,
@@ -1354,54 +1396,7 @@
           "suggested_hs": "8544422900"
         },
         {
-          "attempts": 1,
-          "comparison_status": "inconsistent",
-          "confidence": 0.62,
-          "error_message": "",
-          "evidence_status": "obtained",
-          "issues": [
-            {
-              "code": "HS_MISMATCH",
-              "field": "supplier_hs_raw",
-              "message": "建议编码与原码不一致",
-              "missing": null,
-              "suggested_role": null
-            }
-          ],
-          "item_id": "8d537008-3a2b-4173-9abe-2de00e75f93a",
-          "source_location": {
-            "cells": "A6:H6",
-            "row_number": 6,
-            "sheet_name": "申报要素"
-          },
-          "status": "succeeded",
-          "suggested_hs": "8544422900"
-        },
-        {
-          "attempts": 1,
-          "comparison_status": "needs_confirmation",
-          "confidence": null,
-          "error_message": "",
-          "evidence_status": "query_failed",
-          "issues": [
-            {
-              "code": "SOURCE_QUERY_FAILED",
-              "field": null,
-              "message": "税则来源查询失败，依据待核",
-              "missing": null,
-              "suggested_role": null
-            }
-          ],
-          "item_id": "9c7c5d4d-3d1f-4a96-9b4b-6e0153cf1b5a",
-          "source_location": {
-            "cells": "A12:H12",
-            "row_number": 12,
-            "sheet_name": "申报要素"
-          },
-          "status": "succeeded",
-          "suggested_hs": "8544422900"
-        },
-        {
+          "attempt_history": [],
           "attempts": 1,
           "comparison_status": "supplier_missing",
           "confidence": 0.62,
@@ -1416,7 +1411,8 @@
               "suggested_role": null
             }
           ],
-          "item_id": "b65a7529-417e-4f86-a3d7-d7c859bd2ca4",
+          "item_id": "20e55580-7963-4a06-bca6-f9b2dd759fd3",
+          "origin_run_id": null,
           "source_location": {
             "cells": "A9:H9",
             "row_number": 9,
@@ -1426,6 +1422,77 @@
           "suggested_hs": "8544422900"
         },
         {
+          "attempt_history": [],
+          "attempts": 1,
+          "comparison_status": "needs_confirmation",
+          "confidence": 0.62,
+          "error_message": "",
+          "evidence_status": "obtained",
+          "issues": [
+            {
+              "code": "IMAGE_READ_FAILED",
+              "field": "images",
+              "message": "附图读取失败，可见事实不足",
+              "missing": "附图内容",
+              "suggested_role": "supplier"
+            }
+          ],
+          "item_id": "2c5390e1-77eb-49ba-8dde-0aca4afd8360",
+          "origin_run_id": null,
+          "source_location": {
+            "cells": "A8:H8",
+            "row_number": 8,
+            "sheet_name": "申报要素"
+          },
+          "status": "succeeded",
+          "suggested_hs": "8544422900"
+        },
+        {
+          "attempt_history": [],
+          "attempts": 1,
+          "comparison_status": null,
+          "confidence": null,
+          "error_message": "mock 模拟的技术失败：上游模型超时",
+          "evidence_status": null,
+          "issues": [],
+          "item_id": "31333839-7f75-4778-8606-14858ed5360d",
+          "origin_run_id": null,
+          "source_location": {
+            "cells": "A11:H11",
+            "row_number": 11,
+            "sheet_name": "申报要素"
+          },
+          "status": "failed",
+          "suggested_hs": null
+        },
+        {
+          "attempt_history": [],
+          "attempts": 1,
+          "comparison_status": "inconsistent",
+          "confidence": 0.62,
+          "error_message": "",
+          "evidence_status": "obtained",
+          "issues": [
+            {
+              "code": "HS_MISMATCH",
+              "field": "supplier_hs_raw",
+              "message": "建议编码与原码不一致",
+              "missing": null,
+              "suggested_role": null
+            }
+          ],
+          "item_id": "333b3b94-d0a1-4ce7-a5ba-6b6d2066a5fd",
+          "origin_run_id": null,
+          "source_location": {
+            "cells": "A6:H6",
+            "row_number": 6,
+            "sheet_name": "申报要素"
+          },
+          "status": "succeeded",
+          "suggested_hs": "8544422900"
+        },
+        {
+          "attempt_history": [],
           "attempts": 1,
           "comparison_status": "supplier_invalid",
           "confidence": 0.62,
@@ -1440,7 +1507,8 @@
               "suggested_role": null
             }
           ],
-          "item_id": "fa53bafa-681e-45ae-87fa-7c8f1266bebc",
+          "item_id": "545b34e8-6d04-4d3d-85e7-721e9a108804",
+          "origin_run_id": null,
           "source_location": {
             "cells": "A10:H10",
             "row_number": 10,
@@ -1448,9 +1516,62 @@
           },
           "status": "succeeded",
           "suggested_hs": "8544422900"
+        },
+        {
+          "attempt_history": [],
+          "attempts": 1,
+          "comparison_status": "needs_confirmation",
+          "confidence": null,
+          "error_message": "",
+          "evidence_status": "not_found",
+          "issues": [
+            {
+              "code": "MISSING_USAGE",
+              "field": "attributes.usage",
+              "message": "请补充具体用途",
+              "missing": "具体用途",
+              "suggested_role": "supplier"
+            }
+          ],
+          "item_id": "68f75c02-7c38-4dc4-85dd-e9e2e306c667",
+          "origin_run_id": null,
+          "source_location": {
+            "cells": "A7:H7",
+            "row_number": 7,
+            "sheet_name": "申报要素"
+          },
+          "status": "succeeded",
+          "suggested_hs": null
+        },
+        {
+          "attempt_history": [],
+          "attempts": 1,
+          "comparison_status": "needs_confirmation",
+          "confidence": null,
+          "error_message": "",
+          "evidence_status": "query_failed",
+          "issues": [
+            {
+              "code": "SOURCE_QUERY_FAILED",
+              "field": null,
+              "message": "税则来源查询失败，依据待核",
+              "missing": null,
+              "suggested_role": null
+            }
+          ],
+          "item_id": "ad764084-9f8d-4640-bb3d-db0458b51163",
+          "origin_run_id": null,
+          "source_location": {
+            "cells": "A12:H12",
+            "row_number": 12,
+            "sheet_name": "申报要素"
+          },
+          "status": "succeeded",
+          "suggested_hs": "8544422900"
         }
       ],
       "kind": "precheck",
+      "parent_run_id": null,
       "progress": {
         "failed": 1,
         "queued": 0,
@@ -1460,16 +1581,18 @@
       },
       "prompt_version": "mock-none",
       "result_mode": "mock",
+      "retry_allowed": false,
+      "retry_item_ids": [],
       "rules_version": "d4-0.1",
-      "run_id": "2aa163f3-c390-4a69-9c4a-e6162e1df3ac",
-      "started_at": "2026-11-14T14:19:49.860364+00:00",
+      "run_id": "252d68f5-c774-4ae6-887b-d6c50b561fe6",
+      "started_at": "2026-11-17T09:28:03.228166+00:00",
       "status": "succeeded",
       "submission_id": null,
-      "task_id": "8c5aed88-fe80-4618-9997-82891376ad96",
-      "version_id": "d1051286-aecb-47e1-a614-1f53ed7aef65"
+      "task_id": "403b3e26-e7bc-4b50-bd42-97a24a721ec9",
+      "version_id": "c48496bc-5e2a-4ab2-888a-b1342d95fb6e"
     },
-    "6e0250f3-5f03-4b1a-88c7-f7eff2917a5c": {
-      "created_at": "2026-11-14T14:19:49.865782+00:00",
+    "f1f2b44b-a5ef-4b34-8d2b-40dc3188a2f0": {
+      "created_at": "2026-11-17T09:28:03.266914+00:00",
       "engine_version": "mock-1.0.0",
       "evidence": [
         {
@@ -1492,17 +1615,19 @@
           "url": null
         }
       ],
-      "finished_at": "2026-11-14T14:19:49.866675+00:00",
+      "finished_at": "2026-11-17T09:28:03.273150+00:00",
       "is_current": true,
       "items": [
         {
+          "attempt_history": [],
           "attempts": 1,
           "comparison_status": "consistent",
           "confidence": 0.62,
           "error_message": "",
           "evidence_status": "obtained",
           "issues": [],
-          "item_id": "5ab44d7a-e050-4416-8c28-66ad29c94780",
+          "item_id": "48aad4f1-bae9-43ac-92ae-fb176dc01690",
+          "origin_run_id": null,
           "source_location": {
             "cells": "A3:H3",
             "row_number": 3,
@@ -1513,6 +1638,7 @@
         }
       ],
       "kind": "precheck",
+      "parent_run_id": null,
       "progress": {
         "failed": 0,
         "queued": 0,
@@ -1522,16 +1648,18 @@
       },
       "prompt_version": "mock-none",
       "result_mode": "mock",
+      "retry_allowed": false,
+      "retry_item_ids": [],
       "rules_version": "d4-0.1",
-      "run_id": "6e0250f3-5f03-4b1a-88c7-f7eff2917a5c",
-      "started_at": "2026-11-14T14:19:49.865736+00:00",
+      "run_id": "f1f2b44b-a5ef-4b34-8d2b-40dc3188a2f0",
+      "started_at": "2026-11-17T09:28:03.266006+00:00",
       "status": "succeeded",
       "submission_id": null,
-      "task_id": "b935ddbf-8d10-43e7-8398-0fcaa9dc7544",
-      "version_id": "4b5befef-af8c-4c96-938e-fd8b04975d18"
+      "task_id": "97f2e7ec-6ab5-46c3-b49a-253724ecd1a9",
+      "version_id": "5f9f24df-4970-42f6-b600-a720b7f65b9b"
     },
-    "c5412410-961f-4d35-abca-3673f85cd206": {
-      "created_at": "2026-11-14T14:19:49.867662+00:00",
+    "f8c7d559-c6c1-455a-8816-f06765c57362": {
+      "created_at": "2026-11-17T09:28:03.279722+00:00",
       "engine_version": "mock-1.0.0",
       "evidence": [
         {
@@ -1554,10 +1682,11 @@
           "url": null
         }
       ],
-      "finished_at": "2026-11-14T14:19:49.869077+00:00",
+      "finished_at": "2026-11-17T09:28:03.316298+00:00",
       "is_current": true,
       "items": [
         {
+          "attempt_history": [],
           "attempts": 1,
           "comparison_status": null,
           "confidence": null,
@@ -1572,7 +1701,8 @@
               "suggested_role": null
             }
           ],
-          "item_id": "5ab44d7a-e050-4416-8c28-66ad29c94780",
+          "item_id": "48aad4f1-bae9-43ac-92ae-fb176dc01690",
+          "origin_run_id": null,
           "source_location": {
             "cells": "A3:H3",
             "row_number": 3,
@@ -1583,6 +1713,7 @@
         }
       ],
       "kind": "expert_check",
+      "parent_run_id": null,
       "progress": {
         "failed": 0,
         "queued": 0,
@@ -1592,99 +1723,15 @@
       },
       "prompt_version": "mock-none",
       "result_mode": "mock",
+      "retry_allowed": false,
+      "retry_item_ids": [],
       "rules_version": "d4-0.1",
-      "run_id": "c5412410-961f-4d35-abca-3673f85cd206",
-      "started_at": "2026-11-14T14:19:49.867613+00:00",
+      "run_id": "f8c7d559-c6c1-455a-8816-f06765c57362",
+      "started_at": "2026-11-17T09:28:03.278715+00:00",
       "status": "succeeded",
-      "submission_id": "d57727bf-76ba-4fda-aec7-98748921ea83",
-      "task_id": "b935ddbf-8d10-43e7-8398-0fcaa9dc7544",
-      "version_id": "4b5befef-af8c-4c96-938e-fd8b04975d18"
-    },
-    "f8681831-7480-424d-8cc3-e91faad5d10b": {
-      "created_at": "2026-11-14T14:19:49.856151+00:00",
-      "engine_version": "mock-1.0.0",
-      "evidence": [
-        {
-          "document": "MOCK-ONLY",
-          "effective_from": null,
-          "effective_to": null,
-          "evidence_id": "mock-obtained",
-          "excerpt": null,
-          "issued_at": null,
-          "locator": "合成样例，无真实条款",
-          "note": "mock 合成依据，仅用于演示",
-          "query": {
-            "mode": "mock"
-          },
-          "retrieved_at": "2026-11-14T00:00:00+08:00",
-          "scope": null,
-          "source_type": "synthetic",
-          "status": "obtained",
-          "title": "mock 合成依据（非真实法规）",
-          "url": null
-        }
-      ],
-      "finished_at": "2026-11-14T14:19:49.859342+00:00",
-      "is_current": true,
-      "items": [
-        {
-          "attempts": 1,
-          "comparison_status": "consistent",
-          "confidence": 0.62,
-          "error_message": "",
-          "evidence_status": "obtained",
-          "issues": [],
-          "item_id": "cacf692d-f8f1-4e08-bcc9-81c5becd3a83",
-          "source_location": {
-            "cells": "A5:H5",
-            "row_number": 5,
-            "sheet_name": "申报要素"
-          },
-          "status": "succeeded",
-          "suggested_hs": "8544422900"
-        },
-        {
-          "attempts": 1,
-          "comparison_status": "inconsistent",
-          "confidence": 0.62,
-          "error_message": "",
-          "evidence_status": "obtained",
-          "issues": [
-            {
-              "code": "HS_MISMATCH",
-              "field": "supplier_hs_raw",
-              "message": "建议编码与原码不一致",
-              "missing": null,
-              "suggested_role": null
-            }
-          ],
-          "item_id": "dc8d2647-9ac5-4829-aafe-f9cd354ad112",
-          "source_location": {
-            "cells": "A6:H6",
-            "row_number": 6,
-            "sheet_name": "申报要素"
-          },
-          "status": "succeeded",
-          "suggested_hs": "8544422900"
-        }
-      ],
-      "kind": "precheck",
-      "progress": {
-        "failed": 0,
-        "queued": 0,
-        "running": 0,
-        "succeeded": 2,
-        "total": 2
-      },
-      "prompt_version": "mock-none",
-      "result_mode": "mock",
-      "rules_version": "d4-0.1",
-      "run_id": "f8681831-7480-424d-8cc3-e91faad5d10b",
-      "started_at": "2026-11-14T14:19:49.856078+00:00",
-      "status": "succeeded",
-      "submission_id": null,
-      "task_id": "8c5aed88-fe80-4618-9997-82891376ad96",
-      "version_id": "7839299e-a828-4468-bd66-30e9f76333db"
+      "submission_id": "df54a579-68ce-4281-8a3d-986fac1f19ef",
+      "task_id": "97f2e7ec-6ab5-46c3-b49a-253724ecd1a9",
+      "version_id": "5f9f24df-4970-42f6-b600-a720b7f65b9b"
     }
   },
   "tasks": [
@@ -1692,37 +1739,39 @@
       "allowed_actions": [
         "confirmation.write",
         "read",
-        "submission.create"
+        "submission.create",
+        "task.return"
       ],
-      "created_at": "2026-11-14T14:19:49.853337+00:00",
+      "created_at": "2026-11-17T09:28:03.194341+00:00",
       "current_submission_id": null,
       "current_submission_status": null,
-      "current_version_id": "d1051286-aecb-47e1-a614-1f53ed7aef65",
+      "current_version_id": "c48496bc-5e2a-4ab2-888a-b1342d95fb6e",
       "current_version_number": 2,
-      "latest_run_id": "2aa163f3-c390-4a69-9c4a-e6162e1df3ac",
+      "latest_run_id": "252d68f5-c774-4ae6-887b-d6c50b561fe6",
       "latest_run_kind": "precheck",
       "latest_run_status": "succeeded",
+      "precheck_allowed": true,
       "result_mode": "mock",
       "revision": 1,
       "stage": "awaiting_confirmation",
       "supplier": "供应商甲",
-      "task_id": "8c5aed88-fe80-4618-9997-82891376ad96",
+      "task_id": "403b3e26-e7bc-4b50-bd42-97a24a721ec9",
       "title": "契约演示-主流程",
-      "updated_at": "2026-11-14T14:19:49.853346+00:00",
+      "updated_at": "2026-11-17T09:28:03.194355+00:00",
       "versions": [
         {
           "is_current": false,
           "number": 1,
           "original_filename": "契约演示-V1.xlsx",
-          "uploaded_at": "2026-11-14T14:19:49.854636+00:00",
-          "version_id": "7839299e-a828-4468-bd66-30e9f76333db"
+          "uploaded_at": "2026-11-17T09:28:03.200883+00:00",
+          "version_id": "4e599c20-fad1-40a8-983a-3860e80645f7"
         },
         {
           "is_current": true,
           "number": 2,
           "original_filename": "契约演示-V2.xlsx",
-          "uploaded_at": "2026-11-14T14:19:49.859573+00:00",
-          "version_id": "d1051286-aecb-47e1-a614-1f53ed7aef65"
+          "uploaded_at": "2026-11-17T09:28:03.223407+00:00",
+          "version_id": "c48496bc-5e2a-4ab2-888a-b1342d95fb6e"
         }
       ]
     },
@@ -1730,30 +1779,32 @@
       "allowed_actions": [
         "confirmation.write",
         "read",
-        "submission.create"
+        "submission.create",
+        "task.return"
       ],
-      "created_at": "2026-11-14T14:19:49.864920+00:00",
-      "current_submission_id": "d57727bf-76ba-4fda-aec7-98748921ea83",
+      "created_at": "2026-11-17T09:28:03.261660+00:00",
+      "current_submission_id": "df54a579-68ce-4281-8a3d-986fac1f19ef",
       "current_submission_status": "approved",
-      "current_version_id": "4b5befef-af8c-4c96-938e-fd8b04975d18",
+      "current_version_id": "5f9f24df-4970-42f6-b600-a720b7f65b9b",
       "current_version_number": 1,
-      "latest_run_id": "c5412410-961f-4d35-abca-3673f85cd206",
+      "latest_run_id": "f8c7d559-c6c1-455a-8816-f06765c57362",
       "latest_run_kind": "expert_check",
       "latest_run_status": "succeeded",
+      "precheck_allowed": false,
       "result_mode": "mock",
       "revision": 1,
       "stage": "approved",
       "supplier": "供应商甲",
-      "task_id": "b935ddbf-8d10-43e7-8398-0fcaa9dc7544",
+      "task_id": "97f2e7ec-6ab5-46c3-b49a-253724ecd1a9",
       "title": "契约演示-专家改码",
-      "updated_at": "2026-11-14T14:19:49.864924+00:00",
+      "updated_at": "2026-11-17T09:28:03.261667+00:00",
       "versions": [
         {
           "is_current": true,
           "number": 1,
           "original_filename": "契约演示-改码.xlsx",
-          "uploaded_at": "2026-11-14T14:19:49.865448+00:00",
-          "version_id": "4b5befef-af8c-4c96-938e-fd8b04975d18"
+          "uploaded_at": "2026-11-17T09:28:03.264349+00:00",
+          "version_id": "5f9f24df-4970-42f6-b600-a720b7f65b9b"
         }
       ]
     }

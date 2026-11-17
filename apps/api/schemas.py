@@ -14,7 +14,7 @@ from typing import Any
 from ninja import Schema
 from pydantic import Field
 
-CONTRACT_VERSION = "1.1.0"
+CONTRACT_VERSION = "1.2.0"
 
 
 # --- 枚举：与数据库模型保持一致的取值由 tests/p02 做防漂移校验 ---

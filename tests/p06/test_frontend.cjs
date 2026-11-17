@@ -5,7 +5,7 @@ const vm=require('node:vm');
 const crypto=require('node:crypto');
 const path=require('node:path');
 const source=fs.readFileSync(path.join(__dirname,'../../web/pages/p06.js'),'utf8')
- .replace('import {createClient} from "../api.js";','')
+ .replace(/^import .*;\r?\n/gm,'')
  .replace('const api = createClient({mode:"live"});','const api = globalThis.TEST_API;');
 
 async function harness(){
@@ -14,7 +14,8 @@ async function harness(){
  const api={me:async()=>null,getTask:async id=>({task_id:id,title:id,current_version_id:'V'+id,versions:[]}),
   listTasks:async()=>({items:[],next_cursor:null}),listItems:async()=>({items:[],next_cursor:null}),getImport:async()=>{throw {status:404}},
   uploadFile(file,params){let resolve,reject;const promise=new Promise((a,b)=>{resolve=a;reject=b});calls.push({file,params,resolve,reject});return promise;}};
- const ctx={TEST_API:api,document:{querySelector:el,addEventListener(){}},crypto:{randomUUID:crypto.randomUUID},console};
+ const ctx={TEST_API:api,document:{querySelector:el,addEventListener(){}},crypto:{randomUUID:crypto.randomUUID},console,
+  createRunProgress:()=>({open:async()=>{}}),setTimeout,clearTimeout,URL,location:{href:'http://localhost/uploads/'}};
  vm.createContext(ctx);vm.runInContext(source+'\nglobalThis.hooks={upload,openTask};',ctx);
  await new Promise(r=>setImmediate(r));
  vm.runInContext('me={role:"supplier"};task={task_id:"A",title:"A",current_version_id:"VA",versions:[]};epoch=1;',ctx);

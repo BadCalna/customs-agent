@@ -225,12 +225,8 @@ def create_submission(user, task_id: str, payload, idempotency_key: str | None =
     response = submission_to_out(submission, run, task).model_dump(mode="json")
     idempotency.store(user, ACTION, idempotency_key, fingerprint, response)
 
-    def _dispatch():
-        from apps.runs.inline import execute_expert_check
-
-        execute_expert_check(submission, run=run)
-
-    transaction.on_commit(_dispatch)
+    from apps.runs.services import schedule_run
+    schedule_run(run)
     return response
 
 
