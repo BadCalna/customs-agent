@@ -366,9 +366,9 @@ test('用户正在改选 B 时刷新到 A 的新版本：不得把选择抢回 A
   page.destroy();
 });
 
-test('A 的进度请求在飞时刷新到新版本：落定后补核对，不留旧版本', async () => {
-  // 交错时序：A 详情已返回、进度在飞 → 列表刷新到 A 的 V3 → 进度落定。
-  // 选中期间的刷新会被防重复逻辑吞掉，必须在选中落定后再核对一次。
+test('A 的进度请求在飞时刷新到新版本：详情已提交则立即升级到新版本并丢弃旧进度', async () => {
+  // 交错时序：A 详情已提交、进度在飞 → 列表刷新到 A 的 V3 → 旧进度晚到。
+  // 选择以详情交付为统一起止点，刷新应立即升级到 V3 并丢弃旧轮次的在飞进度。
   let releaseRun;
   const gateRun = new Promise((resolve) => { releaseRun = resolve; });
   const oldRun = runOf(mockTask.latest_run_id);
@@ -391,18 +391,20 @@ test('A 的进度请求在飞时刷新到新版本：落定后补核对，不留
   await page.ready;
   const selecting = page.selectTask(mockTask.task_id);
   await new Promise((resolve) => setImmediate(resolve));
+  assert.match(summaryHost.textContent, /当前版本 V2/, '刷新前右侧显示 V2 详情');
   // 进度请求已发出并被挂起，此时列表刷新到 V3
   listRow = {...listRow, current_version_id: newVersion, current_version_number: 3, latest_run_id: newRun.run_id};
   detailRow = {...copy(listRow), versions: [{version_id: newVersion, number: 3}]};
   await page.tasks.load();
-  assert.match(summaryHost.textContent, /当前版本 V2/, '选中尚未落定时右侧仍是旧详情');
+  assert.match(summaryHost.textContent, /当前版本 V3/, '刷新后应立即升级到 V3');
   releaseRun();
   await selecting;
   await new Promise((resolve) => setImmediate(resolve));
 
-  assert.match(summaryHost.textContent, /当前版本 V3/, '落定后必须补核对，不能停在旧版本');
-  assert.deepEqual(calls.getRun, [oldRun.run_id, newRun.run_id], '补核对后应改读新执行');
+  assert.match(summaryHost.textContent, /当前版本 V3/, '旧进度落定后不得回退到旧版本');
+  assert.deepEqual(calls.getRun, [oldRun.run_id, newRun.run_id], '升级后应改读新执行');
   assert.match(runHost.innerHTML, new RegExp(newRun.run_id));
+  assert.doesNotMatch(runHost.innerHTML, new RegExp(oldRun.run_id));
   page.destroy();
 });
 
@@ -570,6 +572,66 @@ test('连续切换后失败：B 晚失败同样不改写当前选择，之后刷
   detailRow = {...copy(listRow), versions: [{version_id: v3, number: 3}]};
   await page.tasks.load();
   assert.match(summaryHost.textContent, /当前版本 V3/);
+  page.destroy();
+});
+
+test('连续切换后失败（B 详情已显示但进度在飞 → C 失败）：回滚到 B 与右侧一致，之后刷新仍能核对 B 新版本', async () => {
+  const runA = runOf(mockTask.latest_run_id);
+  const oldRunB = runOf(expertTask.latest_run_id);
+  const v3B = 'version-b-v3';
+  const newRunB = {...copy(oldRunB), run_id: 'run-b-v3', version_id: v3B};
+  let listRowB = {...copy(expertTask)};
+  let detailRowB = {...copy(expertTask), versions: [{version_id: expertTask.current_version_id, number: 1}]};
+  let releaseRunB;
+  const gateRunB = new Promise((resolve) => { releaseRunB = resolve; });
+  const calls = [];
+  const client = {
+    async me() { return {display_name: '演示账号'}; },
+    async listTasks() { return {items: [copy(mockTask), copy(listRowB), {...copy(expertTask), task_id: 'task-C'}], next_cursor: null}; },
+    async getTask(id) {
+      calls.push(id);
+      if (id === expertTask.task_id) return copy(detailRowB);
+      if (id === 'task-C') throw {status: 403, message: '当前操作不允许'};
+      return copy(mockTask);
+    },
+    async getRun(id) {
+      if (id === oldRunB.run_id) { await gateRunB; return copy(oldRunB); }
+      if (id === newRunB.run_id) return copy(newRunB);
+      return copy(runA);
+    },
+  };
+  const {page, runHost, summaryHost} = mount({client});
+  await page.ready;
+  await page.selectTask(mockTask.task_id);
+  assert.match(summaryHost.textContent, /当前版本 V2/);
+
+  // 点击 B：详情立即成功、右侧显示 B，只有进度请求挂起
+  const selectingB = page.tasks.selectTask(expertTask.task_id);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(page.getState().selectedId, expertTask.task_id);
+  assert.match(summaryHost.textContent, /当前版本 V1/);
+
+  // 点击 C 失败：列表必须回滚到已提交详情的 B（不能退回 A）
+  await page.tasks.selectTask('task-C');
+  assert.equal(page.tasks.getState().selectedId, expertTask.task_id, '列表应停在已提交的 B');
+  assert.equal(page.tasks.getState().selectionError?.status, 403);
+  assert.equal(page.getState().selectedId, expertTask.task_id, '两侧任务身份必须一致');
+  assert.match(summaryHost.textContent, /当前版本 V1/);
+
+  // 放行 B 的进度后正常渲染
+  releaseRunB();
+  await selectingB;
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.match(runHost.innerHTML, new RegExp(oldRunB.run_id));
+
+  // B 更新到 V3，连续刷新两次必须恢复核对
+  listRowB = {...listRowB, current_version_id: v3B, current_version_number: 3, latest_run_id: newRunB.run_id};
+  detailRowB = {...copy(listRowB), versions: [{version_id: v3B, number: 3}]};
+  await page.tasks.load();
+  await page.tasks.load();
+  assert.match(summaryHost.textContent, /当前版本 V3/);
+  assert.match(runHost.innerHTML, new RegExp(newRunB.run_id));
+  assert.deepEqual(calls, [mockTask.task_id, expertTask.task_id, 'task-C', expertTask.task_id]);
   page.destroy();
 });
 

@@ -135,6 +135,9 @@ export function mountP08Page({client, mode = MODE_LIVE, taskHost, runHost, ident
   let alive = true;
   //: 选中/列表读取期间发现的版本更新先记下，等选中落定后补核对（不能直接丢弃）。
   let pendingReconcile = false;
+  //: 最近一次由 selectTask 启动的进度加载 Promise；供页面级 selectTask() 在需要时等待完成，
+  //: 但不阻塞任务选择的提交时点。
+  let latestProgress = Promise.resolve();
 
   if (modeHost) {
     modeHost.textContent = modeLabel(mode);
@@ -212,27 +215,28 @@ export function mountP08Page({client, mode = MODE_LIVE, taskHost, runHost, ident
     await reconcileSelection(tasks.getState().items);
   }
 
-  async function selectTask(detail) {
+  function selectTask(detail) {
     if (!alive) return;
-    state.selectedId = detail?.task_id || null;
-    state.detail = detail;
-    paintSummary();
     const plan = planRunRequest(detail);
     const markers = selectionMarkers(detail);
-    state.selectionNotice = plan.kind === "run"
+    const nextNotice = plan.kind === "run"
       ? (markers.mock ? noticeHtml({kind: "info", title: markers.title, message: markers.text}) : "")
       : noticeHtml({kind: plan.kind === "invalid" ? "invalid" : "empty", message: plan.message});
+    state.selectedId = detail?.task_id || null;
+    state.detail = detail;
+    state.selectionNotice = nextNotice;
+    paintSummary();
     paintNotice();
     if (plan.kind !== "run") {
       // 没有执行记录：收起进度面板（组件空态文案是“等待选择”，留在页面上会误导），
       // 由页面提示块说明这是空态而不是失败。
       runHost.hidden = true;
-      await progress.open(null);
+      latestProgress = progress.open(null);
       return;
     }
     runHost.hidden = false;
-    // 旧选择的执行响应由 run-progress 的 epoch 丢弃，页面不再二次渲染它。
-    await progress.open(plan.context);
+    // 任务选择以详情提交为统一起止点；初次进度加载异步进行，由 run-progress 的 epoch 负责隔离旧请求。
+    latestProgress = progress.open(plan.context);
   }
 
   async function loadIdentity() {
@@ -263,10 +267,18 @@ export function mountP08Page({client, mode = MODE_LIVE, taskHost, runHost, ident
     if (alive) await load();
   })();
 
+  async function selectTaskById(taskId) {
+    const previousProgress = latestProgress;
+    await tasks.selectTask(taskId);
+    if (latestProgress !== previousProgress && latestProgress) {
+      await latestProgress;
+    }
+  }
+
   return {
     ready,
     load,
-    selectTask: (taskId) => tasks.selectTask(taskId),
+    selectTask: selectTaskById,
     tasks,
     progress,
     getState: () => ({...state, alive}),

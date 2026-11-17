@@ -119,7 +119,8 @@ export function createTaskList(host, { client, onSelectTask = () => {}, onLoaded
       const detail = await client.getTask(taskId);
       if (!alive || request !== selectionToken) return;
       if (detail?.task_id !== taskId) throw new Error("所选任务响应身份不匹配");
-      await onSelectTask(detail);
+      const delivery = onSelectTask(detail);
+      if (delivery && typeof delivery.then === "function") await delivery;
       if (!alive || request !== selectionToken) return;
       lastDeliveredId = taskId;
     } catch (error) {

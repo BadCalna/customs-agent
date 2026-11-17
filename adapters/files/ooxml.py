@@ -435,7 +435,10 @@ class Workbook:
             raw = element.findtext("s:v", "", NS)
             if kind == "s":
                 try:
-                    value = self.shared_strings[int(raw)] if raw else ""
+                    index = int(raw) if raw else None
+                    if index is not None and index < 0:
+                        raise IndexError(index)
+                    value = self.shared_strings[index] if index is not None else ""
                 except (ValueError, IndexError) as exc:
                     raise OoxmlError(
                         "broken_shared_string", f"共享字符串索引越界：{ref}", sheet=name, cell=ref

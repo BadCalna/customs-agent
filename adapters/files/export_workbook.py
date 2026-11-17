@@ -205,6 +205,18 @@ def _append(raw: str, tag: str, fragments: list[str], count: int) -> str:
     return raw[:match.start()] + value + raw[match.end():]
 
 
+def _style_index(raw: str | None, *, label: str) -> int:
+    if raw is None:
+        return 0
+    try:
+        index = int(raw)
+    except (TypeError, ValueError) as exc:
+        raise ExportError("invalid_style", f"{label}无效：{raw!r}") from exc
+    if index < 0:
+        raise ExportError("invalid_style", f"{label}不能为负数：{index}")
+    return index
+
+
 def _styles(raw: bytes, requested: set[tuple[int, str]]) -> tuple[bytes, dict]:
     root = _xml(raw, part="xl/styles.xml")
     fonts, fills, xfs = (root.find("s:" + tag, NS) for tag in ("fonts", "fills", "cellXfs"))
@@ -213,7 +225,7 @@ def _styles(raw: bytes, requested: set[tuple[int, str]]) -> tuple[bytes, dict]:
     appended = {"fonts": [], "fills": [], "cellXfs": []}
     result = {}
     for base, level in sorted(requested):
-        if base >= len(xfs):
+        if not 0 <= base < len(xfs):
             raise ExportError("invalid_style", "结果单元格引用了不存在的样式")
         xf = copy.deepcopy(xfs[base])
         alignment = xf.find("s:alignment", NS)
@@ -224,8 +236,8 @@ def _styles(raw: bytes, requested: set[tuple[int, str]]) -> tuple[bytes, dict]:
         alignment.set("wrapText", "1")
         xf.set("applyAlignment", "1")
         if level in ("低", "中"):
-            font_id = int(xf.get("fontId", "0"))
-            if font_id >= len(fonts):
+            font_id = _style_index(xf.get("fontId"), label="模板字体索引")
+            if not 0 <= font_id < len(fonts):
                 raise ExportError("invalid_style", "模板字体索引无效")
             font = copy.deepcopy(fonts[font_id])
             for node in list(font.findall("s:color", NS)):
@@ -273,7 +285,10 @@ def _fill_sheet(raw: bytes, writes: dict[str, str]) -> bytes:
     cell_pattern = rf'<{cell_prefix}c\b[^>]*?(?:/>|>.*?</{cell_prefix}c>)'
 
     def replace_row(match):
-        number = int(re.search(r'\br="([0-9]+)"', match[1])[1])
+        row_attr = re.search(r'\br="([0-9]+)"', match[1])
+        if not row_attr:
+            raise ExportError("unsupported_xml", "工作表行缺少 r 属性，不能安全填充")
+        number = int(row_attr[1])
         if number not in grouped:
             return match[0]
         visited.add(number)
@@ -281,7 +296,10 @@ def _fill_sheet(raw: bytes, writes: dict[str, str]) -> bytes:
         pending = dict(grouped[number])
         pieces, end = [], 0
         for cell in re.finditer(cell_pattern, body, re.S):
-            ref = re.search(r'\br="([A-Z]+[0-9]+)"', cell[0])[1]
+            ref_attr = re.search(r'\br="([A-Za-z]+[0-9]+)"', cell[0])
+            if not ref_attr:
+                raise ExportError("unsupported_xml", "工作表单元格缺少 r 属性，不能安全填充")
+            ref = ref_attr[1].upper()
             before = sorted((r for r in pending if col_number(re.match(r"[A-Z]+", r)[0]) < col_number(re.match(r"[A-Z]+", ref)[0])),
                             key=lambda r: col_number(re.match(r"[A-Z]+", r)[0]))
             pieces.append(body[end:cell.start()])
@@ -437,7 +455,7 @@ def export_precheck(source: bytes, selection: ExportSelection, *, excel2016_imag
             old = sheet.cell(ref)
             if old and old.formula is not None:
                 raise ExportError("formula_in_result_cell", "结果格含公式，不能静默覆盖")
-            base = int(old.style or 0) if old else 0
+            base = _style_index(old.style, label="结果单元格样式索引") if old else 0
             level = line.confidence_label if line.status == "succeeded" else ""
             requested.add((base, level))
             segments = ([(line.suggested_hs or "", False)] if key == "ai_hs" and line.status == "succeeded"

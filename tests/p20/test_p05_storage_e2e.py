@@ -16,6 +16,7 @@ import io
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -29,6 +30,7 @@ from django.conf import settings
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, TestCase, override_settings
 
+from adapters.files.ooxml import Workbook
 from apps.accounts.models import Role
 from apps.notifications.models import Message
 from apps.reviews.models import (
@@ -433,6 +435,59 @@ class UnknownEncodingWorkbookExportTests(TestCase):
         stored = self.root / self.version.storage_path
         self.assertEqual(hashlib.sha256(stored.read_bytes()).hexdigest(),
                          hashlib.sha256(self.corrupt).hexdigest())
+
+
+class InvalidStyleIndexWorkbookExportTests(TestCase):
+    """XML 语法与编码均合法，但单元格样式索引为负数或越界时，导出必须返回 422（不能 500 或静默取末项）。"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls._tmp = tempfile.TemporaryDirectory(prefix="p20-bad-style-")
+        cls.addClassCleanup(cls._tmp.cleanup)
+        cls.root = Path(cls._tmp.name) / "files"
+        cls._settings = override_settings(CUSTOMS_FILE_ROOT=cls.root)
+        cls._settings.enable()
+        cls.addClassCleanup(cls._settings.disable)
+        super().setUpClass()
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.supplier = make_user("p20-badstyle-supplier", Role.SUPPLIER, "供应商丁")
+        cls.operator = make_user("p20-badstyle-operator", Role.OPERATOR, "业务员丁")
+        source = TEMPLATE.read_bytes()
+        book = Workbook(source)
+        sheet_part = book.find_sheet("申报要素").part
+        sheet_text = book.media_bytes(sheet_part).decode("utf-8")
+        cls.cases = {}
+        for label, bad_index in (("negative_huge", "-999999"), ("negative_one", "-1"), ("upper_bound", "999999")):
+            mutated_sheet = re.sub(r'(<c\b[^>]*\bs=")[^"]+(")', rf'\g<1>{bad_index}\2', sheet_text)
+            corrupt = replace_zip_part(source, sheet_part, mutated_sheet.encode("utf-8"))
+            client = Client()
+            client.force_login(cls.supplier)
+            response = client.post("/api/v1/tasks", {"file": SimpleUploadedFile(TEMPLATE.name, corrupt)},
+                                   HTTP_IDEMPOTENCY_KEY=str(uuid.uuid4()))
+            assert response.status_code == 200, response.content[:800]
+            upload = response.json()
+            version = FileVersion.objects.get(pk=upload["version_id"])
+            claim_task(cls.operator, upload["task_id"], f"p20-badstyle-claim-{label}")
+            cls.cases[label] = (corrupt, upload, version)
+        cls.operator_client = Client()
+        cls.operator_client.force_login(cls.operator)
+
+    def test_invalid_style_indices_upload_but_export_returns_422_without_mutating_original(self):
+        for label, (corrupt, upload, version) in self.cases.items():
+            with self.subTest(label=label):
+                self.assertEqual(upload["parse_status"], "succeeded")
+                self.assertEqual(upload["item_count"], 14)
+                response = self.operator_client.post(
+                    f"/api/v1/versions/{version.pk}/exports",
+                    data=json.dumps({"kind": "precheck", "run_id": upload["precheck_run_id"]}),
+                    content_type="application/json")
+                self.assertEqual(response.status_code, 422, getattr(response, "content", b"")[:400])
+                self.assertEqual(response.json()["error"]["code"], "invalid_style")
+                stored = self.root / version.storage_path
+                self.assertEqual(hashlib.sha256(stored.read_bytes()).hexdigest(),
+                                 hashlib.sha256(corrupt).hexdigest())
 
 
 if __name__ == "__main__":  # pragma: no cover
