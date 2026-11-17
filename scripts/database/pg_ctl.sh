@@ -37,10 +37,14 @@ case "$cmd" in
     fi
     mkdir -p "$PGDATA" "$PGSOCKET"
     chmod 700 "$PGDATA"
-    # 本机专用：UTF8 + en_US.UTF-8，排序/大小写行为稳定；trust 仅限 127.0.0.1。
+    # macOS sandbox may deny SysV shared memory; mmap/posix uses the same PG locks/transactions.
+    init_options=()
+    if [ "$(uname -s)" = Darwin ]; then
+      init_options=(-c shared_memory_type=mmap -c dynamic_shared_memory_type=posix)
+    fi
     "$PG_BIN/initdb" -D "$PGDATA" -U "$PGSUPERUSER" \
       --encoding=UTF8 --locale=en_US.UTF-8 \
-      --auth-local=trust --auth-host=trust >/dev/null
+      --auth-local=trust --auth-host=trust "${init_options[@]}" >/dev/null
     echo "已初始化集群：${PGDATA}（superuser=${PGSUPERUSER}）"
     ;;
   start)
@@ -54,8 +58,9 @@ case "$cmd" in
       exit 2
     fi
     mkdir -p "$PGSOCKET"
+    printf -v server_options '%q ' -p "$PGPORT" -k "$PGSOCKET" -h "$PGHOST"
     "$PG_BIN/pg_ctl" -D "$PGDATA" -l "$PGLOG" -w -t 60 \
-      -o "-p $PGPORT -k $PGSOCKET -c listen_addresses=$PGHOST" start
+      -o "$server_options" start
     wait_ready
     echo "已启动：$PGHOST:${PGPORT}，日志 $PGLOG"
     ;;

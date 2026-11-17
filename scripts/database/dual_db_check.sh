@@ -9,6 +9,8 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./pg_env.sh
 . "$SCRIPT_DIR/pg_env.sh"
+# This runner collects failures instead of exiting at the first failed suite.
+set +e
 
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 cd "$REPO_ROOT"
@@ -22,7 +24,9 @@ if [ ${#suites[@]} -eq 0 ]; then
   suites=(tests/p12 tests/p09 tests/p10 tests/p01 tests/p02)
 fi
 
-"$SCRIPT_DIR/pg_ctl.sh" start >/dev/null
+if ! "$PG_BIN/pg_isready" -h "$PGHOST" -p "$PGPORT" -q; then
+  echo "PostgreSQL 未就绪：$PGHOST:$PGPORT" >&2; exit 2
+fi
 
 run_suite() {  # $1=backend $2=suite
   local backend="$1" suite="$2"
@@ -59,7 +63,8 @@ for suite in "${suites[@]}"; do
 
   note="—"
   if [ "$sqlite_code" != "0" ] && [ "$pg_code" = "0" ]; then
-    note="SQLite 失败、PostgreSQL 通过；按差异逐条确认是否后端限制"
+    note="**SQLite 未通过**（PostgreSQL 通过）"
+    exit_code=1
   elif [ "$pg_code" != "0" ]; then
     note="**PostgreSQL 未通过**"
     exit_code=1
