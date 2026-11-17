@@ -2,6 +2,7 @@
 import json
 
 from apps.reviews.models import Decision, IdempotencyRecord, Issue, Submission, SubmissionItem
+from apps.reviews.schemas import DecisionIn
 from apps.reviews.services import idempotency
 from tests.p10.factories import HS_A, HS_B, SubmissionFixture
 
@@ -78,13 +79,42 @@ class DecisionReviewFixTests(SubmissionFixture):
         other.refresh_from_db()
         self.assertEqual(other.status, Submission.Status.PENDING)
 
+    def test_legacy_decision_formats_replay_same_target_and_reject_another(self):
+        body = {"action": "return", "return_to": "supplier", "reason": "补料",
+                "issues": [{"message": "缺签章"}]}
+        first = self.post(body, key="legacy-decision").json()
+        payload = DecisionIn.model_validate(body).model_dump(mode="json")
+        record = IdempotencyRecord.objects.get(key="legacy-decision")
+        other = self._extra_submission()
+        for legacy_payload in (
+            payload,
+            {"submission_id": str(self.submission.pk), "decision": payload},
+        ):
+            with self.subTest(legacy_payload=legacy_payload):
+                record.request_hash = idempotency.legacy_request_hash(legacy_payload)
+                record.save(update_fields=["request_hash"])
+                conflict = self.post(
+                    body, key="legacy-decision", url=f"/api/v1/submissions/{other.pk}/decisions",
+                )
+                self.assertEqual(conflict.status_code, 409)
+                replay = self.post(body, key="legacy-decision")
+                self.assertEqual(replay.status_code, 200, replay.content)
+                self.assertEqual(replay.json()["decision_id"], first["decision_id"])
+                self.assertTrue(replay.json()["idempotent_replay"])
+                record.refresh_from_db()
+                self.assertEqual(record.request_hash, idempotency.request_hash(payload, str(self.submission.pk)))
+        self.assertEqual(Decision.objects.count(), 1)
+
     def test_legacy_unbound_hash_cannot_replay_across_submissions(self):
         body = {"action": "return", "return_to": "supplier", "reason": "缺材料",
                 "issues": [{"message": "补签章"}]}
         self.assertEqual(self.post(body, key="legacy-target").status_code, 200)
         record = IdempotencyRecord.objects.get(key="legacy-target")
-        record.request_hash = idempotency.legacy_request_hash(body)
+        payload = DecisionIn.model_validate(body).model_dump(mode="json")
+        record.request_hash = idempotency.legacy_request_hash(payload)
         record.save(update_fields=["request_hash"])
+        # 确认实际能识别旧指纹，避免只因 payload 缺默认字段而误冲突的假绿。
+        self.assertTrue(idempotency._matches(record, payload, str(self.submission.pk)))
         other = self._extra_submission()
 
         response = self.post(

@@ -69,11 +69,14 @@ def _matches(record, payload, target_id: str) -> bool:
     if record.request_hash == request_hash(normalized, target_id):
         return True
 
-    # main 的 P06 集成版曾把 task_id 合入提交 payload 后再做纯 payload 哈希。
-    if target_id and isinstance(normalized, Mapping) and "task_id" not in normalized:
-        bound_legacy = legacy_request_hash({"task_id": target_id, **normalized})
-        if record.request_hash == bound_legacy:
-            return True
+    # main 曾使用动作专属的目标包装；只识别实际发布过的形状，不做泛化猜测。
+    legacy_bound = None
+    if record.action in {"submission.create", "task.return"} and isinstance(normalized, Mapping):
+        legacy_bound = {"task_id": target_id, **normalized}
+    elif record.action == "decision.resolve":
+        legacy_bound = {"submission_id": target_id, "decision": normalized}
+    if legacy_bound is not None and record.request_hash == legacy_request_hash(legacy_bound):
+        return True
 
     if record.request_hash != legacy_request_hash(normalized):
         return False
