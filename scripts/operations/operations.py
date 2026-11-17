@@ -189,7 +189,10 @@ class Runner:
             os.close(fd)
 
     def counts(self, db, files):
-        payload = validate(json.loads(self.app("table_counts.py", ["--files-root", str(files)], target_db=db, target_files=files)))
+        # incoming/ is excluded from complete archives. Refuse unfinished uploads
+        # while writers are stopped/frozen, before dumping or archiving anything.
+        payload = validate(json.loads(self.app("table_counts.py", ["--require-complete-imports", "--files-root", str(files)],
+                                               target_db=db, target_files=files)))
         if any(key not in payload for key in ("table_sha256", "database_schema", "sequences")):
             raise ValueError("清单缺少逐行数据库内容指纹/schema/sequence 状态")
         oid = self.oid(db)

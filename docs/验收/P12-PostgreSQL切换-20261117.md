@@ -13,7 +13,7 @@
 - 目标：`customs_p12_cutover`，本工作树独立 PG 17.12 集群 `127.0.0.1:55412`；文件根 `.local/files`。
 - 原工作台 WIP 的 `reviews.0006_issue_lineage` 未合入主线，保护检查拒绝导入；没有忽略其额外字段或数据。
 
-附件为合成 XLSX/PNG，AI 为 mock、执行器为 inline。原演示记录中的空 storage_path 不代表存在附件实体；物理文件核对只统计非空引用，完整目录另由 P22 归档与恢复校验。会话原始值随数据保留，恢复下载使用本轮备份中有效的登录会话。
+附件为合成 XLSX/PNG，AI 为 mock、执行器为 inline。附件清单在所有 ImportJob 均 succeeded 后才允许生成，再统计非空 storage_path。空正式路径的 failed/staged 导入可能仍依赖 incoming 原件/回执，迁移和完整备份均拒绝；P22 完整归档排除 incoming，不能把这类恢复依赖当作无附件。会话原始值随数据保留，恢复下载使用本轮备份中有效的登录会话。
 
 ## 严格迁移与保护
 
@@ -148,6 +148,35 @@ PG 并发包括确认/提交、P06 上传与认领、P10 决定：各线程独�
 旧备份仍保留，但其三项 manifest 没有本次可执行锁边界证据，新版恢复脚本会拒绝它；本轮四项 manifest 产物才是当前实现的完整恢复证明。
 
 native 文件锁仅覆盖同机同用户、已加载新 storage 代码的写入。启用前须重启旧应用/worker；备份期间停止手工文件修改、跨主机或绕过 storage 的写入及 DDL。脚本不声称任意外部写入均受保护，详细操作边界见 [运维说明](../../scripts/operations/README.md)。
+
+## PR #30 未完成导入 P1 修复与再验收
+
+复现条件是上传的事务 A 已提交 ImportJob、FileVersion、预审 Run 及幂等记录，事务 B 在发布原件前后失败。此时正式 `storage_path` 可能仍为空，但原 key 重试依赖 `incoming/` 原件或发布回执。只统计非空正式路径会生成空清单；迁移或不包含 incoming 的完整备份会丢失恢复条件。
+
+本轮采用拒绝策略：只要存在任意 `ImportJob.status != succeeded`，就拒绝迁移和完整备份。包括 staged、failed、空值和未知状态；即使正式原件已发布，也不绕过状态检查。须先在**原数据库、原文件根**用原幂等键重试，或运行 `manage.py resume_import <import_id>`，全部成功后再停写重试；不得删除暂存文件、删除导入记录或直接改状态绕过。
+
+- 共享检查位于附件路径收集入口，在生成 manifest、接触目标 PG、复制目标附件以及 `--fresh` flush 之前执行。拒绝前可保留 SQLite 工作快照和失败日志，原业务源及目标不变。
+- P22 Runner 的备份/恢复验证均调用 `table_counts.py --require-complete-imports`。备份检查位于 native 持锁或 compose 停写之后、dump/归档之前；失败目录留 FAILED，不生成 COMPLETE，释放锁或恢复原运行服务。
+- 严格清单先检查状态再计算库存、输出 stdout 或写 `--out`，失败不会创建或覆盖清单。未加严格参数的 table_counts 仍允许诊断；旧产物只有 COMPLETE 也不代表未完成导入可恢复，完整恢复验证仍严格拒绝。
+- 新增 7 项真实上传故障/原 key 恢复/严格清单回归，以及 2 项 native/compose shell 拒绝回归。只读独立复核确认检查时序、目标零写入边界及失败清理正确，未发现阻断问题。
+- 全部改动后重新执行 P12/P22/P05/P06/P09/P10/P01/P02/P07/P11/P20：每个后端 **747 项通过**，PG 1 跳过、SQLite 26 跳过。日志为 `.local/cutover/incomplete-final-pg-tests.log`、`incomplete-final-sqlite-tests.log`，相应 exit JSON 均为 returncode 0；`make check`、shell 语法和 diff 空白检查通过。此前 737/180 项是六项复审阶段的历史结果。
+
+真实隔离 SQLite + PostgreSQL 演练 **13 项全过**，摘要 `.local/cutover/incomplete-20261117_143107_915372/summary.json`，总日志 `.local/cutover/incomplete-acceptance.log`：
+
+| 场景 | 实际结果 |
+|---|---|
+| 真实上传发布失败 | ImportJob 为 failed，正式路径为空，incoming 原件保留 |
+| 空正式路径的附件 manifest | 明确报出未完成导入及恢复方法，不生成可迁移的空清单 |
+| 精确授权 `--fresh` 的迁移 | 在导出和目标操作前拒绝；已有哨兵用户/文件的目标完全不变，原 SQLite 字节与暂存内容不变 |
+| native 完整备份失败导入 | 持锁后、dump/归档前拒绝；FAILED 存在，COMPLETE、db.dump、files.tar.gz 均不存在，源 PG/暂存指纹不变 |
+| 原 SQLite 用原 key 恢复后迁移 | 恢复 3 Item、3 RunItem，复用原 Task/FileVersion/ImportJob/Run；随后实际复制 2 实体到独立根、迁移 26 组模型/M2M 内容一致、0 外键孤儿 |
+| 迁移 PG/新根用同 key 重放 | 无 incoming 依赖，返回相同版本/Run 和 3 个商品，`idempotent_replay=true` |
+| 原 PG 用原 key 恢复后完整备份/恢复 | 先恢复成功，再备份到四项 manifest 产物，恢复到新数据库/新文件根，完整验证 `verified=true` |
+| 完整恢复目标用同 key 重放 | 返回相同版本/Run 和 3 个商品，无 incoming 依赖；重放后再次完整验证仍为 `verified=true` |
+
+本轮数据库全部新建且隔离：迁移目标 `customs_p12_p1copy_20261117_143107_915372`，PG 故障源 `customs_p12_p1source_20261117_143107_915372`，完整恢复目标 `customs_p12_p1restore_20261117_143107_915372`（OID 57288）。成功备份为摘要目录下 `backups/20261117T143219-p1-complete-aaf3698a/`；失败产物为 `backups/20261117T143147-p1-incomplete-bbf02658/`，不得用于恢复。业务库 `customs_p12_cutover` 没有清空、重导或写入本轮故障样本。
+
+上述证明的是**拒绝携带未完成导入，并在原部署恢复成功后可迁移/完整恢复和重放**，没有将未完成任务及其 incoming 恢复状态迁往新部署。全部样本仍为合成 XLSX/PNG、mock AI、inline 执行；compose 拒绝及原服务恢复为 shell fake 行为回归，不声称实际 Docker 环境已验收。
 
 ## 运行与回退边界
 

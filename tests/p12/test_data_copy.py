@@ -189,6 +189,7 @@ class DataCopyDatabaseTests(TestCase):
         cls.job = ImportJob.objects.create(
             version=cls.graph["version"], precheck=cls.precheck_run,
             sha256="a" * 64, stage_token="p12-copy-stage", report=NESTED_JSON,
+            status=ImportJob.Status.SUCCEEDED,  # This fixture represents an already submitted version.
         )
         cls.claim = TaskClaim.objects.create(task=cls.graph["task"], operator=cls.graph["operator"])
         Task.objects.filter(pk=cls.graph["task"].pk).update(created_at=MOMENT)

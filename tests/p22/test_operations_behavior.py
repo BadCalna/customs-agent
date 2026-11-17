@@ -48,6 +48,9 @@ if pathlib.Path(sys.argv[0]).name == "docker":
         if script.endswith("storage.py"):
             sys.exit(subprocess.call([sys.executable, script] + args, env=env))
         assert script.endswith("table_counts.py"), a
+        if s.get("incomplete_imports") and "--require-complete-imports" in args:
+            print("存在未完成导入，拒绝完整备份", file=sys.stderr)
+            sys.exit(6)
         root = pathlib.Path(env["CUSTOMS_FILE_ROOT"])
         db = env["CUSTOMS_PG_NAME"]
         # Deliberately wrong actual identity catches a lost target override.
@@ -161,6 +164,32 @@ class OperationsBehaviorTests(unittest.TestCase):
         self.assertFalse(any(c[0] == "exec" and "app" in c[:4] for c in state["calls"]))
         self.assertTrue(Path(result["drill_state_file"]).is_file())
         self.assertEqual(Path(result["backup_dir"]).stat().st_mode & 0o777, 0o700)
+
+    def test_incomplete_imports_abort_before_dump_and_restore_compose_services(self):
+        self.fake(incomplete_imports=True)
+        result = self.run_script("backup", ok=False)
+        self.assertIn("未完成导入", self.logs())
+        state = json.loads(self.state.read_text())
+        self.assertEqual(sorted(state["running"]), ["app", "db", "worker"])
+        self.assertFalse(any("pg_dump" in call for call in state["calls"]))
+        directory, = (self.base / "backups").iterdir()
+        self.assertTrue((directory / "FAILED").is_file())
+        self.assertFalse((directory / "COMPLETE").exists())
+        self.assertFalse((directory / "db.dump").exists())
+        self.assertFalse((directory / "files.tar.gz").exists())
+
+    def test_native_incomplete_imports_abort_before_dump(self):
+        self.native_environment()
+        self.fake(incomplete_imports=True)
+        result = self.run_script("backup", ok=False)
+        self.assertIn("未完成导入", self.logs())
+        state = json.loads(self.state.read_text())
+        self.assertFalse(any("pg_dump" in call for call in state["calls"]))
+        directory, = (self.base / "backups").iterdir()
+        self.assertTrue((directory / "FAILED").is_file())
+        self.assertFalse((directory / "COMPLETE").exists())
+        self.assertFalse((directory / "db.dump").exists())
+        self.assertFalse((directory / "files.tar.gz").exists())
 
     def test_backup_ignores_inventory_time_but_rejects_content_drift(self):
         directory = self.backup()

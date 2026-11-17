@@ -29,6 +29,7 @@ from scripts.database.model_inventory import (  # noqa: E402
     validate_generated_metadata, validate_source_schema, validate_target_metadata, verification_models,
 )
 from scripts.database.copy_attachments import checked_manifest, verify_manifest  # noqa: E402
+from scripts.database.import_guard import require_completed_imports  # noqa: E402
 
 
 def _norm_json(value):
@@ -136,6 +137,7 @@ def fk_orphans(model):
 
 
 def attachment_paths():
+    require_completed_imports()
     paths = []
     for label in ("reviews.FileVersion", "reviews.ItemImage"):
         model = apps.get_model(label)

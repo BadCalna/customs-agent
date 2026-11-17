@@ -2,7 +2,9 @@
 
 The source manifest is captured against the upgraded SQLite snapshot. The source
 and target deployments must stay stopped for the whole cutover. Unreferenced
-exports/incoming files are outside this migration; P22 backs up the entire root.
+exports/incoming files are outside this migration. Unfinished imports are rejected
+before capturing the manifest; complete P22 backups also exclude incoming and
+reject unfinished imports under their consistency boundary.
 """
 import hashlib
 import json
