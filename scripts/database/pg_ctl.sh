@@ -27,6 +27,21 @@ wait_ready() {
 }
 
 cmd="${1:-status}"
+# This helper provisions trust authentication. Validate before init/start/restart
+# can create directories, stop an existing cluster, or invoke any PG command.
+case "$cmd" in
+  init|start|restart)
+    "${PYTHON:-$REPO_ROOT/.venv-customs/bin/python}" - "$PGHOST" <<'PY'
+import ipaddress, sys
+try:
+    host = ipaddress.ip_address(sys.argv[1])
+    if not host.is_loopback or '%' in sys.argv[1]:
+        raise ValueError
+except ValueError:
+    sys.exit('本机 trust 集群仅允许单个回环 IP（127.0.0.1 / ::1）；非回环生产连接请使用独立配置并启用密码认证。')
+PY
+    ;;
+esac
 case "$cmd" in
   init)
     require_bin initdb

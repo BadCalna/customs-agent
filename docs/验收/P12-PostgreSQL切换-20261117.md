@@ -17,11 +17,12 @@
 
 ## 严格迁移与保护
 
-命令：
+首次导入命令的当前 CLI 等价写法（当时目标尚未接纳新业务；禁止对现在的业务库重跑）：
 
 ```sh
 CUSTOMS_PG_ALLOW_FLUSH=customs_p12_cutover \
-  scripts/database/copy_sqlite_to_pg.sh .local/cutover/source.sqlite3 --fresh
+  scripts/database/copy_sqlite_to_pg.sh .local/cutover/source.sqlite3 \
+    --source-files-root .local/files --target-files-root .local/files --fresh
 ```
 
 这里的 fresh 只针对本轮尚未接纳 PG 新业务的独立演练库；新写入后没有再次清空。正式切换建议换全新空目标。
@@ -106,6 +107,47 @@ CUSTOMS_PG_ALLOW_FLUSH=customs_p12_cutover \
 全部退出 0。P05 两端同一项未实现项跳过；SQLite 其余跳过为 PG 专属检查。P06 故障注入中的 disk full / interrupt 日志是预期测试路径。原始报告 `.local/p12/dual-db-report.md`，最终合并套件日志 `.local/cutover/check-postgres-main28.log`。
 
 PG 并发包括确认/提交、P06 上传与认领、P10 决定：各线程独立连接、屏障启动，最终落库与审计计数断言。新增决定测试证明不同请求仅一个成功；同 key 同内容一次新建一次重放；更新版本出现后旧提交双路 409 无副作用。SQLite 的跳过结果不作为锁有效的证据。
+
+## PR #30 六项复审修复与最终补验
+
+以下覆盖复审后的当前实现；上文 541 项及旧完整备份为此前历史证据。本轮没有清空或从旧 SQLite 重新导入 `customs_p12_cutover`。
+
+| 复审项 | 当前行为与证据 |
+|---|---|
+| 默认初次启动 | `.env.example` 默认 SQLite、PG 模板注释；复制到全新目录，移除 PG 环境后 setup/migrate/check/WSGI 全通过；报告 `.local/cutover/review-fresh-start.json` |
+| trust 监听边界 | init/start/restart 在目录创建与 PG 操作前拒绝非回环、通配、多地址、主机名；接受单个 127/8 或 `::1`；回归覆盖三入口 |
+| fixture 依赖顺序 | 遍历 FK/M2M/自然键依赖，循环分量稳定排序；真实 dump/loaddata 回归及跨库实跑均证明 Task 在 TaskAssignment 前导入 |
+| 显式源、独立目标附件根 | 源根必填；预先记录 SHA-256 清单后安全复制；本轮两个根独立，2 实体实际复制、0 复用，导入后双端指纹一致 |
+| 目标生成元数据 | 目标 ContentType/Permission 完整自然键及名称必须与 migrate 基线相等；注入额外元数据实跑拒绝，目标数据库及附件前后不变 |
+| native 完整备份边界 | 本机文件排他锁 + PG 表 SHARE/序列锁 + 导出 snapshot；前后内容与身份一致，成功释放后才 COMPLETE；no-quiesce、忙写入和 helper 失败均无 COMPLETE |
+
+附加修正：真实备份发现两次清单 `generated_at` 不同会误判内容变化，现只排除此生成时间字段，继续严格比较数据库、schema、sequence、文件及其身份。新增行为回归同时证明时间差可以通过、真实表内容漂移仍失败。
+
+扩展双库执行：
+
+```sh
+# CUSTOMS_PG_* 指向 127.0.0.1:55412 的独立测试库名
+.venv-customs/bin/python manage.py test \
+  tests/p12 tests/p22 tests/p05 tests/p06 tests/p09 tests/p10 \
+  tests/p01 tests/p02 tests/p07 tests/p11 tests/p20 --noinput
+```
+
+- 首轮每个后端 737 项：PG 150.848 秒，OK/1 跳过；SQLite 144.891 秒，OK/26 跳过。
+- 最终时间戳比较修正并新增回归后，聚焦复跑 P12/P22：每个后端 180 项；PG 85.595 秒全过，SQLite 81.521 秒 OK/21 跳过。仅复跑受影响套件，不把初轮 737 项表述为最终再次全跑。
+- 日志为 `.local/cutover/review-{pg,sqlite}-tests.log` 和 `review-{pg,sqlite}-targeted.log`；`make check`、shell 语法及 diff 空白检查通过。
+- PG 专属用例真实证明事务期间并发 UPDATE/nextval 阻塞、释放后继续，以及忙写入拒绝；storage 子进程即使 TMPDIR 不同也在同一文件锁上等待。SQLite 跳过不作锁有效证据。
+
+真实端到端验收共 **13 项通过**，摘要 `.local/cutover/review-20261117_131834_35485a/summary.json`，控制台记录 `.local/cutover/review-acceptance.log`：
+
+- 从未改动的工作源另建隔离 SQLite 副本，补入 TaskAssignment；迁移目标 `customs_p12_copy_20261117_131834_35485a`。23 模型及自动 M2M 共 26 组内容相等、外键孤儿 0，9 条 TaskAssignment 随父任务恢复；原工作源 SHA 保持 `06912e83377a52501d52d80f31142883b72d97314d1744e32d48b1e6d8f8dc83`。
+- 源、目标附件分别位于摘要目录下 `source-files/`、`target-files/`，2 个实体由脚本复制。双端验证均通过；克隆目标等大小篡改被拒绝。迁移原始核对 `.local/p12/copy-20261117T211849-tPtww1/verify.json`。
+- 对现有业务库执行真实 native 备份，产物为摘要目录下 `backups/20261117T131905-pr30-review-3493fbc2/`。一致性元数据为 `postgres-table-sequence-locks+local-file-lock`，29 张表、8 个序列、snapshot `00000007-000000B0-1`；manifest 精确覆盖 `db.dump`、`files.tar.gz`、`counts.json`、`meta.json`。
+- 恢复目标为全新 `customs_p12_restore_20261117_131834_35485a`（OID 54897）和摘要目录下 `restored-files/`；完整内容/schema/sequence/文件指纹得到 `verified=true`。对原业务库和原文件根再次取清单，与备份前一致。
+- 忙文件写入、忙 PG 事务及 `--no-quiesce` 的失败备份全部无 COMPLETE；失败日志保留，不冒充成功备份。
+
+旧备份仍保留，但其三项 manifest 没有本次可执行锁边界证据，新版恢复脚本会拒绝它；本轮四项 manifest 产物才是当前实现的完整恢复证明。
+
+native 文件锁仅覆盖同机同用户、已加载新 storage 代码的写入。启用前须重启旧应用/worker；备份期间停止手工文件修改、跨主机或绕过 storage 的写入及 DDL。脚本不声称任意外部写入均受保护，详细操作边界见 [运维说明](../../scripts/operations/README.md)。
 
 ## 运行与回退边界
 

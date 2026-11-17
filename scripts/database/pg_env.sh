@@ -15,7 +15,7 @@ if [ -f "$REPO_ROOT/.env" ]; then
 import os, re, shlex, sys
 from dotenv import dotenv_values
 for key, value in dotenv_values(sys.argv[1], interpolate=False).items():
-    if re.fullmatch(r'CUSTOMS_PG[A-Z_]*|CUSTOMS_SQLITE_PATH|CUSTOMS_FILE_ROOT', key) and key not in os.environ and value is not None:
+    if re.fullmatch(r'CUSTOMS_PG[A-Z_]*|CUSTOMS_SQLITE_PATH|CUSTOMS_FILE_ROOT|CUSTOMS_SOURCE_FILE_ROOT', key) and key not in os.environ and value is not None:
         print(f'export {key}={shlex.quote(value)}')
 PY
 )"

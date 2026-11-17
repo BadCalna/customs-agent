@@ -77,8 +77,13 @@ pg-status:
 db-backup:
 	scripts/database/backup.sh
 
+# SOURCE_FILES_ROOT is mandatory; target defaults to CUSTOMS_FILE_ROOT.
+# Example: make db-copy SOURCE_SQLITE=/path/source.sqlite3 SOURCE_FILES_ROOT=/path/files
+SOURCE_SQLITE ?= $(CUSTOMS_SQLITE_PATH)
+SOURCE_FILES_ROOT ?= $(CUSTOMS_SOURCE_FILE_ROOT)
+TARGET_FILES_ROOT ?= $(CUSTOMS_FILE_ROOT)
 db-copy:
-	scripts/database/copy_sqlite_to_pg.sh
+	scripts/database/copy_sqlite_to_pg.sh $(if $(SOURCE_SQLITE),"$(SOURCE_SQLITE)") $(if $(SOURCE_FILES_ROOT),--source-files-root "$(SOURCE_FILES_ROOT)") $(if $(TARGET_FILES_ROOT),--target-files-root "$(TARGET_FILES_ROOT)")
 
 # 只有“后端确实是 PostgreSQL 且连接可用”才算过；端口连通不算（D6 第 3 节）。
 check-postgres:

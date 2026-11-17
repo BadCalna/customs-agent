@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-本轮开发计划已按 Django + Django Ninja、SQLite 起步和全量 Agent 开发重整：P00 工程可本地启动，P01 已建立账号三角色、审核域最小模型与对象级权限并通过 Jay 手工验收（见 [P01 回交](docs/开发文档/交接/P01.md)）。安装和运行步骤见 [运行与交接说明](docs/开发文档/运行与交接说明.md)，本地演示账号用 `make seed-demo` 建立。本地业务推荐 PostgreSQL，`.env.example` 已提供启用配置：先 `scripts/database/bootstrap.sh` 建独立集群，再按 [数据库切换说明](scripts/database/README.md) 迁移旧 SQLite 并核对数据与附件。P12 已接入 P22 的数据库+文件完整备份恢复，验收见 [P12 回交](docs/开发文档/交接/P12.md)。
+本轮开发计划已按 Django + Django Ninja、SQLite 起步和全量 Agent 开发重整：P00 工程可本地启动，P01 已建立账号三角色、审核域最小模型与对象级权限并通过 Jay 手工验收（见 [P01 回交](docs/开发文档/交接/P01.md)）。安装和运行步骤见 [运行与交接说明](docs/开发文档/运行与交接说明.md)，本地演示账号用 `make seed-demo` 建立。`.env.example` 默认 SQLite，复制后可直接 `make setup`、`make migrate`、`make dev`。本地业务推荐 PostgreSQL，模板中另附注释配置：先 `scripts/database/bootstrap.sh` 建独立集群，再按 [数据库切换说明](scripts/database/README.md) 迁移旧 SQLite 并核对数据与附件。P12 已接入 P22 的数据库+文件完整备份恢复，验收见 [P12 回交](docs/开发文档/交接/P12.md)。
 
 统一从 [开发文档入口](docs/开发文档/README.md) 阅读 [开发计划](docs/开发文档/开发任务与阶段交付计划.md)、[Agent任务包](docs/开发文档/Agent任务包.md) 和 [协作交接约定](docs/开发文档/Agent协作与交接约定.md)。先启动 P00 工程骨架，可并行开展 P03 模板保真试验；P02 发布契约后派发独立页面任务。已确认业务规则保留在 [阶段0文档](docs/开发文档/阶段0/README.md)。
 

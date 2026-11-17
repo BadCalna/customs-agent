@@ -8,13 +8,32 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 umask 077
 fresh=0
 sqlite_src="${CUSTOMS_SQLITE_PATH:-$REPO_ROOT/.local/db.sqlite3}"
-for arg in "$@"; do
-  case "$arg" in
-    --fresh) fresh=1 ;;
-    --*) echo "未知参数：$arg" >&2; exit 2 ;;
-    *) sqlite_src="$arg" ;;
+source_files_root="${CUSTOMS_SOURCE_FILE_ROOT:-}"
+target_files_root="$CUSTOMS_FILE_ROOT"
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --fresh) fresh=1; shift ;;
+    --source-files-root|--target-files-root)
+      if [ "$#" -lt 2 ] || [ -z "$2" ] || [[ "$2" = --* ]]; then
+        echo "$1 需要一个非空目录参数" >&2; exit 2
+      fi
+      if [ "$1" = --source-files-root ]; then source_files_root="$2"; else target_files_root="$2"; fi
+      shift 2 ;;
+    --help|-h)
+      echo "用法：$0 [source.sqlite3] --source-files-root <旧附件目录> [--target-files-root <目标附件目录>] [--fresh]"
+      exit 0 ;;
+    --*) echo "未知参数：$1" >&2; exit 2 ;;
+    *) sqlite_src="$1"; shift ;;
   esac
 done
+if [ -z "$source_files_root" ]; then
+  echo "必须显式提供 --source-files-root（或 CUSTOMS_SOURCE_FILE_ROOT），禁止用当前部署的文件根猜测旧库附件。" >&2
+  exit 2
+fi
+case "$source_files_root" in /*) ;; *) source_files_root="$REPO_ROOT/$source_files_root" ;; esac
+case "$target_files_root" in /*) ;; *) target_files_root="$REPO_ROOT/$target_files_root" ;; esac
+if [ ! -d "$source_files_root" ]; then echo "源附件根不存在：$source_files_root" >&2; exit 2; fi
+export CUSTOMS_FILE_ROOT="$target_files_root"
 case "$sqlite_src" in /*) ;; *) sqlite_src="$REPO_ROOT/$sqlite_src" ;; esac
 if [ ! -f "$sqlite_src" ]; then
   echo "找不到 SQLite 源库：${sqlite_src}" >&2; exit 2
@@ -44,7 +63,8 @@ PY
 CUSTOMS_DB_BACKEND=sqlite CUSTOMS_SQLITE_PATH="$workcopy" \
   "$python_bin" manage.py migrate --noinput >"$workdir/source-migrate.log"
 # Validate the upgraded schema and physical file references BEFORE touching PG.
-CUSTOMS_DB_BACKEND=sqlite CUSTOMS_SQLITE_PATH="$workcopy" "$python_bin" - "$workdir/source-files.json" <<'PY'
+CUSTOMS_DB_BACKEND=sqlite CUSTOMS_SQLITE_PATH="$workcopy" CUSTOMS_FILE_ROOT="$source_files_root" \
+  "$python_bin" - "$workdir/source-files.json" <<'PY'
 import json, os, sqlite3, sys
 import django
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
@@ -86,6 +106,9 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
 django.setup()
 from django.apps import apps
 from django.db import connection
+from scripts.database.model_inventory import validate_target_metadata
+# Only the exact migrate-generated baseline may be ignored as target data.
+validate_target_metadata(connection)
 # Unknown nonempty tables are protected too.
 ignored = {'django_migrations', 'auth_permission', 'django_content_type'}
 with connection.cursor() as cursor:
@@ -99,14 +122,17 @@ with connection.cursor() as cursor:
 print(total)
 PY
 )"
-if [ "$fresh" = 1 ]; then
-  if [ "${CUSTOMS_PG_ALLOW_FLUSH:-}" != "$PGDATABASE_NAME" ]; then
-    echo "--fresh 会清空目标；需 CUSTOMS_PG_ALLOW_FLUSH=$PGDATABASE_NAME 精确授权。" >&2; exit 3
-  fi
-  "$python_bin" manage.py flush --noinput
-elif [ "$nonempty" != "0" ]; then
+if [ "$fresh" = 1 ] && [ "${CUSTOMS_PG_ALLOW_FLUSH:-}" != "$PGDATABASE_NAME" ]; then
+  echo "--fresh 会清空目标；需 CUSTOMS_PG_ALLOW_FLUSH=$PGDATABASE_NAME 精确授权。" >&2; exit 3
+elif [ "$fresh" = 0 ] && [ "$nonempty" != "0" ]; then
   echo "目标库非空（${nonempty} 行）：拒绝覆盖，请换全新空库。" >&2; exit 3
 fi
+# Copy referenced bytes to the TARGET root before import/flush. All collisions
+# are checked first; identical existing files can be reused, never overwritten.
+"$python_bin" "$SCRIPT_DIR/copy_attachments.py" --source-files-root "$source_files_root" \
+  --target-files-root "$target_files_root" --manifest "$workdir/source-files.json" \
+  --json "$workdir/file-transfer.json"
+if [ "$fresh" = 1 ]; then "$python_bin" manage.py flush --noinput; fi
 echo "4/5 导入并校正所有整数主键序列"
 # No --ignorenonexistent: an unknown field must fail instead of being discarded.
 "$python_bin" manage.py loaddata "$fixture"
@@ -123,5 +149,6 @@ with connection.cursor() as cursor:
 PY
 echo "5/5 全模型 / M2M / 外键 / 内容 / 附件实体核对"
 "$python_bin" "$SCRIPT_DIR/verify_copy.py" --source "$workcopy" \
-  --files-manifest "$workdir/source-files.json" --json "$workdir/verify.json"
+  --files-manifest "$workdir/source-files.json" --source-files-root "$source_files_root" \
+  --target-files-root "$target_files_root" --json "$workdir/verify.json"
 echo "迁移通过；证据：${workdir}。切换 .env 前请完成 P22 数据库+文件备份恢复演练。"

@@ -26,8 +26,9 @@ from django.conf import settings  # noqa: E402
 from django.db import connection, models  # noqa: E402
 from adapters.files.storage import StorageError, file_sha256, resolve_path  # noqa: E402
 from scripts.database.model_inventory import (  # noqa: E402
-    validate_generated_metadata, validate_source_schema, verification_models,
+    validate_generated_metadata, validate_source_schema, validate_target_metadata, verification_models,
 )
+from scripts.database.copy_attachments import checked_manifest, verify_manifest  # noqa: E402
 
 
 def _norm_json(value):
@@ -169,9 +170,19 @@ def main():
     parser.add_argument("--skip-source", action="store_true")
     parser.add_argument("--json")
     parser.add_argument("--files-manifest", help="迁移前 attachment_manifest 生成的文件指纹 JSON")
+    parser.add_argument("--source-files-root", help="原 SQLite 部署的附件根，完整源目标核对必填")
+    parser.add_argument("--target-files-root", default=str(settings.CUSTOMS_FILE_ROOT))
     args = parser.parse_args()
-    if not args.skip_source and not args.files_manifest:
-        parser.error("源/目标完整核对必须提供 --files-manifest 迁移前指纹")
+    if not args.skip_source and (not args.files_manifest or not args.source_files_root):
+        parser.error("源/目标完整核对必须提供 --files-manifest 迁移前指纹及 --source-files-root")
+    target_root = Path(args.target_files_root).expanduser()
+    if not target_root.is_absolute():
+        target_root = REPO_ROOT / target_root
+    metadata_errors = []
+    try:
+        validate_target_metadata(connection)
+    except ValueError as exc:
+        metadata_errors.append(str(exc))
     if connection.vendor != "postgresql":
         print(f"目标库不是 PostgreSQL（vendor={connection.vendor}）", file=sys.stderr)
         return 2
@@ -207,21 +218,35 @@ def main():
     finally:
         if source is not None:
             source.close()
-    count, missing = attachment_report(settings.CUSTOMS_FILE_ROOT)
-    failures += len(missing)
+    count, missing = attachment_report(target_root)
+    failures += len(missing) + len(metadata_errors)
     files = []
     for path in sorted(set(attachment_paths()) - set(missing)):
-        candidate = resolve_path(settings.CUSTOMS_FILE_ROOT, path)
+        candidate = resolve_path(target_root, path)
         files.append({"path": path, "size": candidate.stat().st_size,
-                      "sha256": file_sha256(settings.CUSTOMS_FILE_ROOT, path)})
-    files_match = None
+                      "sha256": file_sha256(target_root, path)})
+    files_match, source_files_match = None, None
+    source_files_error = None
     if args.files_manifest:
-        baseline = json.loads(Path(args.files_manifest).read_text(encoding="utf-8"))
+        baseline = checked_manifest(json.loads(Path(args.files_manifest).read_text(encoding="utf-8")))
         files_match = baseline == files
         failures += int(not files_match)
+        if args.source_files_root:
+            source_root = Path(args.source_files_root).expanduser()
+            if not source_root.is_absolute():
+                source_root = REPO_ROOT / source_root
+            try:
+                verify_manifest(source_root, baseline)
+                source_files_match = True
+            except (ValueError, StorageError, OSError) as exc:
+                source_files_match, source_files_error = False, str(exc)
+                failures += 1
     summary = {"database": connection.settings_dict["NAME"], "source": None if args.skip_source else str(source_path),
                "results": results, "attachment_references": count, "files": files,
                "files_match": files_match, "files_manifest": args.files_manifest,
+               "source_files_root": args.source_files_root, "target_files_root": str(target_root.resolve()),
+               "source_files_match": source_files_match, "source_files_error": source_files_error,
+               "metadata_match": not metadata_errors, "metadata_errors": metadata_errors,
                "missing_files": missing, "warnings": [], "failures": failures}
     print(f"\n迁移核对：{connection.settings_dict['NAME']} @ {connection.settings_dict['HOST']}:{connection.settings_dict['PORT']}")
     for entry in results:

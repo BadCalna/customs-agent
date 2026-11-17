@@ -13,9 +13,53 @@ def migration_models():
     models = [model for model in apps.get_models()
               if model._meta.managed and not model._meta.proxy
               and model._meta.label_lower not in GENERATED_MODELS]
-    # Natural references to groups/users must be available when deserializing.
-    first = {"auth.group": 0, "accounts.user": 1}
-    return sorted(models, key=lambda model: (first.get(model._meta.label_lower, 2), model._meta.label_lower))
+    # Collapse FK cycles (e.g. Task.current_version <-> FileVersion.task),
+    # then emit dependency components before dependants. loaddata checks the
+    # remaining within-component FKs at transaction end. Natural parents such
+    # as Group/User are still emitted first; no model or edge is dropped.
+    return dependency_order(models)
+
+
+def dependency_order(models):
+    models = set(models)
+    key = lambda model: model._meta.label_lower
+    dependencies = {}
+    for model in models:
+        deps = {field.remote_field.model for field in model._meta.fields
+                if field.remote_field and field.remote_field.model in models}
+        deps.update(field.remote_field.model for field in model._meta.many_to_many
+                    if field.remote_field.through._meta.auto_created and field.remote_field.model in models)
+        for label in getattr(getattr(model, 'natural_key', None), 'dependencies', ()):
+            parent = apps.get_model(label)
+            if parent in models:
+                deps.add(parent)
+        dependencies[model] = deps - {model}
+    indexes, low, stack, active, ordered = {}, {}, [], set(), []
+
+    def visit(model):
+        indexes[model] = low[model] = len(indexes)
+        stack.append(model)
+        active.add(model)
+        for parent in sorted(dependencies[model], key=key):
+            if parent not in indexes:
+                visit(parent)
+                low[model] = min(low[model], low[parent])
+            elif parent in active:
+                low[model] = min(low[model], indexes[parent])
+        if low[model] == indexes[model]:
+            component = []
+            while True:
+                parent = stack.pop()
+                active.remove(parent)
+                component.append(parent)
+                if parent == model:
+                    break
+            ordered.extend(sorted(component, key=key))
+
+    for model in sorted(models, key=key):
+        if model not in indexes:
+            visit(model)
+    return ordered
 
 
 def verification_models():
@@ -81,6 +125,34 @@ def validate_generated_metadata(source):
     if source_types - expected_types or source_permissions - expected_permissions:
         raise ValueError("源库存在不能由当前 migrate 重建的自定义/旧元数据，拒绝丢弃："
                          f"contenttypes={source_types - expected_types}; permissions={source_permissions - expected_permissions}")
+
+
+def validate_target_metadata(connection):
+    """The only ignorable target rows are the exact current generated baseline.
+
+    Compare natural keys AND permission names, so stale, custom, renamed and
+    missing metadata cannot be disguised as a fresh migrated database.
+    """
+    from django.contrib.auth.management import _get_all_permissions
+    from django.utils import translation
+
+    expected_types, expected_permissions = set(), set()
+    with translation.override(None):
+        for model in apps.get_models():
+            opts = model._meta
+            key = (opts.app_label, opts.model_name)
+            expected_types.add(key)
+            expected_permissions.update((*key, code, str(name)) for code, name in _get_all_permissions(opts))
+    with connection.cursor() as cursor:
+        cursor.execute('SELECT app_label, model FROM django_content_type')
+        actual_types = set(cursor.fetchall())
+        cursor.execute('SELECT c.app_label,c.model,p.codename,p.name FROM auth_permission p '
+                       'LEFT JOIN django_content_type c ON c.id=p.content_type_id')
+        actual_permissions = set(cursor.fetchall())
+    if actual_types != expected_types or actual_permissions != expected_permissions:
+        raise ValueError('目标生成元数据不等于当前 migrate 基线，拒绝导入/验收：'
+                         f'contenttypes extra={actual_types - expected_types}, missing={expected_types - actual_types}; '
+                         f'permissions extra={actual_permissions - expected_permissions}, missing={expected_permissions - actual_permissions}')
 
 
 if __name__ == "__main__":
