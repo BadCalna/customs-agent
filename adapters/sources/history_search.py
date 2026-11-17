@@ -192,6 +192,14 @@ class HistoryCandidate(Schema):
     )
     similarity_note: str = Field(default="", description="可读的相似依据与差异说明")
     historical_outcome: str = ""
+    needs_review: bool = Field(
+        default=False,
+        description="导入时该历史行是否被标为待核异常；true 时不能当作成功案例直接采用",
+    )
+    blocking_issue_codes: list[str] = Field(
+        default_factory=list,
+        description="导致待核的导入/P04 问题码，如 missing_contract、reversed_item_range",
+    )
     hs_version: str | None = None
     version_status: EvidenceStatus = Field(
         default=EvidenceStatus.VERSION_UNVERIFIED,
@@ -221,6 +229,11 @@ class HistorySearchResult(Schema):
     reason: str = ""
     query: HistoryQuery | None = None
     candidates: list[HistoryCandidate] = Field(default_factory=list)
+    excluded_needs_review: int = Field(
+        default=0,
+        ge=0,
+        description="本次检索因 needs_review=true 而未纳入成功案例的记录数",
+    )
     dataset: HistoryDatasetInfo | None = None
     searched_at: str | None = Field(default=None, description="本次检索时间；未检索时为空")
     scanned_records: int = Field(default=0, ge=0)
@@ -270,11 +283,17 @@ class HistorySearchResult(Schema):
                 if candidate.diff_keys
                 else "关键属性未见差异"
             )
+            review_note = ""
+            title_label = "历史成功记录"
+            if candidate.needs_review:
+                title_label = "历史记录（待核异常，不能视为成功案例）"
+                codes = "、".join(candidate.blocking_issue_codes) or "未记录问题码"
+                review_note = f"导入待核：{codes}；该记录存在异常，不能作为成功案例直接采用；"
             entries.append(
                 EvidenceEntry(
                     evidence_id=f"history:{candidate.record_id}",
                     source_type="history",
-                    title=f"历史成功记录{origin_note}：{candidate.historical_name}",
+                    title=f"{title_label}{origin_note}：{candidate.historical_name}",
                     status=EvidenceStatus.OBTAINED,
                     url=candidate.source.url,
                     document=candidate.source.document,
@@ -289,7 +308,7 @@ class HistorySearchResult(Schema):
                     query=query_payload,
                     note=(
                         f"历史业务日期 {candidate.recorded_at}；相似度 {candidate.score:.2f}；"
-                        f"{diff_note}；{candidate.validity_note}；{USAGE_NOTE}"
+                        f"{diff_note}；{review_note}{candidate.validity_note}；{USAGE_NOTE}"
                     ),
                 )
             )
@@ -307,6 +326,23 @@ class HistorySnapshot:
 def _is_success_record(record: HistoryRecord) -> bool:
     """只有明确标记为成功的记录才可进入历史成功案例；空/未知/已拒绝都排除。"""
     return _normalize(record.outcome) in SUCCESS_OUTCOMES
+
+
+def _needs_review(record: HistoryRecord) -> bool:
+    """导入层写入的待核标记；缺失时兼容 blocking 问题码。"""
+
+    attributes = record.attributes or {}
+    value = _normalize(attributes.get("needs_review", ""))
+    if value in {"true", "1", "yes", "y", "是"}:
+        return True
+    return bool(_blocking_issue_codes(record))
+
+
+def _blocking_issue_codes(record: HistoryRecord) -> list[str]:
+    raw = _clean_text((record.attributes or {}).get("blocking_issue_codes", ""))
+    if not raw:
+        return []
+    return [part.strip() for part in re.split(r"[,，;；]", raw) if part.strip()]
 
 
 class HistoryStoreError(RuntimeError):
@@ -593,6 +629,7 @@ class HistorySearchSource:
         limit: int = DEFAULT_LIMIT,
         min_score: float = DEFAULT_MIN_SCORE,
         stale_days: int = DEFAULT_STALE_DAYS,
+        include_needs_review: bool = False,
     ):
         if records is not None and store is not None:
             raise ValueError("records 与 store 只能二选一")
@@ -610,10 +647,13 @@ class HistorySearchSource:
             raise ValueError("min_score 必须在 0~1 之间")
         if stale_days < 0:
             raise ValueError("stale_days 必须 >= 0")
+        if not isinstance(include_needs_review, bool):
+            raise ValueError("include_needs_review 必须是 bool")
         self._clock = clock or (lambda: datetime.now(timezone.utc))
         self.limit = limit
         self.min_score = min_score
         self.stale_days = stale_days
+        self.include_needs_review = include_needs_review
 
     @classmethod
     def load(cls, path: str | Path, **kwargs: Any) -> "HistorySearchSource":
@@ -676,9 +716,19 @@ class HistorySearchSource:
             )
 
         success_records = [record for record in snapshot.records if _is_success_record(record)]
+        review_in_snapshot = sum(1 for record in success_records if _needs_review(record))
+        success_summary = (
+            f"符合成功口径 {len(success_records)} 条，其中待核异常 {review_in_snapshot} 条"
+        )
+        excluded_needs_review = 0 if self.include_needs_review else review_in_snapshot
+        searchable_records = (
+            success_records
+            if self.include_needs_review
+            else [record for record in success_records if not _needs_review(record)]
+        )
         candidates = [
             candidate
-            for record in success_records
+            for record in searchable_records
             if (candidate := self._build_candidate(prepared, record, now)) is not None
             and candidate.score >= self.min_score
         ]
@@ -686,12 +736,18 @@ class HistorySearchSource:
         candidates = candidates[: self.limit]
 
         if not candidates:
+            exclusion_note = (
+                f"；其中 {excluded_needs_review} 条待核异常记录已排除，"
+                "可用 include_needs_review=True 单独查看"
+                if excluded_needs_review
+                else ""
+            )
             return HistorySearchResult(
                 outcome=HistorySearchOutcome.NO_MATCH,
                 evidence_status=EvidenceStatus.NOT_FOUND,
                 reason=(
                     f"检索执行成功，未取得达到阈值 {self.min_score:.2f} 的历史参考记录"
-                    f"（扫描 {len(snapshot.records)} 条，其中明确成功 {len(success_records)} 条）；"
+                    f"（扫描 {len(snapshot.records)} 条，{success_summary}{exclusion_note}）；"
                     f"这是没查到，不是查询失败"
                 ),
                 query=prepared,
@@ -700,16 +756,28 @@ class HistorySearchSource:
                 scanned_records=len(snapshot.records),
                 query_gaps=query_gaps,
                 truncated=truncated,
+                excluded_needs_review=excluded_needs_review,
             )
 
         gap_note = f"；输入缺口：{'、'.join(query_gaps)}" if query_gaps else ""
+        review_count = sum(1 for candidate in candidates if candidate.needs_review)
+        review_note = (
+            f"；其中 {review_count} 条待核异常，不能视为成功案例"
+            if review_count
+            else (
+                f"；另有 {excluded_needs_review} 条待核异常记录已排除，"
+                "可用 include_needs_review=True 单独查看"
+                if excluded_needs_review
+                else ""
+            )
+        )
         return HistorySearchResult(
             outcome=HistorySearchOutcome.MATCHED,
             evidence_status=EvidenceStatus.OBTAINED,
             reason=(
                 f"检索到 {len(candidates)} 条历史参考记录"
-                f"（扫描 {len(snapshot.records)} 条，其中明确成功 {len(success_records)} 条）"
-                f"{gap_note}；历史成功码仅作参考，不能作为当前归类结论"
+                f"（扫描 {len(snapshot.records)} 条，{success_summary}）"
+                f"{gap_note}{review_note}；历史成功码仅作参考，不能作为当前归类结论"
             ),
             query=prepared,
             candidates=candidates,
@@ -718,6 +786,7 @@ class HistorySearchSource:
             scanned_records=len(snapshot.records),
             query_gaps=query_gaps,
             truncated=truncated,
+            excluded_needs_review=excluded_needs_review,
         )
 
     # --- 内部 ---
@@ -806,6 +875,8 @@ class HistorySearchSource:
                 name_score, query_attributes, record_attributes, matched, diff, unverified
             ),
             historical_outcome=record.outcome,
+            needs_review=_needs_review(record),
+            blocking_issue_codes=_blocking_issue_codes(record),
             hs_version=record.hs_version,
             applicable_scope=record.applicable_scope,
             valid_until=record.valid_until,

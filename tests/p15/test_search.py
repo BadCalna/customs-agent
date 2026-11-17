@@ -21,9 +21,11 @@ from adapters.sources.history_search import (
     HistoryCandidate,
     HistoryDatasetInfo,
     HistoryQuery,
+    HistoryRecord,
     HistorySearchOutcome,
     HistorySearchResult,
     HistorySearchSource,
+    HistorySourceRef,
     HistoryStoreError,
     JsonHistoryStore,
     default_records_path,
@@ -478,6 +480,83 @@ class DatasetDeclarationTest(SimpleTestCase):
                 os.environ[ENV_RECORDS_PATH] = previous
 
 
+class NeedsReviewRecordTest(SimpleTestCase):
+    """待核异常记录仍可被检索，但必须把标记透传到候选与证据。"""
+
+    def _record(self, **overrides):
+        payload = {
+            "record_id": "HIST-REVIEW-001",
+            "historical_hs": "7307210000",
+            "historical_name": "待核法兰盘",
+            "elements": {"材质": "不锈钢"},
+            "material": "不锈钢",
+            "spec": "DN50",
+            "recorded_at": "2025-01-01",
+            "outcome": "approved",
+            "source": HistorySourceRef(document="SYN-REVIEW", locator="第 1 项"),
+        }
+        payload.update(overrides)
+        return HistoryRecord(**payload)
+
+    def test_needs_review_is_propagated_to_candidate_and_evidence(self):
+        record = self._record(
+            attributes={
+                "needs_review": "true",
+                "blocking_issue_codes": "reversed_item_range,missing_contract",
+            }
+        )
+        source = HistorySearchSource(
+            records=[record], clock=fixed_clock, include_needs_review=True
+        )
+        result = source.search(HistoryQuery(name="待核法兰盘", elements={"材质": "不锈钢"}))
+        self.assertIs(result.outcome, HistorySearchOutcome.MATCHED)
+        candidate = result.candidates[0]
+        self.assertTrue(candidate.needs_review)
+        self.assertEqual(candidate.blocking_issue_codes, ["reversed_item_range", "missing_contract"])
+        self.assertIn("待核异常", result.reason)
+
+        entries = result.to_evidence_entries()
+        self.assertEqual(len(entries), 1)
+        self.assertIn("待核异常", entries[0].title)
+        self.assertNotIn("历史成功记录", entries[0].title)
+        self.assertIn("reversed_item_range", entries[0].note)
+        self.assertIn("不能作为成功案例", entries[0].note)
+
+    def test_blocking_codes_without_explicit_flag_still_marks_review(self):
+        record = self._record(attributes={"blocking_issue_codes": "missing_contract"})
+        source = HistorySearchSource(
+            records=[record], clock=fixed_clock, include_needs_review=True
+        )
+        result = source.search(HistoryQuery(name="待核法兰盘", elements={"材质": "不锈钢"}))
+        candidate = result.candidates[0]
+        self.assertTrue(candidate.needs_review)
+        self.assertEqual(candidate.blocking_issue_codes, ["missing_contract"])
+
+    def test_needs_review_is_excluded_from_success_hits_by_default(self):
+        record = self._record(
+            attributes={
+                "needs_review": "true",
+                "blocking_issue_codes": "reversed_item_range",
+            }
+        )
+        source = HistorySearchSource(records=[record], clock=fixed_clock)
+        result = source.search(HistoryQuery(name="待核法兰盘", elements={"材质": "不锈钢"}))
+        self.assertIs(result.outcome, HistorySearchOutcome.NO_MATCH)
+        self.assertEqual(result.candidates, [])
+        self.assertEqual(result.excluded_needs_review, 1)
+        self.assertIn("待核异常", result.reason)
+        self.assertIn("已排除", result.reason)
+
+    def test_normal_record_is_not_flagged(self):
+        record = self._record(attributes={"needs_review": "false"})
+        source = HistorySearchSource(records=[record], clock=fixed_clock)
+        result = source.search(HistoryQuery(name="待核法兰盘", elements={"材质": "不锈钢"}))
+        candidate = result.candidates[0]
+        self.assertFalse(candidate.needs_review)
+        self.assertEqual(candidate.blocking_issue_codes, [])
+        self.assertIn("历史成功记录", result.to_evidence_entries()[0].title)
+
+
 class SuccessOutcomeFilterTest(SimpleTestCase):
     """只有明确成功的记录进入历史成功案例；已拒绝/缺失 outcome 一律排除（Jay 评审）。"""
 
@@ -504,7 +583,7 @@ class SuccessOutcomeFilterTest(SimpleTestCase):
             HistoryQuery(name="不锈钢法兰盘")
         )
         self.assertIs(result.outcome, HistorySearchOutcome.NO_MATCH)
-        self.assertIn("明确成功 0 条", result.reason)
+        self.assertIn("符合成功口径 0 条", result.reason)
 
     def test_only_explicit_success_values_are_eligible(self):
         base = JsonHistoryStore(RECORDS_PATH).load().records[0].model_dump()
@@ -517,4 +596,4 @@ class SuccessOutcomeFilterTest(SimpleTestCase):
         )
         eligible = {c.record_id for c in result.candidates}
         self.assertEqual(eligible, {"SYN-approved", "SYN-passed", "SYN-放行", "SYN-通过"})
-        self.assertIn("明确成功 4 条", result.reason)
+        self.assertIn("符合成功口径 4 条", result.reason)
