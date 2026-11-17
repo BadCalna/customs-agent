@@ -19,7 +19,6 @@ router = Router(tags=["未实现端点"])
 PENDING_ENDPOINTS = [
     ("POST", "/versions/{version_id}/prechecks", "P13"),
     ("POST", "/runs/{run_id}/retries", "P13"),
-    ("POST", "/versions/{version_id}/exports", "P20"),
     ("GET", "/messages", "P19"),
     ("PATCH", "/messages/{message_id}", "P19"),
 ]
