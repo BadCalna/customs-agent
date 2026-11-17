@@ -123,6 +123,7 @@ def get_item_card(request, version_id: str, item_id: str):
     return item_to_card(request.auth, item)
 
 
-# 首次上传由 P06 实现。它与 GET /tasks 同路径，必须挂在同一 router，
-# 否则 Ninja 先注册的路径视图会把 POST 判为 405 而不是显式 501。
-router.api_operation(["POST"], "/tasks", auth=session_auth)(pending_view("POST", "/tasks", "P06"))
+# 与 GET /tasks 共用 router，避免 Ninja 跨 router 同路径返回 405。
+from .imports import create_task
+from ..import_schemas import ImportOut
+router.post("/tasks", response=ImportOut, auth=session_auth)(create_task)

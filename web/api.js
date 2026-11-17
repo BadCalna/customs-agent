@@ -64,11 +64,12 @@ function createLiveAdapter(baseUrl) {
   let csrf = "";
 
   async function raw(method, path, { body, headers = {} } = {}) {
+    const multipart = typeof FormData !== "undefined" && body instanceof FormData;
     const response = await fetch(baseUrl + path, {
       method,
       credentials: "same-origin",
-      headers: { ...(body !== undefined ? JSON_HEADERS : {}), ...headers },
-      body: body !== undefined ? JSON.stringify(body) : undefined,
+      headers: { ...(body !== undefined && !multipart ? JSON_HEADERS : {}), ...headers },
+      body: body !== undefined ? (multipart ? body : JSON.stringify(body)) : undefined,
     });
     const payload = await readPayload(response);
     if (!response.ok) {
@@ -117,6 +118,24 @@ function createLiveAdapter(baseUrl) {
       csrf = readCookie("csrftoken");
     },
 
+    async uploadFile(file, { taskId, currentVersionId, confirmDuplicate = false, key } = {}) {
+      const body = new FormData();
+      body.append("file", file);
+      if (taskId) {
+        body.append("expected_current_version_id", currentVersionId);
+        body.append("confirm_duplicate", String(confirmDuplicate));
+      }
+      csrf = readCookie("csrftoken") || await ensureCsrf();
+      return raw("POST", taskId ? `/tasks/${encodeURIComponent(taskId)}/versions` : "/tasks", {
+        body, headers: { "X-CSRFToken": csrf, "Idempotency-Key": key },
+      });
+    },
+    listClaimable(params = {}) { return raw("GET", `/tasks/claimable${query(params)}`); },
+    async claimTask(taskId, key) {
+      csrf = readCookie("csrftoken") || await ensureCsrf();
+      return raw("POST", `/tasks/${encodeURIComponent(taskId)}/claim`, {headers: {"X-CSRFToken": csrf, "Idempotency-Key": key}});
+    },
+    getImport(versionId) { return raw("GET", `/versions/${encodeURIComponent(versionId)}/import`); },
     listTasks(params = {}) {
       return raw("GET", `/tasks${query({ stage: params.stage, limit: params.limit, cursor: params.cursor })}`);
     },
@@ -159,6 +178,10 @@ function createFixtureAdapter(url) {
 
   return {
     mode: "fixture",
+    async uploadFile() { throw new ApiError(501, "live_required", "真实上传仅支持 live API"); },
+    async listClaimable() { throw new ApiError(501, "live_required", "认领仅支持 live API"); },
+    async claimTask() { throw new ApiError(501, "live_required", "认领仅支持 live API"); },
+    async getImport() { throw new ApiError(501, "live_required", "解析报告仅支持 live API"); },
 
     // fixture 模式没有真实身份，明确返回演示身份；页面必须显示"不校验权限"标记。
     async me() {

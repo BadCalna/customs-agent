@@ -20,7 +20,7 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Iterable
 
 from .ooxml import OoxmlError, Sheet, Workbook, col_label, col_number
@@ -263,8 +263,9 @@ def extract_images(
         match_header = header_cell.value if header_cell is not None else ""
 
     # 普通浮图只认“起止锚点都在本行图片列的同一单元格”；跨行/跨列/表外一律不就近归属。
+    drawing_errors = []
     floating_by_cell = _floating_images_by_cell(
-        workbook, sheet.name, col_number(label), header_row,
+        workbook, sheet.name, col_number(label), header_row, on_error=drawing_errors.append,
     )
     images = tuple(
         _resolve_row(
@@ -273,6 +274,14 @@ def extract_images(
         )
         for row in row_numbers
     )
+    if drawing_errors:
+        cause = ", ".join(sorted({error.code for error in drawing_errors}))
+        message = f"浮图资源无法完整读取（{cause}），不能证明该单元格无图"
+        images = tuple(
+            replace(image, notes=image.notes + (message,)) if image.dispimg_id or image.status == STATUS_READ_FAILED else
+            _failed(sheet.name, image.row, image.cell, "floating_image_scan_failed", message)
+            for image in images
+        )
     return ImageExtraction(
         sheet=sheet_name, column=label, column_status=column_status,
         column_header=match_header, rows=images, max_image_bytes=max_image_bytes,
@@ -408,11 +417,11 @@ def _resolve_row(
 
 
 def _floating_images_by_cell(
-    workbook: Workbook, sheet_name: str, column_number: int, header_row: int,
+    workbook: Workbook, sheet_name: str, column_number: int, header_row: int, *, on_error=None,
 ) -> dict[str, tuple]:
     """收集精确单格浮图；只返回带图片资源的锚点，不处理跨行/跨列/表外图片。"""
     result: dict[str, list] = {}
-    for anchor in workbook.picture_anchors():
+    for anchor in workbook.picture_anchors(sheet_name=sheet_name, on_error=on_error):
         if anchor.sheet != sheet_name or not anchor.images:
             continue
         row = anchor.exact_cell(column_number)

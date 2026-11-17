@@ -1,6 +1,6 @@
 # D4 Agent 输入输出与证据约定
 
-版本：0.3，2026-11-16。状态：P02 第一批已发布引擎协议与 mock 实现；P14 已发布 HS 与申报要素来源适配契约（第 6 节，合成样本自验，真实官方来源未接入）。协议 DTO 在 `adapters/engines/protocols.py`，固定场景实现与比较优先级在 `adapters/engines/mock.py`，JSON Schema 见 `contracts/schemas/engine/`。本文件规定系统内关务 AI 引擎；编程 Agent 的分工见 [协作与交接约定](Agent协作与交接约定.md)。
+版本：0.5，2026-11-17。状态：P02 第一批已发布引擎协议与 mock 实现；P14 已发布 HS 与申报要素来源适配契约（第 6 节，合成样本自验，真实官方来源未接入）；P17 已发布退税与监管来源适配契约（第 7 节，同样是合成样本自验）；P06 已补充 inline mock 接线与独立推荐输入隔离说明（文末）。协议 DTO 在 `adapters/engines/protocols.py`，固定场景实现与比较优先级在 `adapters/engines/mock.py`，JSON Schema 见 `contracts/schemas/engine/`。本文件规定系统内关务 AI 引擎；编程 Agent 的分工见 [协作与交接约定](Agent协作与交接约定.md)。
 
 ## 1. 引擎边界
 
@@ -189,3 +189,132 @@ P16 只能在以下条件同时满足时，把 P14 的结果当作“事实已�
 - 未出现 `version_unverified`/`query_failed`/`not_found` 被当作“无风险”的情况。
 
 其余情况保持 `needs_confirmation`，把 P14 的 `gaps` 按 `suggested_role` 分流：`supplier` 只在 `insufficient` 时进入补料；`expert`/`operator` 进入人工核查。P16 不得用模型补齐 P14 未取得的条款或要素值。
+
+## 7. 退税与监管来源适配（P17 发布，2026-11-17）
+
+### 7.1 边界与入口
+
+P17 与 P14 同级：**只提供来源事实，不做退税判定、不做合规裁定、不替代审批**。它回答两个问题：
+
+1. 某个编码在某期退税政策里对应什么退税率/处理方式、有哪些适用条件（`adapters/sources/tax_lookup.py`）；
+2. 某个编码在某个申报日期、某个进出口方向下，来源声明了哪些监管/检验检疫要求，是否**明确声明**无要求（`adapters/sources/regulatory_lookup.py`）。
+
+两个入口都不接收图片、不接收关税税率、不接收“要不要办证”的调用方断言，不产生 AI 判断，不落库、不访问网络、不调用模型。存储可替换；默认读环境变量指向的本地 JSON，未配置就返回 `source_unconfigured`，**没有默认样本**。
+
+| 入口 | 输入 | 输出 |
+|---|---|---|
+| `TaxRateSource.lookup(TaxRateQuery)` | 编码原文、适用退税代码（可选）、`QueryBasis`、原表退税率原文 | 格式分类、版本解析、来源记录、原值/查询值/机械比对三块、`applicability`、问题、待核原因、证据 |
+| `RegulatorySource.lookup(RegulatoryQuery)` | 编码原文、**进出口方向（必需）**、`QueryBasis` | 格式分类、版本解析、来源记录、`outcome` 三态、措施与两用物项线索、问题、待核原因、证据 |
+
+`QueryBasis` 沿用 P14（D3 第 5 节）：**系统不填拟申报日期**；两个基准都为空时版本保持 `unverified`。在退税适配器里 `tariff_version` 的语义是“退税政策/文库版本”。
+
+**明确不做的**：不从图片或 OCR 推退税率；不把关税税率换算成出口退税率（输入里出现 `tariff_rate`/`duty_rate` 等字段直接 `invalid_input`，见 `TAX_RATE_DERIVED_FROM_TARIFF_REFUSED`）；不内置监管代码→含义表；不判定两用物项是否适用；不生成条件判定规则。
+
+### 7.2 退税率：三种事实不能混
+
+`rate_kind` 是**来源声明的处理方式**，`rate_percent` 只在数值型下存在：
+
+| 来源声明 | `rate_kind` | `rate_percent` | 含义 |
+|---|---|---|---|
+| 具体退税率 | `export_rebate` | 13.0 | 退税率 13%（必须 > 0） |
+| 明确零税率 | `zero_rate` | 0.0 | 零税率，不是“没查到” |
+| 免税 | `exempt` | `null` | 免税；不是 0% 退税率 |
+| 不予退税 | `not_refundable` | `null` | 明确不予退税；不是 0% |
+| 不适用出口退税 | `not_applicable` | `null` | 不适用；不是 0% |
+| 来源未说明 | `unknown` | `null` | 待核；不得补成任何数值 |
+
+- 0% 只能用 `zero_rate` 表达：`export_rebate` 配 0 会在导入期被拒绝，避免把“未取得/不予退税”和“零税率”混成一个值；来源原文仍保留在 `rate_raw`。
+- 查不到记录 ⇒ `record=null`、`looked_up_rate=null`、`evidence_status=not_found`；**永远不会出现 0%**。
+- 原表空白 ⇒ `original_rate.state=blank`、`percent=null`；**空白不是 0%，也不是“不予退税”**。
+
+### 7.3 三块分开：原值 / 查询值 / 机械比对
+
+| 字段 | 内容 | 谁产生 |
+|---|---|---|
+| `original_rate` | 供应商原表退税率：`raw` 原样保留，`state` 为 `blank/numeric/non_numeric/unparseable` | 解析原文，不修正 |
+| `looked_up_rate` | 来源查询值：`rate_kind/rate_percent/rate_raw/rate_state/rebate_code` | 逐字段镜像来源记录（结果校验强制） |
+| `rate_comparison` | `matched/conflict/not_compared/unverified` + 原因 | 固定规则机械比对，`produced_by=deterministic_adapter` |
+
+- `rate_comparison` **不是 AI 判断，也不代表审批**；P18 的 AI 判断必须另立字段，不能写回这里（结果校验拒绝 `produced_by != deterministic_adapter`）。
+- 任一端不可比（原值空白、来源为非数值处理方式）一律 `not_compared` 并写明原因，不默认“一致”；原值有内容但无法确定唯一数值（区间、多个值）为 `unverified`。
+- `conflict` 只陈述“数值不一致”，**不裁定谁对**；必须转专家。
+
+### 7.4 适用性（`applicability`）
+
+| 取值 | 条件 | 下游动作 |
+|---|---|---|
+| `applies` | 10 位完整编码 + 来源权威（官方 + 已复核）+ 版本已核 + 申报日期落在记录有效期 + 记录 `in_force` + 来源**明确声明无条件限制**（`conditions: []`）+ 适用退税代码核对一致 | 可作该申报日期依据（仍不等于审批通过） |
+| `conditional` | 来源给出条件文本但未机读化 | 转专家；**不得**当作已适用 |
+| `not_effective` | 申报日期早于/晚于记录有效期，或来源声明政策废止/被替代 | 换用当期政策或转专家 |
+| `unknown` | 缺申报日期、版本待核、来源未声明条件、来源未声明处理方式/状态、来源非权威、8 位子目、退税代码无法核对 | 转人工/专家 |
+
+- `conditions` 字段的三种状态必须区分：字段缺失 ⇒ `not_declared`（**不等于无条件**，判 `unknown`）；空数组 ⇒ `declared_none`；非空 ⇒ `declared_unverified`（判 `conditional`）。
+- **任何非 `applies` 的结果至少带一条 `pending_reasons`**（结果校验强制 + 构造期兜底），P18 据此保持 `unknown`，不能读成无风险。
+- `usable_as_basis` 与 `applicability=applies` 严格等价，不接受人工覆盖。
+- 8 位子目一律 `unknown`（不 `applies`）：文库若按 10 位维护，退税率可能不同，且无法确认申报编码。
+- `expert_review_required`：**只有 `applies` 且 `rate_comparison=matched` 时为 false**。`conflict`、`unverified` 与 `not_compared`（含原表空白、来源是“不予退税/免税”等非数值处理方式）都必须转专家——2026-11-17 复查修复的正是“原表 13%、来源不予退税却标无需专家”这一类（缺陷 C-18）。
+- `usable_as_basis` 与 `expert_review_required` 是**两件事**：前者说“来源事实可作依据”，后者说“这一分项还有要人看的问题”。二者都为真时（例如来源是不予退税但原值写了 13%），P18 必须按专家复核处理，不能只看 `usable_as_basis`。
+
+### 7.5 监管条件：三态与方向
+
+| `outcome` | 含义 | 能否读成“无监管” |
+|---|---|---|
+| `measures_required` | 来源明确列出监管/检验检疫要求 | 否（是“有要求”） |
+| `declared_none` | 来源明确声明无要求（`measures: []`）且日期/方向可核 | **仅当 `usable_as_basis=true`** |
+| `not_effective` | 记录已废止，或申报日期不在有效期 | 否 |
+| `unknown` | 未取得、`measures` 字段缺失、版本待核、缺申报日期、方向不明/不一致、来源失败 | 否 |
+
+- `measures` 字段缺失（`null`）⇒ `measures_state=not_declared` ⇒ `outcome=unknown`；**“来源没写”不等于“来源说没有”**。
+- **方向是必需输入**：未给方向直接 `invalid_input`（`REG_DIRECTION_UNKNOWN`），不默认进口或“双向都行”；记录方向与查询方向不一致时返回 `not_found` 并提示 `REG_OTHER_VERSION_OR_DIRECTION`，**不能据此方向判无监管**。
+- `direction=both` 的记录**不得携带具体措施**（导入期拒绝）：来源表里 A 类进口、B 类出口必须拆成两条方向明确的记录，否则无法逐条核对方向。
+- 措施名称（`name`）与主管机关（`agency`）只来自来源；只有代码时留空并报 `REG_MEASURE_NAME_UNKNOWN`，**不得由模型或硬编码补出含义**；此时 `usable_as_basis=false`。
+- 8 位子目一律 `usable_as_basis=false`（`REG_SUBHEADING_ONLY` + 待核原因）：监管条件通常按 10 位维护，8 位只说明层级；“来源声明无监管”也不例外（缺陷 C-16）。
+- **两用物项有两个入口，行为必须一致**：`dual_use[]` 线索列表，以及 `measures[].category=dual_use`。两种写法都要求 `usable_as_basis=false`、`expert_review_required=true` 并报问题（`REG_DUAL_USE_UNVERIFIED` / `REG_MEASURE_DUAL_USE_UNVERIFIED`）；不能因为写进“监管措施”就当作已核清（缺陷 C-17）。
+- 两用物项只输出清单命中线索：`verdict` **恒为 `unknown`**（枚举只有一个取值，结果校验拒绝其它值），必须转专家按技术参数、最终用途与用户判定；不通过改名规避。
+- 措施类别不明（`category=unknown`）同样 `usable_as_basis=false` 并报 `REG_MEASURE_CATEGORY_UNKNOWN`：不知道是证件、检验检疫还是两用物项，就不能说监管结论已核清。
+- `expert_review_required == not usable_as_basis`：可用已排除 8 位码、来源非权威、方向不符、结论待核、措施不可定位/无名称/类别不明/两用物项，因此“可用”等价于“不需要专家再看”，任何降级都必须转人，不能自动放行。
+- 来源明确声明无监管且可作依据时 `pending_reasons` 为空：人工审批属于 P18/专家的业务流程，不算“适配器还有没核清的事”，避免出现“无需专家却仍挂待核”的自相矛盾。
+
+### 7.6 证据与引用
+
+- 证据按“1 条记录证据 + 每条可定位措施/条件/线索各 1 条”生成：`tax:<版本>:<税号>`、`tax:<版本>:<税号>:cond<n>`、`reg:<版本>:<税号>:<方向>`、`reg:<版本>:<税号>:<方向>:measure<n>`、`...:dual<n>`；`document`/`locator` 非空、`retrieved_at` 合法、权威来源必须有 `retrieved_at`（与 P14 同一校验）。
+- 没有文档/条款定位的条件、措施、线索**不生成证据**，改为问题 `*_UNLOCATED` 并计入 `pending_reasons`；此时不得 `usable_as_basis`。
+- 证据 `query` 带查询参数（编码、方向、基准、措施代码），便于 P18 逐条复核与页面回跳。
+- 查无/失败不生成任何证据条目，不编造公告号或条款。
+
+### 7.7 来源能力清单（2026-11-17 本机实测）
+
+| 来源 | 内容 | 访问方式 | 本机结论 | 限制 |
+|---|---|---|---|---|
+| 税务总局出口退税率文库 | 退税率 | 人工导入（需授权） | `requires_authorization` | 无公开批量接口；需电子税务局/离线工具取得；与海关税则分库，口径可能不一致 |
+| 财政部/税务总局退税政策公告 | 政策依据 | 公开页面 | `available` | 只给政策口径与范围，不含全量税率表；条件为文字表述，未机读化前待核 |
+| 中国国际贸易单一窗口参数查询 | 监管/检验检疫 | 公开页面（需登录） | `requires_authorization` | JavaScript 单页应用；代码含义需另取官方代码表 |
+| 海关总署监管条件公告 | 监管/检验检疫 | 公开页面 | `unreachable` | `www.customs.gov.cn` 连接失败（与 P14 一致） |
+| 商务部中国出口管制信息网 | 两用物项清单 | 公开页面 | `available` | 清单与 HS 不一一对应；是否受管制必须专家判定 |
+| 第三方退税率/监管条件站 | 退税率/监管 | 公开页面 | `available`（仅初筛） | 可能滞后/缺项/错误，不得作为结论 |
+
+结论：P17 交付的是**可运行适配器 + 明确标注的合成样本 + 来源能力清单**，没有真实数据；任何“真实退税率/监管条件已查通”的说法都不成立。真实接入需 Jay/关务专家按 D6 §2.6 导入并复核。
+
+### 7.8 P18 集成规则
+
+P18 只有在以下条件同时满足时，才能把 P17 的结果当作“已核实事实”：
+
+- 退税：`usable_as_basis=true`（即 `applicability=applies`）**且** `expert_review_required=false`；原值与来源值一致只能作为**机械一致**，专业结论仍需专家；
+- 监管：`usable_as_basis=true` **且** `expert_review_required=false`，且 `outcome` 为 `measures_required`/`declared_none`；
+- 证据可定位且属于当前版本；两用物项 `verdict` 恒为 `unknown`（无论写在 `dual_use[]` 还是 `measures[].category` 里）。
+- 必须同时满足 `usable_as_basis=true` 和 `expert_review_required=false` 才能进 `matched`；只满足一个（例如来源事实可作依据，但原值比对没对上）一律按下一条降级处理。
+
+其余情况：`conditional`/`unknown`/`not_effective` 一律记为分项 `unknown`（**不是 matched，也不是“无风险”**），把 `pending_reasons` 按 `suggested_role` 分流（`supplier` 补资料、`expert` 判专业、`operator` 补来源）。P18 不得用模型补齐 P17 未取得的条款、税率、证件名称，也不得把 `declared_none` 写成“无监管”除非 `usable_as_basis=true`；专家改码后必须以新 HS 重跑本适配器，旧结果只保留为历史。
+
+## P06 inline mock 接线补充（2026-11-17）
+
+上传事务先预登记一个 `queued, is_current=false` Run，作为持久执行凭据；解析/图片成功后，系统用
+`execute_precheck(version, run=job.precheck)` 激活同一 Run，整表执行。未解析成功不激活，不产生有效预审结果。
+该编排是 P06 inline 模式，P13 后续接队列和后台恢复。失败/中断恢复复用 ImportJob、版本、Run，不追加第二轮。
+原有 P02 显式预审入口仍可不传 run，保持兼容。预审全部行失败时导入可以成功，但 `precheck_status=failed`，
+页面分别展示解析状态与预审失败，不能写成“预审通过”。
+P06 不读取 P10 候选对照，不使用旧版本确认/审批，不调用真实 AI、官方来源或后台队列。
+
+P06 对抗性修复（2026-11-17）：`_build_recommend_input` 不再透传 Item.attributes。
+只从固定白名单取标量商品事实；`excel_fields`、原 HS、退税率、历史审核意见、未识别备注和旧结果列留库核查，
+不进入独立推荐 DTO。原码仅进入 compare 阶段；自由文本事实中可能自然出现编码，仍记录锚定风险。

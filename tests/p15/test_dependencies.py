@@ -12,10 +12,13 @@ from django.conf import settings
 from django.test import SimpleTestCase
 
 BASE_DIR = Path(settings.BASE_DIR)
-MODULE_PATH = BASE_DIR / "adapters" / "sources" / "history_search.py"
+MODULE_PATHS = (
+    BASE_DIR / "adapters" / "sources" / "history_search.py",
+    BASE_DIR / "adapters" / "sources" / "history_import.py",
+)
 
-#: 标准库 + 仓库已有依赖（Django / django-ninja / pydantic 由 ninja 带入）+ 本项目包。
-ALLOWED_TOP_LEVEL = {
+#: history_search.py 的允许清单（保持严格：不因导入模块而放松）。
+SEARCH_ALLOWED_TOP_LEVEL = {
     "__future__",
     "collections",
     "dataclasses",
@@ -30,6 +33,21 @@ ALLOWED_TOP_LEVEL = {
     "ninja",
     "pydantic",
     "apps",
+}
+
+#: history_import.py 的允许清单（标准库 + 本项目包 + Django 延迟配置）。
+IMPORT_ALLOWED_TOP_LEVEL = SEARCH_ALLOWED_TOP_LEVEL | {
+    "argparse",
+    "hashlib",
+    "sys",
+    "traceback",
+    "adapters",
+    "django",
+}
+
+MODULE_ALLOWED = {
+    BASE_DIR / "adapters" / "sources" / "history_search.py": SEARCH_ALLOWED_TOP_LEVEL,
+    BASE_DIR / "adapters" / "sources" / "history_import.py": IMPORT_ALLOWED_TOP_LEVEL,
 }
 
 #: 明确不允许出现的能力：向量库、网络客户端、模型 SDK、科学计算栈。
@@ -66,14 +84,16 @@ def imported_top_level(path: Path) -> set[str]:
 
 class NoExtraDependencyTest(SimpleTestCase):
     def test_imports_are_stdlib_or_existing_project_dependencies(self):
-        modules = imported_top_level(MODULE_PATH)
-        self.assertTrue(modules, "AST 未解析到任何 import，检查测试本身")
-        self.assertLessEqual(
-            modules,
-            ALLOWED_TOP_LEVEL,
-            f"出现允许清单外的 import：{sorted(modules - ALLOWED_TOP_LEVEL)}",
-        )
-        self.assertFalse(modules & FORBIDDEN_TOP_LEVEL)
+        for path, allowed in MODULE_ALLOWED.items():
+            with self.subTest(module=path.name):
+                modules = imported_top_level(path)
+                self.assertTrue(modules, "AST 未解析到任何 import，检查测试本身")
+                self.assertLessEqual(
+                    modules,
+                    allowed,
+                    f"出现允许清单外的 import：{sorted(modules - allowed)}",
+                )
+                self.assertFalse(modules & FORBIDDEN_TOP_LEVEL)
 
     def test_baseline_project_dependencies_still_present(self):
         """只锁 P15 自己的足迹，不要求整份依赖清单不变。
@@ -93,7 +113,8 @@ class NoExtraDependencyTest(SimpleTestCase):
         )
 
     def test_no_vector_store_or_network_client_in_source(self):
-        source = MODULE_PATH.read_text(encoding="utf-8").lower()
-        for forbidden in ("chromadb", "faiss", "qdrant", "pinecone", "requests.get", "httpx."):
-            with self.subTest(forbidden=forbidden):
-                self.assertNotIn(forbidden, source)
+        for path in MODULE_PATHS:
+            source = path.read_text(encoding="utf-8").lower()
+            for forbidden in ("chromadb", "faiss", "qdrant", "pinecone", "requests.get", "httpx."):
+                with self.subTest(module=path.name, forbidden=forbidden):
+                    self.assertNotIn(forbidden, source)

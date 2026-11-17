@@ -1,0 +1,202 @@
+{
+  "schema_version": "p17.regulatory.1",
+  "dataset": {
+    "dataset_id": "SYN-P17-REGULATORY",
+    "source_type": "synthetic",
+    "authority": "synthetic",
+    "synthetic": true,
+    "description": "P17 合成接口样本，模拟监管条件/检验检疫类别表；不是真实监管条件，不能作为申报依据",
+    "document": "SYN-P17-REGULATORY",
+    "retrieved_at": "2026-11-17T00:00:00+08:00",
+    "review_status": "unreviewed",
+    "notes": "代码含义按公开常识编造为合成文本，仅用于验证适配器分支"
+  },
+  "versions": [
+    {
+      "version": "2025",
+      "effective_from": "2025-01-01",
+      "effective_to": "2025-12-31",
+      "label": "2025 年期（合成）"
+    },
+    {
+      "version": "2026",
+      "effective_from": "2026-01-01",
+      "effective_to": "2026-12-31",
+      "label": "2026 年期（合成）"
+    }
+  ],
+  "records": [
+    {
+      "version": "2026",
+      "hs_code": "8482102000",
+      "direction": "import",
+      "product_name": "深沟球轴承（合成样本）",
+      "state": "in_force",
+      "effective_from": "2026-01-01",
+      "effective_to": "2026-12-31",
+      "measures": [
+        {
+          "code": "A",
+          "category": "licence",
+          "name": "入境货物通关单（合成名称）",
+          "agency": "海关（合成）",
+          "document": "SYN-P17-REGTABLE",
+          "locator": "合成代码表第 A 行"
+        }
+      ],
+      "source": {
+        "system": "SYN 监管条件表",
+        "document": "SYN-P17-REGULATORY",
+        "locator": "合成数据行 2026/8482102000",
+        "retrieved_at": "2026-11-17T00:00:00+08:00"
+      }
+    },
+    {
+      "version": "2026",
+      "hs_code": "8482102000",
+      "direction": "export",
+      "product_name": "深沟球轴承（合成样本）",
+      "state": "in_force",
+      "effective_from": "2026-01-01",
+      "effective_to": "2026-12-31",
+      "measures": [
+        {
+          "code": "B",
+          "category": "licence",
+          "name": "出境货物通关单（合成名称）",
+          "agency": "海关（合成）",
+          "document": "SYN-P17-REGTABLE",
+          "locator": "合成代码表第 B 行"
+        }
+      ],
+      "source": {
+        "system": "SYN 监管条件表",
+        "document": "SYN-P17-REGULATORY",
+        "locator": "合成数据行 2026/8482102000（出口）",
+        "retrieved_at": "2026-11-17T00:00:00+08:00"
+      }
+    },
+    {
+      "version": "2025",
+      "hs_code": "8482102000",
+      "direction": "both",
+      "product_name": "深沟球轴承（合成样本，2025 期）",
+      "state": "in_force",
+      "effective_from": "2025-01-01",
+      "effective_to": "2025-12-31",
+      "measures": [],
+      "source": {
+        "system": "SYN 监管条件表",
+        "document": "SYN-P17-REGULATORY",
+        "locator": "合成数据行 2025/8482102000",
+        "retrieved_at": "2026-11-17T00:00:00+08:00"
+      }
+    },
+    {
+      "version": "2026",
+      "hs_code": "8536490090",
+      "direction": "export",
+      "product_name": "继电器（合成样本）",
+      "state": "in_force",
+      "effective_from": "2026-01-01",
+      "effective_to": "2026-12-31",
+      "measures": [
+        {
+          "code": "B",
+          "category": "licence",
+          "name": "出境货物通关单（合成名称）",
+          "agency": "海关（合成）",
+          "document": "SYN-P17-REGTABLE",
+          "locator": "合成代码表第 B 行"
+        }
+      ],
+      "dual_use": [
+        {
+          "list_name": "两用物项出口管制清单（合成）",
+          "item_description": "合成条目描述：某类继电器",
+          "technical_criteria": "合成技术门槛：电压 > 60V 且含特定触点材料",
+          "document": "SYN-P17-DUALUSE",
+          "locator": "合成清单第 3 类第 2 条"
+        }
+      ],
+      "source": {
+        "system": "SYN 监管条件表",
+        "document": "SYN-P17-REGULATORY",
+        "locator": "合成数据行 2026/8536490090",
+        "retrieved_at": "2026-11-17T00:00:00+08:00"
+      }
+    },
+    {
+      "version": "2026",
+      "hs_code": "8501109100",
+      "direction": "import",
+      "product_name": "微特电机（合成样本，明确无监管要求）",
+      "state": "in_force",
+      "effective_from": "2026-01-01",
+      "effective_to": "2026-12-31",
+      "measures": [],
+      "source": {
+        "system": "SYN 监管条件表",
+        "document": "SYN-P17-REGULATORY",
+        "locator": "合成数据行 2026/8501109100（监管条件栏为“无”）",
+        "retrieved_at": "2026-11-17T00:00:00+08:00"
+      },
+      "note": "来源明确声明无监管要求（declared_none），仅此情况才可能是“无监管”"
+    },
+    {
+      "version": "2026",
+      "hs_code": "8471300000",
+      "direction": "export",
+      "product_name": "便携式电脑（合成样本，措施无名称）",
+      "state": "in_force",
+      "effective_from": "2026-01-01",
+      "effective_to": "2026-12-31",
+      "measures": [
+        {
+          "code": "B",
+          "category": "unknown",
+          "document": "SYN-P17-REGTABLE",
+          "locator": "合成代码表第 B 行（未给名称）"
+        }
+      ],
+      "source": {
+        "system": "SYN 监管条件表",
+        "document": "SYN-P17-REGULATORY",
+        "locator": "合成数据行 2026/8471300000",
+        "retrieved_at": "2026-11-17T00:00:00+08:00"
+      }
+    },
+    {
+      "version": "2026",
+      "hs_code": "7304190000",
+      "direction": "both",
+      "product_name": "无缝钢管（合成样本，记录已废止）",
+      "state": "abolished",
+      "effective_from": "2026-01-01",
+      "effective_to": "2026-06-30",
+      "measures": [],
+      "source": {
+        "system": "SYN 监管条件表",
+        "document": "SYN-P17-REGULATORY",
+        "locator": "合成数据行 2026/7304190000",
+        "retrieved_at": "2026-11-17T00:00:00+08:00"
+      }
+    },
+    {
+      "version": "2026",
+      "hs_code": "3917400000",
+      "direction": "import",
+      "product_name": "塑料管件（合成样本，未声明措施字段）",
+      "state": "in_force",
+      "effective_from": "2026-01-01",
+      "effective_to": "2026-12-31",
+      "source": {
+        "system": "SYN 监管条件表",
+        "document": "SYN-P17-REGULATORY",
+        "locator": "合成数据行 2026/3917400000",
+        "retrieved_at": "2026-11-17T00:00:00+08:00"
+      },
+      "note": "刻意不写 measures 字段：来源未声明不等于无监管"
+    }
+  ]
+}

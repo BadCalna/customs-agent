@@ -193,8 +193,9 @@ class ReadApiTest(TestCase):
         self.assertEqual(response.json()["error"]["details"]["owner"], "P19")
 
         response = self.client.post("/api/v1/tasks", {}, content_type="application/json", **self.csrf_headers())
-        self.assertEqual(response.status_code, 501)
-        self.assertEqual(response.json()["error"]["details"]["owner"], "P06")
+        # P06 已接管上传；缺少 multipart 文件是结构化校验失败。
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.json()["error"]["code"], "validation_error")
 
     def test_write_without_csrf_is_403_not_501(self):
         self.login()

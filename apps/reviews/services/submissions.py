@@ -20,6 +20,7 @@ from ..models import AuditEvent, Submission, SubmissionItem, Task
 from ..schemas import SubmissionLineOut, SubmissionOut, WithdrawalOut
 from . import idempotency
 from .confirmations import current_confirmation
+from .reviewers import ensure_submission_expert
 
 ACTION = "submission.create"
 
@@ -134,7 +135,7 @@ def _validate_lines(version, payload):
     return resolved
 
 
-def _pending_replay(task, version, pairs, revision):
+def _pending_replay(task, version, pairs, revision, *, user):
     """同版本已有待审提交：内容相同重放，不同则明确冲突，不创建第二个有效提交。"""
     pending = Submission.objects.filter(task=task, version=version, status=Submission.Status.PENDING).first()
     if pending is None:
@@ -151,6 +152,7 @@ def _pending_replay(task, version, pairs, revision):
     # 首次响应丢失后的重试可能带提交前的修订；只允许它或当前修订重放同一快照。
     if revision not in (pending.revision, task.revision):
         return None
+    ensure_submission_expert(task, pending, actor=user, source="pending_replay")
     run = pending.runs.order_by("-created_at").first()
     return submission_to_out(pending, run, task, replay=True).model_dump(mode="json")
 
@@ -163,6 +165,9 @@ def create_submission(user, task_id: str, payload, idempotency_key: str | None =
 
     replay = idempotency.begin(user, ACTION, idempotency_key, payload, target_id=str(task.pk))
     if replay is not None:
+        pending = Submission.objects.filter(task=task, pk=replay["submission_id"]).first()
+        if pending:
+            ensure_submission_expert(task, pending, actor=user, source="idempotent_replay")
         return replay
 
     version = _get_version(task, payload.version_id)
@@ -179,7 +184,7 @@ def create_submission(user, task_id: str, payload, idempotency_key: str | None =
     resolved = _validate_lines(version, payload)
     pairs = [(str(item.pk), str(confirmation.pk)) for item, confirmation in resolved]
     # 无幂等键的重复提交也要能安全重放：先按内容比对，再做修订校验。
-    replayed = _pending_replay(task, version, pairs, payload.revision)
+    replayed = _pending_replay(task, version, pairs, payload.revision, user=user)
     if replayed is not None:
         idempotency.store(user, ACTION, idempotency_key, payload, replayed, target_id=str(task.pk))
         return replayed
@@ -202,6 +207,9 @@ def create_submission(user, task_id: str, payload, idempotency_key: str | None =
     task.stage = Task.Stage.SUBMITTED
     task.revision += 1
     task.save(update_fields=["stage", "revision", "updated_at"])
+
+    # 与提交同事务授权；默认专家不可用时整体回滚，不留下无人可审的 pending。
+    ensure_submission_expert(task, submission, actor=user)
 
     # D4 第 4 节：同事务登记待运行记录；执行在提交成功后进行，进程崩溃由 P13 重扫。
     Run.objects.filter(version=version, kind=Run.Kind.EXPERT_CHECK, is_current=True).update(is_current=False)

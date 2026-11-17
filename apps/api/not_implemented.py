@@ -17,11 +17,9 @@ router = Router(tags=["未实现端点"])
 # 注意：与已实现端点同路径的占位不能放在本 router，Ninja 按路径先注册者优先，
 # 跨 router 的同路径方法会被 405。POST /tasks 因此在 reviews/api/read.py 注册。
 PENDING_ENDPOINTS = [
-    ("POST", "/tasks/{task_id}/versions", "P06"),
     ("POST", "/versions/{version_id}/prechecks", "P13"),
     ("POST", "/runs/{run_id}/retries", "P13"),
     ("POST", "/versions/{version_id}/exports", "P20"),
-    ("GET", "/files/{file_id}", "P05"),
     ("GET", "/messages", "P19"),
     ("PATCH", "/messages/{message_id}", "P19"),
 ]

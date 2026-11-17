@@ -14,7 +14,7 @@ from django.contrib.auth import logout as django_logout
 from django.core.exceptions import PermissionDenied
 from django.http import Http404, JsonResponse
 from ninja import Router, Schema
-from ninja.errors import AuthenticationError, HttpError, ValidationError as NinjaValidationError
+from ninja.errors import AuthenticationError, HttpError, ValidationError as RequestValidationError
 
 from .auth import enforce_csrf, session_auth
 from .errors import ApiError, AuthenticationRequired, error_payload
@@ -90,7 +90,7 @@ def install_error_handlers(api):
     def _api_error(request, exc):
         return JsonResponse(error_payload(exc.code, exc.message, exc.details), status=exc.status)
 
-    @api.exception_handler(NinjaValidationError)
+    @api.exception_handler(RequestValidationError)
     def _validation_error(request, exc):
         # Ninja 默认返回裸 detail 数组，前端取不到字段级错误；统一成 error 信封。
         return JsonResponse(
@@ -110,5 +110,6 @@ def install_error_handlers(api):
     def _http_error(request, exc):
         code = "csrf_failed" if exc.status_code == 403 else "error"
         return JsonResponse(error_payload(code, str(exc)), status=exc.status_code)
+
 
     return api

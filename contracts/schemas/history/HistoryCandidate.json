@@ -81,6 +81,14 @@
       "default": null,
       "title": "Applicable Scope"
     },
+    "blocking_issue_codes": {
+      "description": "导致待核的导入/P04 问题码，如 missing_contract、reversed_item_range",
+      "items": {
+        "type": "string"
+      },
+      "title": "Blocking Issue Codes",
+      "type": "array"
+    },
     "diff_keys": {
       "description": "查询与历史不一致的属性键；关键差异不会被总分吞掉",
       "items": {
@@ -128,6 +136,12 @@
       },
       "title": "Matched Keys",
       "type": "array"
+    },
+    "needs_review": {
+      "default": false,
+      "description": "导入时该历史行是否被标为待核异常；true 时不能当作成功案例直接采用",
+      "title": "Needs Review",
+      "type": "boolean"
     },
     "record_id": {
       "title": "Record Id",

@@ -1,0 +1,69 @@
+# HTTPS 示例：只有拿到域名 + 证书后才需要，纯 IP 测试不要用这一份。
+#
+# 步骤（细节见 deploy/README.md 第 6 节）：
+# 1. 把证书放到服务器上的部署目录（不要提交进仓库）：deploy/certs/fullchain.pem、privkey.pem
+# 2. 复制为 deploy/nginx/https.conf（已忽略），将 compose 原 default.conf 挂载替换为此文件
+#    仍挂到 /etc/nginx/conf.d/default.conf；不要同时挂入两份配置（保留仓库 HTTP 默认文件）。
+# 3. compose 里给 web 增加 443 端口映射：- "443:443"（默认外部 TLS 端口固定 443）
+#    同时只读挂载 ./certs:/etc/nginx/certs:ro；443 须在防火墙放行。
+# 4. deploy/.env 设置 CUSTOMS_HTTPS=1 与 CUSTOMS_CSRF_TRUSTED_ORIGINS=https://<你的域名>
+#
+# 注意：CUSTOMS_CSRF_TRUSTED_ORIGINS 必须与实际访问的 scheme + host 完全一致，
+# 否则登录后的写请求（确认/提交/决定）会被 CSRF 校验以 403 拒绝。
+# 如改用非标准外部端口，须同步 compose 映射、HTTP 重定向 URL 和 Origin 的 :端口。
+
+map $http_host $customs_forwarded_host {
+    default $http_host;
+    "" $host;
+}
+
+server {
+    listen 80 default_server;
+    server_name _;
+    client_max_body_size 110m;
+    # 健康检查必须保持 HTTP 200，不受业务重定向影响。
+    location = /nginx-health {
+        access_log off;
+        add_header Content-Type text/plain;
+        return 200 "ok\n";
+    }
+    location / {
+        # 默认外部 TLS 端口为 443；非标准端口部署时必须同步此处与 CSRF Origin。
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name test.example.com;   # 改成你的域名
+
+    ssl_certificate     /etc/nginx/certs/fullchain.pem;
+    ssl_certificate_key /etc/nginx/certs/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    client_max_body_size 110m;
+
+    location /static/ {
+        alias /usr/share/nginx/static/;
+        access_log off;
+        expires 1h;
+    }
+
+    location = /nginx-health {
+        access_log off;
+        add_header Content-Type text/plain;
+        return 200 "ok\n";
+    }
+
+    location / {
+        proxy_pass http://app:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $customs_forwarded_host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 120s;
+        proxy_send_timeout 120s;
+    }
+}

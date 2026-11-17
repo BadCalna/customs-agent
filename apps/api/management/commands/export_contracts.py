@@ -65,7 +65,10 @@ from apps.runs.models import Run
 from apps.runs.schemas import RunDetail, RunItemEntry
 from apps.runs.serializers import run_to_detail
 
+from apps.reviews.import_schemas import ImportOut, ImportDetail, ClaimableEntry, ClaimablePage, ClaimOut
+
 SCHEMAS = {
+    "imports": [ImportOut, ImportDetail, ClaimableEntry, ClaimablePage, ClaimOut],
     "common": [ErrorEnvelope, SourceLocation, StageValue, IssueEntry, EvidenceEntry, ImageEntry, RunProgress],
     "expert": [ExpertFinding, ExpertCheckRef],
     "tasks": [VersionEntry, TaskListEntry, TaskPage, TaskDetail],

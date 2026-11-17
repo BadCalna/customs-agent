@@ -77,12 +77,26 @@ def _image_facts(item) -> list[ImageFact]:
     ]
 
 
+# 独立推荐只取明确的商品事实。来源快照、原码、旧意见和旧阶段结果仍留库供审计。
+_RECOMMEND_FACT_FIELDS = frozenset({
+    "name", "primary_name", "alias", "specification", "manufacturer_model", "material",
+    "usage", "brand", "model", "quantity", "unit", "process", "composition", "function",
+    "品名", "规格型号", "材质", "用途", "品牌", "型号", "成分", "工艺", "功能", "数量", "单位",
+})
+
+
+def _recommend_attributes(attributes) -> dict[str, str]:
+    # 只允许标量，不能把嵌套历史/字段对象以字符串形式藏回白名单字段。
+    return {str(key): str(value) for key, value in (attributes or {}).items()
+            if key in _RECOMMEND_FACT_FIELDS and isinstance(value, (str, int, float, bool))}
+
+
 def _build_recommend_input(run, item, scenario) -> RecommendInput:
     context = _context(run, item, scenario)
     payload = RecommendInput(
         context=context,
         name=item.name,
-        attributes={str(k): str(v) for k, v in (item.attributes or {}).items()},
+        attributes=_recommend_attributes(item.attributes),
         elements_text=item.supplier_elements_raw,
         # 申报要素原文可能自然出现编码；只记录风险，不声称已彻底消除锚定。
         anchoring_notes=["elements_text 为供应商原文，可能含编码字样"],
@@ -124,12 +138,24 @@ def _finish_run(run):
 
 
 @transaction.atomic
-def execute_precheck(version, scenarios: dict[str, str] | None = None, triggered_by=None) -> Run:
+def execute_precheck(version, scenarios: dict[str, str] | None = None, triggered_by=None, run=None) -> Run:
     """对指定版本的全部商品执行一次 mock 预审，旧执行转为历史。"""
 
     scenarios = scenarios or {}
     engine = get_engine()
-    run = _start_run(version.task, version, Run.Kind.PRECHECK, triggered_by=triggered_by)
+    if run is None:
+        run = _start_run(version.task, version, Run.Kind.PRECHECK, triggered_by=triggered_by)
+    else:
+        Task.objects.select_for_update().get(pk=version.task_id)
+        run = Run.objects.select_for_update().get(pk=run.pk)
+        if run.version_id != version.pk or run.kind != Run.Kind.PRECHECK or run.submission_id:
+            raise ValueError("预登记执行与预审版本不一致")
+        if run.status != Run.Status.QUEUED:
+            return run
+        Run.objects.filter(version=version, kind=run.kind, is_current=True).exclude(pk=run.pk).update(is_current=False)
+        run.status, run.is_current, run.started_at = Run.Status.RUNNING, True, timezone.now()
+        run.finished_at = None
+        run.save(update_fields=["status", "is_current", "started_at", "finished_at"])
     for item in Item.objects.filter(version=version).order_by("source_sheet", "source_row"):
         scenario = _scenario_for(scenarios, item)
         row = RunItem(run=run, item=item, status=RunItem.Status.RUNNING)

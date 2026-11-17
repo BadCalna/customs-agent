@@ -23,7 +23,6 @@
 from __future__ import annotations
 
 import errno
-import fcntl
 import hashlib
 import json
 import os
@@ -35,6 +34,11 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Callable
+
+if os.name == "nt":
+    import msvcrt
+else:
+    import fcntl
 
 #: 单次保存的默认上限；调用方可用 ``max_bytes`` 或 settings 覆盖。
 DEFAULT_MAX_BYTES = 100 * 1024 * 1024
@@ -538,12 +542,26 @@ def _token_lock(root: str | Path, canonical: str):
         descriptor = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600)
     except OSError as exc:
         raise StorageError("storage_unwritable", f"创建暂存锁失败：{exc}") from exc
+    locked = False
     try:
-        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        try:
+            if os.name == "nt":
+                os.lseek(descriptor, 0, os.SEEK_SET)
+                msvcrt.locking(descriptor, msvcrt.LK_LOCK, 1)
+            else:
+                fcntl.flock(descriptor, fcntl.LOCK_EX)
+            locked = True
+        except OSError as exc:
+            raise StorageError("storage_unwritable", f"获取暂存锁失败：{exc}") from exc
         yield
     finally:
         try:
-            fcntl.flock(descriptor, fcntl.LOCK_UN)
+            if locked:
+                if os.name == "nt":
+                    os.lseek(descriptor, 0, os.SEEK_SET)
+                    msvcrt.locking(descriptor, msvcrt.LK_UNLCK, 1)
+                else:
+                    fcntl.flock(descriptor, fcntl.LOCK_UN)
         finally:
             os.close(descriptor)
 
