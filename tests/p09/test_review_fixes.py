@@ -7,6 +7,7 @@ from django.test import TestCase, override_settings
 from apps.accounts.errors import ApiError
 from apps.accounts.models import Role
 from apps.reviews.models import Confirmation, IdempotencyRecord, Submission, Task
+from apps.reviews.services import idempotency
 from apps.reviews.services.confirmations import normalize_hs
 from apps.runs.models import Run
 from tests.p01.factories import assign, make_item, make_task, make_user, make_version
@@ -95,6 +96,23 @@ class SubmissionReviewFixTests(TestCase):
         self.assertEqual(Submission.objects.count(), 1)
         other.refresh_from_db()
         self.assertEqual(other.revision, 1)
+
+    def test_legacy_payload_hash_replays_and_is_upgraded(self):
+        body = self.payload()
+        first = self.submit(body, key="legacy-hash").json()
+        record = IdempotencyRecord.objects.get(key="legacy-hash")
+        record.request_hash = idempotency.legacy_request_hash(body)
+        record.save(update_fields=["request_hash"])
+
+        response = self.submit(body, key="legacy-hash")
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()["submission_id"], first["submission_id"])
+        self.assertTrue(response.json()["idempotent_replay"])
+        record.refresh_from_db()
+        self.assertEqual(
+            record.request_hash,
+            idempotency.request_hash(body, str(self.task.pk)),
+        )
 
     def test_pending_replay_with_new_key_stores_completed_response(self):
         first = self.submit().json()

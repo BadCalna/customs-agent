@@ -21,6 +21,7 @@ if __name__=='__main__':
         from django.test import Client
         from apps.accounts.models import Role, TaskAssignment
         from apps.reviews.models import TaskClaim, AuditEvent
+        from apps.reviews.api import imports as imports_api
         from apps.reviews.services.imports import upload
         from tests.p01.factories import make_user
         from tests.p06.samples import sample
@@ -40,7 +41,9 @@ if __name__=='__main__':
 
         def race(entries):
             barrier=Barrier(2);lock=Lock();calls=0
-            create=TaskClaim.objects.create
+            # 幂等键现在在业务事务内先写一条预占；SQLite 单写者下必须让两个请求
+            # 在进入服务前同时起跑，否则第二个请求到不了 TaskClaim 竞争窗口。
+            create=imports_api.claim_task
             def synchronized(*args,**kwargs):
                 nonlocal calls
                 with lock:
@@ -56,7 +59,7 @@ if __name__=='__main__':
                              HTTP_X_CSRFTOKEN=c.cookies['csrftoken'].value)
                     return r.status_code,r.json()
                 finally:connections.close_all()
-            with patch.object(TaskClaim.objects,'create',synchronized):
+            with patch.object(imports_api,'claim_task',synchronized):
                 with ThreadPoolExecutor(max_workers=2) as pool:
                     return list(pool.map(request,entries))
 

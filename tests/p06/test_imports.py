@@ -13,8 +13,8 @@ from adapters.files.ooxml import Workbook
 from adapters.files.packing_links import map_workbook
 from apps.accounts.errors import ApiError
 from apps.accounts.models import Role, TaskAssignment
-from apps.reviews.models import AuditEvent, Confirmation, FileVersion, ImportJob, Item, ItemImage, ItemMember, Task, TaskClaim
-from apps.reviews.services import files, imports
+from apps.reviews.models import AuditEvent, Confirmation, FileVersion, IdempotencyRecord, ImportJob, Item, ItemImage, ItemMember, Task, TaskClaim
+from apps.reviews.services import files, idempotency, imports
 from apps.reviews.services.claims import claim_task, claimable_tasks
 from apps.runs.models import Run, RunItem
 from tests.p01.factories import make_user, assign
@@ -62,6 +62,19 @@ class ImportTests(TestCase):
         self.assertEqual((Task.objects.count(),FileVersion.objects.count(),Run.objects.count()),(1,1,1))
         self.assertEqual(AuditEvent.objects.filter(action="import.succeeded").count(),1)
 
+    def test_legacy_upload_record_still_replays(self):
+        first=self.upload()
+        job=ImportJob.objects.get(pk=first["import_id"])
+        payload={"task_id":None,"filename":"synthetic.xlsx","sha256":job.sha256,
+                 "expected_current_version_id":None,"confirm_duplicate":False}
+        record=IdempotencyRecord.objects.get(key="upload-1")
+        record.request_hash=idempotency.legacy_request_hash(payload)
+        record.save(update_fields=["request_hash"])
+        second=self.upload()
+        self.assertEqual(second["version_id"],first["version_id"])
+        self.assertTrue(second["idempotent_replay"])
+        self.assertEqual(FileVersion.objects.count(),1)
+
     def test_same_key_different_content_conflicts(self):
         self.upload()
         with self.assertRaises(ApiError) as ctx:self.upload(data=sample(order=(3,2,1)))
@@ -79,6 +92,7 @@ class ImportTests(TestCase):
                 self.assertEqual(ctx.exception.status,422);self.assertTrue(ctx.exception.details["issues"])
                 self.assertEqual(Task.objects.count(),0)
         self.assertFalse(self.root.exists())
+        self.assertFalse(IdempotencyRecord.objects.exists())
 
     def test_blank_hs_elements_tax_preserved(self):
         self.upload(data=sample(blank_raw=True))

@@ -2,6 +2,7 @@
 import json
 
 from apps.reviews.models import Decision, IdempotencyRecord, Issue, Submission, SubmissionItem
+from apps.reviews.services import idempotency
 from tests.p10.factories import HS_A, HS_B, SubmissionFixture
 
 
@@ -76,6 +77,21 @@ class DecisionReviewFixTests(SubmissionFixture):
         self.assertEqual(Decision.objects.count(), 1)
         other.refresh_from_db()
         self.assertEqual(other.status, Submission.Status.PENDING)
+
+    def test_legacy_unbound_hash_cannot_replay_across_submissions(self):
+        body = {"action": "return", "return_to": "supplier", "reason": "缺材料",
+                "issues": [{"message": "补签章"}]}
+        self.assertEqual(self.post(body, key="legacy-target").status_code, 200)
+        record = IdempotencyRecord.objects.get(key="legacy-target")
+        record.request_hash = idempotency.legacy_request_hash(body)
+        record.save(update_fields=["request_hash"])
+        other = self._extra_submission()
+
+        response = self.post(
+            body, key="legacy-target", url=f"/api/v1/submissions/{other.pk}/decisions",
+        )
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json()["error"]["code"], "idempotency_conflict")
 
     # --- 预占键必须随被拒请求回滚 ---------------------------------------
     def test_rejected_request_leaves_no_reserved_key(self):

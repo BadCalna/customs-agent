@@ -47,6 +47,17 @@ class NoMatchedFactTest(SimpleTestCase):
         self.assertIs(result.outcome, HistorySearchOutcome.NO_MATCH)
         self.assertEqual(result.candidates, [])
 
+    def test_attribute_conflict_without_matched_key_is_still_a_candidate(self):
+        # 同名、材质不同是真实的属性冲突（1×0.6×0.7=0.42），不是没有可比事实。
+        source = _source([_record("R-conflict", "不锈钢法兰盘", {"材质": "不锈钢"})])
+        result = source.search(HistoryQuery(name="不锈钢法兰盘", elements={"材质": "碳钢"}))
+        self.assertIs(result.outcome, HistorySearchOutcome.MATCHED)
+        candidate = result.candidates[0]
+        self.assertEqual(candidate.score, 0.42)
+        self.assertEqual(candidate.matched_keys, [])
+        self.assertEqual(candidate.diff_keys, ["材质"])
+        self.assertTrue(candidate.key_attribute_conflict)
+
     def test_one_matched_fact_still_hits(self):
         source = _source([_record("R-2", "不锈钢法兰盘", {"材质": "碳钢"})])
         result = source.search(HistoryQuery(name="不锈钢法兰盘", elements={"材质": "碳钢"}))
