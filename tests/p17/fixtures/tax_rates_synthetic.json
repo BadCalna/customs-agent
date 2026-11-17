@@ -1,0 +1,206 @@
+{
+  "schema_version": "p17.taxrate.1",
+  "dataset": {
+    "dataset_id": "SYN-P17-TAXRATE",
+    "source_type": "synthetic",
+    "authority": "synthetic",
+    "synthetic": true,
+    "description": "P17 合成接口样本，模拟出口退税率文库；不是真实退税率，不能作为申报依据",
+    "document": "SYN-P17-TAXRATE",
+    "retrieved_at": "2026-11-17T00:00:00+08:00",
+    "review_status": "unreviewed",
+    "notes": "字段形状参考公开文库结构；数值全部编造，仅用于验证适配器分支"
+  },
+  "versions": [
+    {
+      "version": "2025",
+      "effective_from": "2025-01-01",
+      "effective_to": "2025-12-31",
+      "label": "2025 年期（合成）"
+    },
+    {
+      "version": "2026",
+      "effective_from": "2026-01-01",
+      "effective_to": "2026-12-31",
+      "label": "2026 年期（合成）"
+    }
+  ],
+  "rates": [
+    {
+      "version": "2026",
+      "hs_code": "8482102000",
+      "product_name": "深沟球轴承（合成样本）",
+      "rate_kind": "export_rebate",
+      "rate_raw": "13%",
+      "rate_percent": 13,
+      "rate_state": "in_force",
+      "effective_from": "2026-01-01",
+      "effective_to": "2026-12-31",
+      "conditions": [],
+      "source": {
+        "system": "SYN 退税率文库",
+        "document": "SYN-P17-TAXRATE",
+        "locator": "合成数据行 2026/8482102000",
+        "publisher": "P17 合成样本",
+        "retrieved_at": "2026-11-17T00:00:00+08:00"
+      },
+      "note": "来源明确声明无附加条件（declared_none），用于验证 applies 分支"
+    },
+    {
+      "version": "2025",
+      "hs_code": "8482102000",
+      "product_name": "深沟球轴承（合成样本，2025 期）",
+      "rate_kind": "export_rebate",
+      "rate_raw": "13%",
+      "rate_percent": 13,
+      "rate_state": "in_force",
+      "effective_from": "2025-01-01",
+      "effective_to": "2025-12-31",
+      "conditions": [],
+      "source": {
+        "system": "SYN 退税率文库",
+        "document": "SYN-P17-TAXRATE",
+        "locator": "合成数据行 2025/8482102000",
+        "retrieved_at": "2026-11-17T00:00:00+08:00"
+      }
+    },
+    {
+      "version": "2026",
+      "hs_code": "8536490090",
+      "product_name": "继电器（合成样本）",
+      "rate_kind": "export_rebate",
+      "rate_raw": "13%",
+      "rate_percent": 13,
+      "rate_state": "in_force",
+      "effective_from": "2026-01-01",
+      "effective_to": "2026-12-31",
+      "conditions": [
+        {
+          "text": "仅限一般贸易方式且自营出口（合成条件原文）",
+          "document": "SYN-P17-NOTICE-02",
+          "locator": "第二条",
+          "note": "条件未机读化，本适配器不判断是否成立"
+        },
+        {
+          "text": "合成样本：同一政策另有未定位条件",
+          "note": "故意不给 document/locator，用于验证不可定位条件不会生成证据"
+        }
+      ],
+      "source": {
+        "system": "SYN 退税率文库",
+        "document": "SYN-P17-TAXRATE",
+        "locator": "合成数据行 2026/8536490090",
+        "retrieved_at": "2026-11-17T00:00:00+08:00"
+      }
+    },
+    {
+      "version": "2026",
+      "hs_code": "7304190000",
+      "product_name": "无缝钢管（合成样本，零税率）",
+      "rate_kind": "zero_rate",
+      "rate_raw": "0",
+      "rate_percent": 0,
+      "rate_state": "in_force",
+      "effective_from": "2026-01-01",
+      "effective_to": "2026-12-31",
+      "conditions": [],
+      "source": {
+        "system": "SYN 退税率文库",
+        "document": "SYN-P17-TAXRATE",
+        "locator": "合成数据行 2026/7304190000",
+        "retrieved_at": "2026-11-17T00:00:00+08:00"
+      }
+    },
+    {
+      "version": "2026",
+      "hs_code": "2710110000",
+      "product_name": "石脑油类（合成样本，不予退税）",
+      "rate_kind": "not_refundable",
+      "rate_raw": "不予退税",
+      "rate_percent": null,
+      "rate_state": "in_force",
+      "effective_from": "2026-01-01",
+      "effective_to": "2026-12-31",
+      "conditions": [],
+      "source": {
+        "system": "SYN 退税率文库",
+        "document": "SYN-P17-TAXRATE",
+        "locator": "合成数据行 2026/2710110000",
+        "retrieved_at": "2026-11-17T00:00:00+08:00"
+      }
+    },
+    {
+      "version": "2026",
+      "hs_code": "8471300000",
+      "product_name": "便携式电脑（合成样本，未声明条件）",
+      "rate_kind": "export_rebate",
+      "rate_raw": "9%",
+      "rate_percent": 9,
+      "rate_state": "in_force",
+      "effective_from": "2026-01-01",
+      "effective_to": "2026-12-31",
+      "source": {
+        "system": "SYN 退税率文库",
+        "document": "SYN-P17-TAXRATE",
+        "locator": "合成数据行 2026/8471300000",
+        "retrieved_at": "2026-11-17T00:00:00+08:00"
+      },
+      "note": "刻意不写 conditions 字段：来源未声明条件，不等于无条件"
+    },
+    {
+      "version": "2026",
+      "hs_code": "8501109100",
+      "product_name": "微特电机（合成样本，已废止）",
+      "rate_kind": "export_rebate",
+      "rate_raw": "13%",
+      "rate_percent": 13,
+      "rate_state": "abolished",
+      "effective_from": "2026-01-01",
+      "effective_to": "2026-06-30",
+      "conditions": [],
+      "source": {
+        "system": "SYN 退税率文库",
+        "document": "SYN-P17-TAXRATE",
+        "locator": "合成数据行 2026/8501109100",
+        "retrieved_at": "2026-11-17T00:00:00+08:00"
+      }
+    },
+    {
+      "version": "2026",
+      "hs_code": "72081000",
+      "product_name": "热轧卷板（合成样本，8 位子目）",
+      "rate_kind": "export_rebate",
+      "rate_raw": "10%",
+      "rate_percent": 10,
+      "rate_state": "in_force",
+      "effective_from": "2026-01-01",
+      "effective_to": "2026-12-31",
+      "conditions": [],
+      "source": {
+        "system": "SYN 退税率文库",
+        "document": "SYN-P17-TAXRATE",
+        "locator": "合成数据行 2026/72081000",
+        "retrieved_at": "2026-11-17T00:00:00+08:00"
+      }
+    },
+    {
+      "version": "2026",
+      "hs_code": "3917400000",
+      "rebate_code": "0310",
+      "product_name": "塑料管件（合成样本，带适用退税代码）",
+      "rate_kind": "export_rebate",
+      "rate_raw": "13%",
+      "rate_percent": 13,
+      "rate_state": "in_force",
+      "effective_from": "2026-01-01",
+      "effective_to": "2026-12-31",
+      "conditions": [],
+      "source": {
+        "system": "SYN 退税率文库",
+        "document": "SYN-P17-TAXRATE",
+        "locator": "合成数据行 2026/3917400000",
+        "retrieved_at": "2026-11-17T00:00:00+08:00"
+      }
+    }
+  ]
+}
