@@ -72,6 +72,9 @@ export function createTaskList(host, { client, onSelectTask = () => {}, onLoaded
   let state = {items: [], stage: "", query: "", page: 0, nextCursor: null,
     loading: false, error: null, selectionError: null, selectedId: null, selecting: false};
   let alive = true, token = 0, selectionToken = 0;
+  //: 最近一次**成功交付给宿主**的任务（onSelectTask 正常返回）。失败回滚要用它，
+  //: 不能用「点击时的 selectedId」——那可能是一个还在加载、最终会被丢弃的选择。
+  let lastDeliveredId = null;
   let cursors = [null];
   const draw = () => { if (alive) renderTaskList(host, state); };
   async function load(page = state.page) {
@@ -107,9 +110,8 @@ export function createTaskList(host, { client, onSelectTask = () => {}, onLoaded
   async function selectTask(taskId) {
     if (!alive || !state.items.some(t => t.task_id === taskId)) return;
     if (state.selecting && taskId === state.selectedId) return;
-    // 失败时回到上一个选择：列表不能一直显示一个没加载成功的任务，
-    // 否则宿主页面的详情（仍是被选择过的那个）与列表状态永久不一致。
-    const previousId = state.selectedId;
+    // 失败时回到**最后一个真正显示过的**任务：连续点击 B→C 时，「点击时的 selectedId」
+    // 可能是还在加载的 B，回滚到它会让列表选中一个从未加载成功、且晚响应已被丢弃的任务。
     const request = ++selectionToken;
     state = {...state, selectedId: taskId, selecting: true, selectionError: null}; draw();
     let settledId = taskId;
@@ -118,10 +120,12 @@ export function createTaskList(host, { client, onSelectTask = () => {}, onLoaded
       if (!alive || request !== selectionToken) return;
       if (detail?.task_id !== taskId) throw new Error("所选任务响应身份不匹配");
       await onSelectTask(detail);
+      if (!alive || request !== selectionToken) return;
+      lastDeliveredId = taskId;
     } catch (error) {
       if (!alive || request !== selectionToken) return;
-      state = {...state, selectedId: previousId, selectionError: error};
-      settledId = previousId;
+      state = {...state, selectedId: lastDeliveredId, selectionError: error};
+      settledId = lastDeliveredId;
     }
     if (!alive || request !== selectionToken) return;
     state = {...state, selecting: false}; draw();
@@ -137,7 +141,7 @@ export function createTaskList(host, { client, onSelectTask = () => {}, onLoaded
   function setStage(stage) {
     if (!alive) return;
     if (stage && !Object.hasOwn(TASK_STAGES, stage)) throw new TypeError("未知阶段筛选");
-    selectionToken += 1; cursors = [null];
+    selectionToken += 1; lastDeliveredId = null; cursors = [null];
     state = {...state, stage, page: 0, query: "", items: [], nextCursor: null, selectedId: null, selecting: false, selectionError: null};
     return load(0);
   }

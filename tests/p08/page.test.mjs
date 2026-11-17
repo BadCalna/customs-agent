@@ -486,6 +486,93 @@ test('改选失败后恢复上一个选择，后续刷新仍能核对更新（�
   mounted.page.destroy();
 });
 
+test('连续切换后失败：回滚到最后成功显示的任务，晚响应不得改写（B 晚成功）', async () => {
+  // A 已显示 → 点 B（在飞）→ 点 C（失败）。回滚必须回到 A，不能回到还在加载的 B；
+  // B 的晚响应因 selectionToken 过期被丢弃，之后再刷新 A 的新版本要能恢复核对。
+  const oldVersion = mockTask.current_version_id;
+  const v3 = 'version-after-abc-v3';
+  const newRun = {...copy(runOf(mockTask.latest_run_id)), run_id: 'run-after-abc-v3', version_id: v3};
+  let listRow = {...copy(mockTask)};
+  let detailRow = {...copy(mockTask), versions: [{version_id: oldVersion, number: 2}]};
+  let releaseB;
+  const gateB = new Promise((resolve) => { releaseB = resolve; });
+  const calls = [];
+  const client = {
+    async me() { return {display_name: '演示账号'}; },
+    async listTasks() { return {items: [copy(listRow), copy(expertTask), {...copy(expertTask), task_id: 'task-C'}]}; },
+    async getTask(id) {
+      calls.push(id);
+      if (id === expertTask.task_id) { await gateB; return copy(expertTask); }
+      if (id === 'task-C') throw {status: 403, message: '当前操作不允许'};
+      return copy(detailRow);
+    },
+    async getRun(id) { return copy(id === newRun.run_id ? newRun : runOf(mockTask.latest_run_id)); },
+  };
+  const {page, summaryHost} = mount({client});
+  await page.ready;
+  await page.tasks.selectTask(mockTask.task_id);
+  assert.match(summaryHost.textContent, /当前版本 V2/);
+
+  const pendingB = page.tasks.selectTask(expertTask.task_id);
+  await new Promise((resolve) => setImmediate(resolve));
+  await page.tasks.selectTask('task-C'); // 失败
+  assert.equal(page.tasks.getState().selectedId, mockTask.task_id, '失败应回滚到 A，而不是还在加载的 B');
+  assert.match(summaryHost.textContent, /当前版本 V2/);
+
+  releaseB();
+  await pendingB;
+  assert.equal(page.tasks.getState().selectedId, mockTask.task_id, 'B 的晚成功必须被丢弃');
+  assert.equal(page.getState().selectedId, mockTask.task_id);
+  assert.match(summaryHost.textContent, /当前版本 V2/, '右侧仍是 A');
+
+  // 之后 A 更新到 V3：连续两次刷新都要能恢复核对
+  listRow = {...listRow, current_version_id: v3, current_version_number: 3, latest_run_id: newRun.run_id};
+  detailRow = {...copy(listRow), versions: [{version_id: v3, number: 3}]};
+  await page.tasks.load();
+  await page.tasks.load();
+  assert.match(summaryHost.textContent, /当前版本 V3/, '失败回滚后仍要能核对到新版本');
+  assert.deepEqual(calls, [mockTask.task_id, expertTask.task_id, 'task-C', mockTask.task_id],
+    '只有回滚后的一次补核对会重读 A');
+  page.destroy();
+});
+
+test('连续切换后失败：B 晚失败同样不改写当前选择，之后刷新仍能核对（B 晚失败）', async () => {
+  const oldVersion = mockTask.current_version_id;
+  const v3 = 'version-after-abf-v3';
+  const newRun = {...copy(runOf(mockTask.latest_run_id)), run_id: 'run-after-abf-v3', version_id: v3};
+  let listRow = {...copy(mockTask)};
+  let detailRow = {...copy(mockTask), versions: [{version_id: oldVersion, number: 2}]};
+  let releaseB;
+  const gateB = new Promise((resolve) => { releaseB = resolve; });
+  const client = {
+    async me() { return {display_name: '演示账号'}; },
+    async listTasks() { return {items: [copy(listRow), copy(expertTask), {...copy(expertTask), task_id: 'task-C'}]}; },
+    async getTask(id) {
+      if (id === expertTask.task_id) { await gateB; throw {status: 404, message: '该任务已不可见'}; }
+      if (id === 'task-C') throw {status: 403, message: '当前操作不允许'};
+      return copy(detailRow);
+    },
+    async getRun(id) { return copy(id === newRun.run_id ? newRun : runOf(mockTask.latest_run_id)); },
+  };
+  const {page, summaryHost} = mount({client});
+  await page.ready;
+  await page.tasks.selectTask(mockTask.task_id);
+
+  const pendingB = page.tasks.selectTask(expertTask.task_id);
+  await new Promise((resolve) => setImmediate(resolve));
+  await page.tasks.selectTask('task-C');
+  releaseB();
+  await pendingB;
+
+  assert.equal(page.tasks.getState().selectedId, mockTask.task_id, 'B 的晚失败也不影响回滚结果');
+  assert.equal(page.getState().selectedId, mockTask.task_id);
+  listRow = {...listRow, current_version_id: v3, current_version_number: 3, latest_run_id: newRun.run_id};
+  detailRow = {...copy(listRow), versions: [{version_id: v3, number: 3}]};
+  await page.tasks.load();
+  assert.match(summaryHost.textContent, /当前版本 V3/);
+  page.destroy();
+});
+
 test('列表刷新但任务未变时，不重复读详情（避免每次刷新都闪一下右侧）', async () => {
   let getTaskCount = 0;
   const client = {
