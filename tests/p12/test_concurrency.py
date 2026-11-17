@@ -54,8 +54,11 @@ class ConcurrencyTests(TransactionTestCase):
     def setUp(self):
         self.supplier = make_user("supplier_p12", Role.SUPPLIER)
         self.operator = make_user("operator_p12", Role.OPERATOR)
+        # P06 起提交会在没有任务专家时按默认专家建立授权；并发测试显式准备专家，避免 409 干扰并发断言。
+        self.expert = make_user("expert_p12", Role.EXPERT)
         self.task = make_task(self.supplier, stage=Task.Stage.AWAITING_CONFIRMATION)
         assign(self.task, self.operator, Role.OPERATOR)
+        assign(self.task, self.expert, Role.EXPERT)
         self.version = make_version(self.task, self.supplier)
         self.item_a = make_item(self.version, row=5, name="合成商品A")
         self.item_b = make_item(self.version, row=6, name="合成商品B", supplier_hs="7304210000")
