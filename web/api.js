@@ -47,6 +47,50 @@ function query(params) {
   return text ? `?${text}` : "";
 }
 
+/**
+ * Content-Disposition → 下载文件名。
+ *
+ * Django 对非 ASCII 文件名用 RFC 5987 的 ``filename*=utf-8''%E9...``，ASCII 名用
+ * ``filename="..."``；两种都要能取到，取不到时由调用方给兜底名，不能编造业务名。
+ */
+/** 安全下载名：只允许常规文件名字符，去掉路径分隔符与控制字符；不合格返回空串。 */
+function safeFilename(name) {
+  const value = String(name || "").trim();
+  if (!value) return "";
+  // 浏览器会把分隔符收敛成下划线，但这里不接受可疑名字，避免把错误页/路径当文件名展示。
+  if (/[\u0000-\u001f\u007f/\\]/.test(value) || value.includes("..")) return "";
+  if (value.length > 120) return "";
+  return /^[\w\u4e00-\u9fa5][\w\u4e00-\u9fa5 .()（）-]*$/.test(value) ? value : "";
+}
+
+function filenameOf(disposition) {
+  if (!disposition) return "";
+  for (const part of disposition.split(";").slice(1)) {
+    const index = part.indexOf("=");
+    if (index < 0) continue;
+    const key = part.slice(0, index).trim().toLowerCase();
+    const value = part.slice(index + 1).trim().replace(/^"|"$/g, "");
+    if (key === "filename*") {
+      const encoded = value.includes("''") ? value.split("''").pop() : value;
+      let decoded;
+      try {
+        decoded = decodeURIComponent(encoded);
+      } catch {
+        // 非法百分号编码：不当成可下载名，交给调用方报错，而不是原样保存。
+        return "";
+      }
+      const safe = safeFilename(decoded);
+      if (safe) return safe;
+      continue;
+    }
+    if (key === "filename") {
+      const safe = safeFilename(value);
+      if (safe) return safe;
+    }
+  }
+  return "";
+}
+
 async function readPayload(response) {
   const text = await response.text();
   if (!text) return null;
@@ -130,6 +174,51 @@ function createLiveAdapter(baseUrl) {
         body, headers: { "X-CSRFToken": csrf, "Idempotency-Key": key },
       });
     },
+    /**
+     * 导出审核结果 / 独立补料清单（POST /versions/{id}/exports）。
+     *
+     * 响应不是 JSON 而是 xlsx 二进制，因此不走 ``raw()``：文件名从
+     * ``Content-Disposition`` 取，执行引用与结果来源取 ``X-Export-Run`` /
+     * ``X-Result-Mode``，页面据此核对导出的确实是本次执行的结果集。
+     * 非 2xx 仍按契约的 ``{"error": {...}}`` 解析后抛 ``ApiError``，不吞错误、
+     * 也不把错误页当成文件保存。
+     */
+    async createExport(versionId, payload = {}) {
+      csrf = readCookie("csrftoken") || await ensureCsrf();
+      const response = await fetch(baseUrl + `/versions/${encodeURIComponent(versionId)}/exports`, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { ...JSON_HEADERS, "X-CSRFToken": csrf },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) {
+        const parsed = await readPayload(response);
+        const error = (parsed && parsed.error) || {};
+        throw new ApiError(response.status, error.code, error.message, error.details, parsed && parsed.request_id);
+      }
+      const filename = filenameOf(response.headers.get("Content-Disposition"));
+      if (!filename) {
+        // 没有可用的服务端文件名就无法在页面上说明导出的是什么，宁可报错也不冒充成功。
+        throw new ApiError(response.status, "missing_export_filename",
+          "导出响应缺少可用的文件名（或文件名含非法字符），无法确认下载内容");
+      }
+      const blob = await response.blob();
+      // 200 + 空 body / 错误页冒充 xlsx：不保存文件。xlsx 是 ZIP 容器，必须以 PK 开头。
+      if (!blob.size) {
+        throw new ApiError(response.status, "empty_export_body", "导出响应内容为空，未保存文件");
+      }
+      const head = new Uint8Array(await blob.slice(0, 2).arrayBuffer());
+      if (head.length < 2 || head[0] !== 0x50 || head[1] !== 0x4b) {
+        throw new ApiError(response.status, "unexpected_export_type", "导出响应不是 xlsx 文件（缺少 ZIP 头），未保存文件");
+      }
+      return {
+        blob,
+        filename,
+        runId: response.headers.get("X-Export-Run") || "",
+        resultMode: (response.headers.get("X-Result-Mode") || "").toLowerCase(),
+        contentType: response.headers.get("Content-Type") || "",
+      };
+    },
     listClaimable(params = {}) { return raw("GET", `/tasks/claimable${query(params)}`); },
     async claimTask(taskId, key) {
       csrf = readCookie("csrftoken") || await ensureCsrf();
@@ -182,6 +271,8 @@ function createFixtureAdapter(url) {
     async listClaimable() { throw new ApiError(501, "live_required", "认领仅支持 live API"); },
     async claimTask() { throw new ApiError(501, "live_required", "认领仅支持 live API"); },
     async getImport() { throw new ApiError(501, "live_required", "解析报告仅支持 live API"); },
+    // 样例数据没有真实存储与执行引用；绝不在浏览器里拼一个假 xlsx 冒充导出结果。
+    async createExport() { throw new ApiError(501, "live_required", "真实导出仅支持 live API，样例模式不生成文件"); },
 
     // fixture 模式没有真实身份，明确返回演示身份；页面必须显示"不校验权限"标记。
     async me() {

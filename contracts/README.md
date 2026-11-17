@@ -73,20 +73,33 @@ make test TASK=P02     # 与上一条同入口，58 项
 
 ## 已实现与未实现端点
 
-已实现（全部 `auth=session_auth`，GET 无副作用）：
+已实现（全部 `auth=session_auth`，GET 无副作用；以 `contracts/openapi/v1.json` 为准）：
 
-- `GET /api/v1/tasks`、`GET /api/v1/tasks/{task_id}`
-- `GET /api/v1/versions/{version_id}/items`、`GET /api/v1/versions/{version_id}/items/{item_id}`
-- `GET /api/v1/runs/{run_id}`
+- 身份：`POST /auth/login`、`POST /auth/logout`、`GET /me`
+- 任务读取：`GET /tasks`、`GET /tasks/{task_id}`、`GET /tasks/claimable`、`GET /tasks/{task_id}/history`
+- 版本与商品读取：`GET /versions/{version_id}/import`、`GET /versions/{version_id}/items`、
+  `GET /versions/{version_id}/items/{item_id}`、`GET /runs/{run_id}`
+- 文件下载：`GET /files/{file_id}`
+- 写入：`POST /tasks`（P06 上传）、`POST /tasks/{task_id}/versions`（P06 补料）、
+  `POST /tasks/{task_id}/claim`（P06 认领）、`PATCH /versions/{version_id}/items/{item_id}/confirmation`（P09）、
+  `POST /tasks/{task_id}/submissions`（P09）、`POST /submissions/{submission_id}/withdraw`（P09）、
+  `POST /submissions/{submission_id}/decisions`（P10）、`POST /tasks/{task_id}/returns`（P10）、
+  `POST /versions/{version_id}/exports`（P20，返回 xlsx 文件流，见下）
+- 导出响应口径（P20）：`Content-Type` 为 xlsx，`Content-Disposition` 为附件文件名，
+  另带 `X-Export-Run`（本次执行）与 `X-Result-Mode`（`mock`/`live`）响应头；
+  结果集必须属于请求版本指定的执行，不属于即 422 `result_reference_mismatch`。
 
-显式 501（`error.code=not_implemented`，`details.owner` 标交付任务包）：
-上传与版本创建（P06）、重跑与重试（P13）、确认与提交（P09）、退回与决定及历史（P10）、
-导出（P20）、受控文件下载（P05）、站内消息（P19）。
-`POST /tasks` 与 `GET /tasks` 同路径，占位注册在 `apps/reviews/api/read.py`，
-其余在 `apps/api/not_implemented.py`。
+显式 501（`error.code=not_implemented`，`details.owner` 标交付任务包，见 `apps/api/not_implemented.py`）：
 
-写动作的 `Idempotency-Key` 持久化与 409 冲突检测**尚未实现**，只有错误形状样例；
-FIX-08 不代表重试去重已可用。
+- `POST /versions/{version_id}/prechecks`（P13）
+- `POST /runs/{run_id}/retries`（P13）
+- `GET /messages`、`PATCH /messages/{message_id}`（P19）
+
+`Idempotency-Key` 的持久化幂等已随 P09/P10 落地（同 key 同对象重放、不同内容 409、不同目标冲突）；
+FIX-08 样例仍只描述错误形状，不代表所有写端点都已覆盖幂等。
+
+> 2026-11-17 修订：此前本节把 P06/P09/P10/P20 的端点都写成「显式 501」，与代码不符。
+> 本次按 `api_v1.get_openapi_schema()` 的实际 path 重写，并删掉 P20 导出占位。
 
 ## 1.1.0 变更（2026-11-15）
 
