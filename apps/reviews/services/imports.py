@@ -89,8 +89,9 @@ def upload(user, *, filename, data, key, task_id=None, expected_current_version_
     digest = hashlib.sha256(data).hexdigest()
     payload = {"task_id": str(task_id) if task_id else None, "filename": filename, "sha256": digest,
                "expected_current_version_id": expected_current_version_id, "confirm_duplicate": confirm_duplicate}
-    # 重试已登记的版本不受后来版本变化影响，但每次先校验归属。
-    replay = idempotency.begin(user, ACTION, key, payload)
+    target_id = str(task_id) if task_id else ""
+    # 事务外只读检查已完成响应，不能在这里创建空响应预占；真正的预占只在事务内发生。
+    replay = idempotency.get_replay(user, ACTION, key, payload, target_id=target_id)
     if replay is not None:
         return finish_import(replay["import_id"], replay=True)
     mapping = parse(data, filename)
@@ -99,7 +100,7 @@ def upload(user, *, filename, data, key, task_id=None, expected_current_version_
     try:
         with transaction.atomic():
             User.objects.select_for_update().get(pk=user.pk)
-            replay = idempotency.begin(user, ACTION, key, payload)
+            replay = idempotency.begin(user, ACTION, key, payload, target_id=target_id)
             if replay is not None:
                 job_id = replay["import_id"]
             else:
@@ -131,7 +132,7 @@ def upload(user, *, filename, data, key, task_id=None, expected_current_version_
                 job_id = str(job.pk)
                 AuditEvent.objects.create(task=task, version=version, actor=user, action="version.created",
                                           details={"number": number, "sha256": digest, "import_id": job_id, "result_mode": "mock"})
-                idempotency.store(user, ACTION, key, payload, {"import_id": job_id})
+                idempotency.store(user, ACTION, key, payload, {"import_id": job_id}, target_id=target_id)
                 reserved = True
     finally:
         if not reserved:

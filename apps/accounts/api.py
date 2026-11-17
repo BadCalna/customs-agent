@@ -90,6 +90,14 @@ def install_error_handlers(api):
     def _api_error(request, exc):
         return JsonResponse(error_payload(exc.code, exc.message, exc.details), status=exc.status)
 
+    @api.exception_handler(RequestValidationError)
+    def _validation_error(request, exc):
+        # Ninja 默认返回裸 detail 数组，前端取不到字段级错误；统一成 error 信封。
+        return JsonResponse(
+            error_payload("validation_error", "请求参数字段校验失败", {"errors": exc.errors}),
+            status=422,
+        )
+
     @api.exception_handler(PermissionDenied)
     def _forbidden(request, exc):
         return JsonResponse(error_payload("forbidden", str(exc) or "动作不允许"), status=403)
@@ -102,12 +110,6 @@ def install_error_handlers(api):
     def _http_error(request, exc):
         code = "csrf_failed" if exc.status_code == 403 else "error"
         return JsonResponse(error_payload(code, str(exc)), status=exc.status_code)
-
-    @api.exception_handler(RequestValidationError)
-    def _validation_error(request, exc):
-        fields = [{"location": list(e.get("loc", [])), "message": e.get("msg", ""),
-                   "type": e.get("type", "")} for e in exc.errors]
-        return JsonResponse(error_payload("validation_error", "请求字段不完整或格式不正确", {"fields": fields}), status=422)
 
 
     return api
