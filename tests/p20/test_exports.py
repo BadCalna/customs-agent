@@ -12,7 +12,7 @@ from zipfile import ZipFile
 
 from apps.api.schemas import IssueEntry
 from adapters.files.export_workbook import (
-    ExportError, ExportLine, ExportSelection, _zip_replace, audit_fill, export_precheck,
+    ExportError, ExportLine, ExportSelection, _zip_replace, audit_fill, export_precheck, normalize_export_views,
 )
 from adapters.files.export_issues import HEADERS, STYLES, export_issues
 from adapters.files.ooxml import NS, S, Workbook
@@ -54,6 +54,33 @@ class ExportTests(unittest.TestCase):
         self.assertEqual(sheet.cell("I2").value, "原专家意见")
         self.assertEqual(sheet.cell("B2").value, "55-27")
         self.assertEqual(hashlib.sha256(self.source).hexdigest(), self.selection.source_sha256)
+
+    def test_preview_watermarks_removed_from_all_sheets_without_changing_print_or_manual_data(self):
+        book = Workbook(self.source)
+        changes = {}
+        for sheet in book.sheets:
+            raw = book.media_bytes(sheet.part).decode()
+            view = ('<sheetViews><sheetView workbookViewId="0" view="pageBreakPreview" zoomScale="75">'
+                    '<pane xSplit="2" ySplit="1" topLeftCell="C2" state="frozen"/>'
+                    '<selection pane="bottomRight" activeCell="H2" sqref="H2"/></sheetView></sheetViews>')
+            setup = '<pageSetup paperSize="9" scale="40" fitToWidth="1" fitToHeight="0"/>'
+            changes[sheet.part] = raw.replace('<sheetData>', view + '<sheetData>').replace('</worksheet>', setup + '</worksheet>').encode()
+        source = _zip_replace(self.source, changes)
+        artifact = export_precheck(source, selection(source))
+        after = Workbook(artifact.content)
+        for sheet in after.sheets:
+            root = ET.fromstring(after.media_bytes(sheet.part))
+            view = root.find('s:sheetViews/s:sheetView', NS)
+            self.assertEqual(view.get('view'), 'normal')
+            self.assertEqual(view.get('zoomScale'), '75')
+            self.assertEqual(view.find('s:pane', NS).get('state'), 'frozen')
+            self.assertEqual(view.find('s:selection', NS).get('activeCell'), 'H2')
+            self.assertEqual(root.find('s:pageSetup', NS).get('scale'), '40')
+        self.assertEqual(after.find_sheet('申报要素').cell('H2').value, '0000000002')
+        self.assertEqual(len(artifact.manifest['view_adjustment']['views']), len(book.sheets))
+        unchanged, report = normalize_export_views(artifact.content)
+        self.assertEqual(unchanged, artifact.content)
+        self.assertEqual(report['changed_parts'], [])
 
     def test_positions_can_change(self):
         source = sample(headers=("采购合同号", "合同项号", "品名", "海关编码", "申报要素", "业务员确认HScode", "置信度", "AI预审结论（业务员参考）", "AI推荐hscode"))

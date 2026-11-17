@@ -330,6 +330,42 @@ def _zip_replace(source: bytes, changes: dict[str, bytes]) -> bytes:
     return output.getvalue()
 
 
+def normalize_export_views(source: bytes) -> tuple[bytes, dict]:
+    """Open exported sheets in normal view; retain cells, panes and print settings."""
+    book = Workbook(source)
+    changes, views = {}, []
+    for sheet in book.sheets:
+        raw = book.media_bytes(sheet.part)
+        expected = ET.fromstring(raw)
+        changed = []
+        for node in expected.findall("s:sheetViews/s:sheetView", NS):
+            previous = node.get("view")
+            if previous in ("pageBreakPreview", "pageLayout"):
+                node.set("view", "normal")
+                changed.append({"sheet": sheet.name, "workbook_view_id": node.get("workbookViewId"),
+                                "before": previous, "after": "normal"})
+        if not changed:
+            continue
+        value = raw.decode("utf-8")
+        container_prefix = _prefix(value, "sheetViews")
+        container = re.compile(rf'<{container_prefix}sheetViews\b[^>]*>.*?</{container_prefix}sheetViews>', re.S)
+        match = container.search(value)
+        if not match:
+            raise ExportError("unsupported_sheet_view", "页签视图结构不支持安全调整")
+        opening = re.compile(r'<(?:[A-Za-z_][\w.-]*:)?sheetView\b[^>]*>')
+        view_attribute = re.compile(r'''(\sview\s*=\s*)(["'])(pageBreakPreview|pageLayout)\2''')
+        replacement = opening.sub(lambda tag: view_attribute.sub(lambda attr: attr[1] + attr[2] + "normal" + attr[2], tag[0]), match[0])
+        updated = (value[:match.start()] + replacement + value[match.end():]).encode("utf-8")
+        if canonical(ET.fromstring(updated)) != canonical(expected):
+            raise ExportError("fidelity_failed", "视图调整改变了非预期的页签内容")
+        changes[sheet.part] = updated
+        views.extend(changed)
+    output = _zip_replace(source, changes) if changes else source
+    return output, {"operation": "normal_sheet_views", "status": "passed", "views": views,
+                    "changed_parts": sorted(changes), "source_sha256": hashlib.sha256(source).hexdigest(),
+                    "output_sha256": hashlib.sha256(output).hexdigest()}
+
+
 def export_precheck(source: bytes, selection: ExportSelection, *, excel2016_images: bool = True) -> ExportArtifact:
     original_book, extracted, _ = source_records(source, selection)
     if any("vba" in part.lower() or "_xmlsignatures/" in part.lower() for part in original_book.part_names):
@@ -395,8 +431,10 @@ def export_precheck(source: bytes, selection: ExportSelection, *, excel2016_imag
               for ref, (segments, base, level) in cells.items()}
     output = _zip_replace(prepared, {sheet.part: _fill_sheet(book.media_bytes(sheet.part), writes), "xl/styles.xml": styles})
     audit_fill(prepared, output, sheet.name, writes)
+    output, view_report = normalize_export_views(output)
     details = manifest(selection, "precheck")
     details.update(output_sha256=hashlib.sha256(output).hexdigest(), result_columns={
         k: extracted.layout.columns[k] for k in ("ai_hs", "precheck_conclusion")},
-        preprocessing=preprocessing, changed_cells=sorted(writes), client_wps="pending", client_excel="pending")
+        preprocessing=preprocessing, view_adjustment=view_report, changed_cells=sorted(writes),
+        client_wps="pending", client_excel="pending")
     return ExportArtifact(output, "预审结果" + ("-测试结果" if selection.result_mode == ResultMode.MOCK else "") + ".xlsx", details)
