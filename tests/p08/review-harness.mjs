@@ -5,7 +5,7 @@ export function element() {
     contains:()=>true,querySelector:()=>null,remove(){this.removed=true;},focus(){}};
 }
 export function installDocument(){globalThis.document={activeElement:null,createElement:element,getElementById:()=>null};}
-export function host(){return {child:null,innerHTML:'',replaceChildren(node){this.child=node||null;this.innerHTML='';}};}
+export function host(){return {child:null,dataset:{},innerHTML:'',replaceChildren(node){this.child=node||null;this.innerHTML='';}};}
 export function field(root,name,value,item='') {
   const input={dataset:{raField:name,item},value};
   root.listeners.get('input')({target:{closest:selector=>selector==='[data-ra-field]'?input:null}});

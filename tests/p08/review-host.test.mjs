@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createWorkbenchReview} from '../../web/workbench-live.js';
+import {createWorkbenchContext} from '../../web/workbench-context.js';
 import {installDocument,host,field,click,flush,expertState} from './review-harness.mjs';
 installDocument();
 
@@ -73,6 +74,84 @@ test('operator confirmation remains bound to only the selected commodity',async(
   assert.equal(h.calls[0][0],'confirm');assert.equal(h.calls[0][1],'V');assert.equal(h.calls[0][2],'second');h.view.destroy();
 });
 
+
+test('real context reload retains the panel through task/history/items/run and a failed retry',async()=>{
+  const s=expertState();s.task.latest_run_kind='expert_check';s.task.latest_run_id='R';s.history.task_id='T';
+  s.history.versions[0].runs=[s.run];
+  const waits=[],calls=[],node=host();
+  const hold=value=>new Promise((resolve,reject)=>waits.push({resolve:()=>resolve(structuredClone(value)),reject}));
+  const client={getTask:()=>hold(s.task),getHistory:()=>hold(s.history),listItems:()=>hold({items:s.items}),
+    decideSubmission:async(...args)=>{calls.push(args);return {};}};
+  const ctx=createWorkbenchContext(client);
+  const view=createWorkbenchReview({host:node,client,getContext:()=>ctx,getUser:()=>({role:'expert'}),getSession:()=>1});
+  ctx.store.set(s);const off=ctx.store.subscribe(v=>view.render(v));view.render(s);
+  const root=node.child;field(root,'final-hs','9999999999','first');field(root,'change-reason','真实加载链路','first');
+  let pending=ctx.openTask('T');waits.shift().reject(Error('任务读取失败'));await pending;
+  assert.equal(node.child,root);assert.equal(node.hidden,true);
+  click(root,'decide');await flush();assert.equal(calls.length,0);
+  pending=ctx.openTask('T');
+  for(let i=0;i<3;i++){
+    assert.equal(node.child,root);assert.equal(node.hidden,true);
+    waits.shift().resolve();await flush();
+  }
+  await pending;assert.equal(node.child,root);assert.equal(node.hidden,true,'run not revalidated yet');
+  ctx.acceptProgress({context:{taskId:'T',versionId:'V',runId:'R'},run:s.run});
+  assert.equal(node.child,root);assert.equal(node.hidden,false);
+  click(root,'decide');await flush();assert.equal(calls[0][1].items.find(i=>i.item_id==='first').final_hs,'9999999999');
+  off();view.destroy();ctx.destroy();
+});
+
+test('history, item-list and run failures keep the same draft suspended until successful revalidation',async()=>{
+  for(const stage of ['history','items','run']){
+    const s=expertState();s.task.latest_run_kind='expert_check';s.task.latest_run_id='R';s.history.task_id='T';s.history.versions[0].runs=[s.run];
+    let failing=true;const calls=[],node=host();
+    const client={getTask:async()=>s.task,getHistory:async()=>{if(failing&&stage==='history')throw Error('history failed');return s.history;},
+      listItems:async()=>{if(failing&&stage==='items')throw Error('items failed');return {items:s.items};},
+      decideSubmission:async(...args)=>{calls.push(args);return {};}};
+    const ctx=createWorkbenchContext(client),view=createWorkbenchReview({host:node,client,getContext:()=>ctx,getUser:()=>({role:'expert'}),getSession:()=>1});
+    ctx.store.set(s);const off=ctx.store.subscribe(v=>view.render(v));view.render(s);const root=node.child;
+    field(root,'final-hs','9999999999','first');field(root,'change-reason','失败重试保留','first');
+    await ctx.openTask('T');
+    if(stage==='run')ctx.acceptProgress({context:{taskId:'T',versionId:'V',runId:'R'},run:null,error:Error('run failed')});
+    assert.equal(node.child,root,stage);assert.equal(node.hidden,true,stage);click(root,'decide');await flush();assert.equal(calls.length,0);
+    failing=false;await ctx.openTask('T');ctx.acceptProgress({context:{taskId:'T',versionId:'V',runId:'R'},run:s.run});
+    assert.equal(node.child,root);assert.equal(node.hidden,false);click(root,'decide');await flush();
+    assert.equal(calls[0][1].items.find(i=>i.item_id==='first').change_reason,'失败重试保留');
+    off();view.destroy();ctx.destroy();
+  }
+});
+
+test('loading and missing metadata suspend rather than prune approve and return drafts',async()=>{
+  for(const mode of ['approve','return']){
+    const s=expertState(),h=harness(s),root=h.node.child;
+    field(root,'final-hs','9999999999','first');field(root,'change-reason','保留改码','first');
+    if(mode==='return'){field(root,'decision-mode','return');field(root,'return-to','supplier');field(root,'decision-reason','保留退回原因');field(root,'issue','保留问题','third');}
+    for(const next of [{...s,loading:true},{...s,items:[]},{...s,run:null,progressError:Error('断线') }]){
+      h.render(next);assert.equal(h.node.child,root);assert.equal(h.node.hidden,true);
+      click(root,'decide');await flush();assert.equal(h.calls.length,0);
+    }
+    h.render(s);assert.equal(h.node.child,root);assert.equal(h.node.hidden,false);
+    click(root,'decide');await flush();const body=h.calls[0][2];
+    if(mode==='approve')assert.equal(body.items.find(i=>i.item_id==='first').change_reason,'保留改码');
+    else {assert.equal(body.return_to,'supplier');assert.equal(body.reason,'保留退回原因');assert.deepEqual(body.issues,[{item_id:'third',message:'保留问题'}]);}
+    h.view.destroy();
+  }
+});
+
+test('a destroyed panel cannot refresh a new instance even after returning to the same scope',async()=>{
+  const s=expertState(),h=harness(s),old=h.node.child;let resolve;
+  h.client.decideSubmission=()=>new Promise(r=>resolve=r);click(old,'decide');await flush();
+  const changed=structuredClone(s);changed.run.submission_id='S2';changed.history.versions[0].submissions[0].submission_id='S2';
+  h.render(changed);h.render(s);assert.notEqual(h.node.child,old);
+  resolve({});await flush();assert.deepEqual(h.refreshes,[]);h.view.destroy();
+});
+
+test('an in-flight success during refresh starts a post-write read instead of trusting the earlier snapshot',async()=>{
+  const s=expertState(),h=harness(s),root=h.node.child;let resolve;
+  h.client.decideSubmission=()=>new Promise(r=>resolve=r);
+  click(root,'decide');await flush();h.render({...s,loading:true});assert.equal(h.node.hidden,true);
+  resolve({});await flush();assert.deepEqual(h.refreshes,['T']);h.view.destroy();
+});
 
 test('task, version and login-session changes create a fresh review scope',()=>{
   for(const kind of ['task','version','session']){

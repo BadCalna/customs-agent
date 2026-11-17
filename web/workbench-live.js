@@ -10,8 +10,19 @@ import {createReviewActions} from './components/review-actions.js';
 
 /** Bind P11 to immutable review scope; browsing a commodity never replaces an expert draft. */
 export function createWorkbenchReview({host, client, getContext, getUser, getSession}) {
-  let panel=null, scopeKey='', dataKey='';
-  function clear() {panel?.destroy();panel=null;scopeKey=dataKey='';host.replaceChildren();}
+  let panel=null, scopeKey='', dataKey='', bound=null;
+  function clear() {panel?.destroy();panel=null;bound=null;scopeKey=dataKey='';host.hidden=false;host.replaceChildren();}
+  // Empty fields during openTask/openVersion are not evidence of a different submission.
+  // Keep the instance (including P11's private drafts), but never expose stale write controls.
+  function canRetain(s, role) {
+    if (!panel || role!=='expert' || role!==bound.role || getSession()!==bound.ticket || getContext()!==bound.ctx || s.taskId!==bound.taskId) return false;
+    if ((s.task && s.task.current_version_id!==bound.versionId) || (s.versionId && s.versionId!==bound.versionId)) return false;
+    if (!s.task || !s.history || !s.versionId) return true;
+    if (s.kind && s.kind!=='expert_check') return false;
+    if (!s.run) return !!(s.loading || s.error || s.runId);
+    const submission=s.history.versions.find(v=>v.version_id===s.versionId)?.submissions.find(x=>x.submission_id===s.run.submission_id);
+    return s.run.kind==='expert_check' && s.run.is_current && submission?.status==='pending' && submission.submission_id===bound.submissionId;
+  }
   function binding(s, role) {
     if (!s.task || s.versionId!==s.task.current_version_id || !['operator','expert'].includes(role)) return null;
     const version=s.task.versions.find(v=>v.version_id===s.versionId);
@@ -19,7 +30,7 @@ export function createWorkbenchReview({host, client, getContext, getUser, getSes
     if (role==='expert') {
       submission=s.history?.versions.find(v=>v.version_id===s.versionId)?.submissions.find(x=>x.submission_id===s.run?.submission_id);
       if (!submission || submission.status!=='pending' || s.run?.kind!=='expert_check' || !s.run.is_current) return null;
-      if (s.loading) return {notice:'正在读取本版本商品信息，完成后显示整批审核表单。'};
+      if (s.loading || s.progressError) return {notice:'正在读取并核对本版本审核信息，完成后再提交。'};
       const byId=new Map(s.items.map(item=>[item.item_id,item]));
       const rows=submission.items.map(row=>({row,item:byId.get(row.item_id)}));
       if (!rows.length || byId.size!==s.items.length || rows.some(({item})=>
@@ -43,29 +54,36 @@ export function createWorkbenchReview({host, client, getContext, getUser, getSes
   function render(s) {
     const role=getUser()?.role, next=binding(s,role);
     if (!next || next.notice) {
+      if (canRetain(s,role)) {host.hidden=true;host.dataset.reviewNotice=next?.notice || '审核信息读取未完成，请刷新任务详情后重试。';return;}
       clear();if(next?.notice)host.innerHTML=`<p role="status">${esc(next.notice)}</p>`;return;
     }
+    host.hidden=false;
     const signature=JSON.stringify(next.data), sessionScope=JSON.stringify([getSession(),next.scope]);
     if (panel && sessionScope===scopeKey) {
       // Data updates within the same submission preserve P11's draft. Commodity selection is absent here.
       if (signature!==dataKey) {dataKey=signature;panel.update(next.data);}return;
     }
     clear();scopeKey=sessionScope;dataKey=signature;
-    const bound={taskId:s.taskId,versionId:s.versionId,itemId:next.itemId,submissionId:next.submissionId,
+    const owner=bound={role,taskId:s.taskId,versionId:s.versionId,itemId:next.itemId,submissionId:next.submissionId,
       ctx:getContext(),ticket:getSession(),scope:next.scope};
     let decisionAttempt=null;
     function stillCurrent() {
       const ctx=getContext();
-      return getSession()===bound.ticket && ctx===bound.ctx && binding(ctx.store.get(),getUser()?.role)?.scope===bound.scope;
+      return bound===owner && !host.hidden && getSession()===owner.ticket && ctx===owner.ctx && binding(ctx.store.get(),getUser()?.role)?.scope===owner.scope;
     }
     panel=createReviewActions({role,data:next.data,api:{
-      confirm:payload=>client.confirmItem(bound.versionId,bound.itemId,payload),
+      confirm:payload=>client.confirmItem(owner.versionId,owner.itemId,payload),
       submit:()=>Promise.reject(new Error('请使用本批次提交入口，避免只提交选中商品')),
       decide:payload=>{
+        if (!stillCurrent() || !getContext().store.get().task.allowed_actions.includes('decision.resolve')) return Promise.reject(new Error('审核上下文正在刷新、已切换或无操作权限；草稿已保留，请核对后再提交。'));
         const signature=JSON.stringify(payload);if(decisionAttempt?.signature!==signature)decisionAttempt={signature,key:crypto.randomUUID()};
-        return client.decideSubmission(bound.submissionId,payload,decisionAttempt.key);
-      }},onChanged:()=>{if(stillCurrent())void bound.ctx.openTask(bound.taskId);},
-      onConflict:()=>{if(stillCurrent())return bound.ctx.openTask(bound.taskId);}});
+        return client.decideSubmission(owner.submissionId,payload,decisionAttempt.key);
+      }},onChanged:()=>{
+        // A write already in flight may finish while the same task is refreshing.
+        // Start a post-write read even when suspended; its epoch supersedes stale reads.
+        if(bound===owner && getSession()===owner.ticket && getContext()===owner.ctx && owner.ctx.store.get().taskId===owner.taskId) void owner.ctx.openTask(owner.taskId);
+      },
+      onConflict:()=>{if(stillCurrent())return owner.ctx.openTask(owner.taskId);}});
     panel.mount(host);
   }
   return {render,clear,destroy:clear};
@@ -97,7 +115,6 @@ export async function mountWorkbench(root) {
     const ticket=session;
     try{return await value(...args);}catch(error){if(ticket===session)expire(error);throw error;}
   }:value;}});
-  function clearReview() {review?.clear();}
   function render(s) {
     if(!alive||!user||!context)return;
     $('#wb-title').textContent=s.task?.title || (s.loading?'正在读取任务…':'选择左侧任务');
@@ -109,7 +126,7 @@ export async function mountWorkbench(root) {
       <label>执行阶段<select id="wb-kind">${Object.entries(RUN_KINDS).map(([k,v])=>`<option value="${k}" ${k===s.kind?'selected':''}>${v}</option>`).join('')}</select></label>
       <label>执行记录<select id="wb-run"><option value="">${runs.length?'请选择执行记录':'本版本该阶段暂无执行'}</option>${runs.map(r=>`<option value="${esc(r.run_id)}" ${r.run_id===s.runId?'selected':''}>${esc(r.created_at)} · ${esc(r.status)} · ${esc(r.run_id.slice(0,8))}${r.is_current?' · 阶段有效':''}</option>`).join('')}</select></label>
       ${submission?`<label>专家决定<select id="wb-decision"><option value="">仅所选提交，不绑定决定</option>${submission.decisions.map(d=>`<option value="${esc(d.decision_id)}" ${d.decision_id===s.decisionId?'selected':''}>${esc(d.action)} · ${esc(d.decision_id.slice(0,8))}</option>`).join('')}</select></label>`:''}
-      <button class="btn" id="wb-refresh">刷新任务详情</button>`:'';
+      <button class="btn" id="wb-refresh">刷新任务详情</button>`:s.taskId?'<button class="btn" id="wb-refresh">刷新任务详情</button>':'';
     $('#wb-version')?.addEventListener('change',e=>void context.openVersion(e.target.value));
     $('#wb-kind')?.addEventListener('change',e=>context.chooseKind(e.target.value));
     $('#wb-run')?.addEventListener('change',e=>context.chooseRun(e.target.value));
@@ -132,6 +149,7 @@ export async function mountWorkbench(root) {
     $('#wb-submit').hidden=user.role!=='operator';
     $('#wb-submit').disabled=submitting||s.loading||!!s.error||!s.items.length||s.versionId!==s.task?.current_version_id||!s.task.allowed_actions.includes('submission.create');
     review.render(s);
+    if ($('#wb-review').hidden) $('#wb-summary').textContent+=` 专家草稿已保留，暂不可提交。${$('#wb-review').dataset.reviewNotice}`;
   }
   async function submitBatch() {
     if(submitting||!context)return;
@@ -165,7 +183,7 @@ export async function mountWorkbench(root) {
       const ctx=context;await ctx.selectItem(identity.item_id,identity);
       if(context===ctx&&ctx.store.get().card?.item_id===identity.item_id){$('#wb-card').scrollIntoView({block:'start',behavior:'smooth'});$('#wb-card').focus();}
     }});
-    tasks=createTaskList($('#wb-tasks'),{client,onSelectionStart:id=>{clearReview();$('#wb-write-note').textContent='';context.beginTask(id);},onSelectTask:t=>context.acceptTask(t)});
+    tasks=createTaskList($('#wb-tasks'),{client,onSelectionStart:id=>{$('#wb-write-note').textContent='';context.beginTask(id);},onSelectTask:t=>context.acceptTask(t)});
     unsubscribe=context.store.subscribe(render);render(context.store.get());
     $('#wb-submit').onclick=submitBatch;
     $('#wb-logout').onclick=async()=>{
