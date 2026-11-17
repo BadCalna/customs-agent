@@ -83,35 +83,69 @@ function factsSection(card) {
   </section>`;
 }
 
+/**
+ * 阶段编码的展示值：只把「契约给了非空字符串」当成有值。
+ *
+ * 数字 0 是合法编码取值（`String(0)` 非空），不能因为 JavaScript 的真假值判断
+ * 被当成「没有值」；纯空白串按「没有值」处理，不冒充一个编码。
+ */
+function stageText(entry) {
+  const raw = entry === null || entry === undefined ? null : entry.value;
+  if (raw === null || raw === undefined) return "";
+  const value = String(raw);
+  return value.trim() === "" ? "" : value;
+}
+
 function recodeSection(card, contractNotes) {
   const check = card.latest_expert_check;
   const submitted = card.submitted_hs || {};
   const final = card.expert_final_hs || {};
-  const submittedValue = submitted.value ? String(submitted.value) : "";
-  const finalValue = final.value ? String(final.value) : "";
-  const changed = Boolean(submittedValue && finalValue && submittedValue !== finalValue);
-  if (!check && !changed) return "";
+  const submittedValue = stageText(submitted);
+  const finalValue = stageText(final);
+  const hasSubmitted = submittedValue !== "";
+  const hasFinal = finalValue !== "";
+  const hasBoth = hasSubmitted && hasFinal;
+  const changed = hasBoth && submittedValue !== finalValue;
+  const same = hasBoth && !changed;
+  if (!check && !hasBoth) return "";
 
-  const target = check && check.target_hs ? String(check.target_hs) : "";
+  const target = check && check.target_hs !== null && check.target_hs !== undefined
+    ? String(check.target_hs).trim()
+    : "";
   let scope;
-  if (check && target && submittedValue && target === submittedValue) {
+  if (check && target && hasSubmitted && target === submittedValue) {
     scope = `最近一次专家核查（run <code>${esc(shortId(check.run_id, 12))}</code>）的
       <code>target_hs=${esc(target)}</code>，即原提交码。本次核查针对的是原提交码。`;
-  } else if (check && target && submittedValue) {
+  } else if (check && target && hasSubmitted) {
     scope = `最近一次专家核查的 <code>target_hs=${esc(target)}</code> 与
       <code>submitted_hs=${esc(submittedValue)}</code> 不一致；页面如实并列，不推断核查覆盖范围。`;
-  } else if (check) {
-    scope = `最近一次专家核查的 <code>target_hs=${esc(target || "—")}</code>；卡片没有可对照的原提交码，
+  } else if (check && target) {
+    scope = `最近一次专家核查的 <code>target_hs=${esc(target)}</code>；卡片没有可对照的原提交码，
       页面不判断核查针对哪一版编码。`;
+  } else if (check) {
+    scope = `最近一次专家核查记录未标注 <code>target_hs</code>；页面不判断本次核查针对哪一版编码。`;
   } else {
     scope = `契约未返回 latest_expert_check，无法判断改码核查的目标；页面不推断。`;
   }
 
-  const finalNote = changed
-    ? (check
-      ? `专家终值 <code>${esc(finalValue)}</code> 不属于上述核查目标；契约未提供针对新终值的核查记录，页面不推断它已被核查。`
-      : `专家终值 <code>${esc(finalValue)}</code> 未在契约的 latest_expert_check 中体现；页面不推断它是否被核查。`)
-    : `专家终值与提交值相同或未形成改码，页面不额外推断核查状态。`;
+  let finalNote;
+  if (changed) {
+    finalNote = check && target && target === finalValue
+      ? `专家终值 <code>${esc(finalValue)}</code> 与最近一次核查目标 <code>target_hs=${esc(target)}</code> 一致；页面仅据契约字段展示，不推断其他核查范围。`
+      : check && target && hasSubmitted && target === submittedValue
+        ? `专家终值 <code>${esc(finalValue)}</code> 不属于上述核查目标；契约未提供针对新终值的核查记录，页面不推断它已被核查。`
+        : check && target
+          ? `专家终值 <code>${esc(finalValue)}</code> 与最近一次核查目标 <code>target_hs=${esc(target)}</code> 不同；契约未说明核查覆盖范围，页面不推断。`
+          : `专家终值 <code>${esc(finalValue)}</code> 未在契约的 latest_expert_check 中体现；页面不推断它是否被核查。`;
+  } else if (same) {
+    finalNote = `专家终值 <code>${esc(finalValue)}</code> 与提交值相同，未形成改码；页面不额外推断核查状态。`;
+  } else if (hasFinal) {
+    finalNote = `卡片没有原提交码记录；专家终值 <code>${esc(finalValue)}</code> 无法与提交值比较，页面不推断是否改码。`;
+  } else if (hasSubmitted) {
+    finalNote = `卡片没有专家终值记录；无法判断是否改码，页面不推断核查状态。`;
+  } else {
+    finalNote = `卡片既没有原提交码也没有专家终值（契约未提供或为空值）；页面不推断核查状态。`;
+  }
 
   const findings = (check && check.findings) || [];
   const findingsHtml = findings.length
@@ -148,8 +182,14 @@ function recodeSection(card, contractNotes) {
     </div>
     <p class="commodity-recode-scope" role="note"><b>核查范围：</b>${scope}</p>
     <p class="commodity-recode-scope is-secondary" role="note">${finalNote}</p>
+    ${changed
+      ? `<p class="commodity-recode-reason">改码原因：未提供（ItemCard v1 未提供该字段，卡片不推断）。</p>`
+      : ""}
+    ${!hasBoth
+      ? `<p class="commodity-recode-reason">对照不完整：${hasSubmitted ? "缺少专家终值" : hasFinal ? "缺少原提交码" : "原提交码与专家终值都缺失"}；不推断是否改码。</p>`
+      : ""}
     ${contractNotes
-      ? `<p class="commodity-recode-reason">改码原因：ItemCard v1 未提供该字段，卡片不推断；已在交接 P07 提交契约申请。</p>`
+      ? `<p class="commodity-recode-contract-note">契约说明：ItemCard v1 未提供改码原因字段；已在交接 P07 提交契约申请。</p>`
       : ""}
     ${findingsHtml}
   </section>`;

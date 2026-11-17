@@ -223,7 +223,7 @@
       const extras = [
         [demoCards.find((card) => card.comparison_status === "inconsistent"), "补充 · 不一致样例"],
         [demoCards.find((card) => card.comparison_status === "supplier_invalid"), "补充 · 原码异常"],
-        [demoCards.find((card) => card.comparison_status === null && card.latest_run_id), "补充 · 比较结论为空（技术失败行）"],
+        [demoCards.find((card) => card.comparison_status === null && card.latest_run_id), "补充 · 比较结论为空（未得出结论）"],
         [demoCards.find((card) => card.evidence_status === "query_failed"), "补充 · 证据查询失败"],
       ];
       extras.forEach(([card, label]) => addRow(card, label, "contracts/fixtures/DEMO-SET.json"));
