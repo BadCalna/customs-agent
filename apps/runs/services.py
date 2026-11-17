@@ -48,14 +48,14 @@ def schedule_run(run):
     if settings.EXECUTOR_MODE == "rq":
         register_run(run)
         from .dispatch import safe_dispatch
-        transaction.on_commit(lambda: safe_dispatch(str(run.pk)))
+        transaction.on_commit(lambda: safe_dispatch(str(run.pk)), robust=True)
     else:
         def execute():
             if run.kind == Run.Kind.PRECHECK:
                 inline.execute_precheck(run.version, run=run)
             else:
                 inline.execute_expert_check(run.submission, run=run)
-        transaction.on_commit(execute)
+        transaction.on_commit(execute, robust=True)
 
 
 def _lookup(model, pk):
@@ -94,7 +94,7 @@ def start_precheck(user, version_id, revision, key=None):
     task = Task.objects.select_for_update().get(pk=version.task_id)
     require_action(user, CONFIRM, task)
     fingerprint = {"version_id": str(version.pk), "revision": revision}
-    replay = idempotency.begin(user, "precheck.create", key, fingerprint)
+    replay = idempotency.begin(user, "precheck.create", key, fingerprint, target_id=str(version.pk))
     if replay is not None:
         return replay
     if task.versions.order_by("-number").first().pk != version.pk:
@@ -113,7 +113,7 @@ def start_precheck(user, version_id, revision, key=None):
     AuditEvent.objects.create(task=task, version=version, actor=user, action="precheck.created", details={"run_id": str(run.pk)})
     schedule_run(run)
     result = _response(run)
-    idempotency.store(user, "precheck.create", key, fingerprint, result)
+    idempotency.store(user, "precheck.create", key, fingerprint, result, target_id=str(version.pk))
     return result
 
 
@@ -141,7 +141,7 @@ def retry_run(user, run_id, item_ids, key=None):
     parent = Run.objects.select_for_update().get(pk=parent.pk)
     require_action(user, CONFIRM if parent.kind == Run.Kind.PRECHECK else DECIDE, parent)
     fingerprint = {"run_id": str(parent.pk), "item_ids": sorted(item_ids)}
-    replay = idempotency.begin(user, "run.retry", key, fingerprint)
+    replay = idempotency.begin(user, "run.retry", key, fingerprint, target_id=str(parent.pk))
     if replay is not None:
         return replay
     failed = set(str(v) for v in parent.items.filter(status="failed").values_list("item_id", flat=True))
@@ -171,7 +171,7 @@ def retry_run(user, run_id, item_ids, key=None):
         details={"run_id": str(run.pk), "parent_run_id": str(parent.pk), "item_ids": item_ids})
     schedule_run(run)
     result = _response(run)
-    idempotency.store(user, "run.retry", key, fingerprint, result)
+    idempotency.store(user, "run.retry", key, fingerprint, result, target_id=str(parent.pk))
     return result
 
 

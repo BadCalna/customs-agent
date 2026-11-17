@@ -108,24 +108,32 @@ class ConcurrencyTests(TransactionTestCase):
         """两个并发提交同版本同修订：只落一份快照，另一路得到重放或明确冲突。"""
         def submit():
             try:
-                submissions.create_submission(
+                return submissions.create_submission(
                     self.operator, str(self.task.pk), self.submission_payload(), None,
                 )
-                return "ok"
             except ApiError as exc:
                 return f"api-error:{exc.status}:{exc.code}"
 
         results = run_concurrently(submit)
+        succeeded = [result for result in results if isinstance(result, dict)]
         self.assertEqual(Submission.objects.filter(task=self.task).count(), 1, results)
-        # 一路成功落库；另一路要么重放同一快照，要么因任务修订已变而 409，二者都不产生第二份提交。
-        self.assertEqual(results.count("ok"), 1, results)
-        self.assertTrue(all(r == "ok" or r.startswith("api-error:409") for r in results), results)
+        # 一路落库，另一路要么重放同一快照、要么因任务修订已变收到 409；两条成功
+        # 响应也必须指向同一份快照，不能各自创建提交。
+        self.assertGreaterEqual(len(succeeded), 1, results)
+        self.assertEqual(len({result["submission_id"] for result in succeeded}), 1, results)
+        self.assertTrue(
+            all(isinstance(result, dict) or result.startswith("api-error:409") for result in results),
+            results,
+        )
 
     def test_concurrent_same_idempotency_key_single_record(self):
         payload = {"version_id": str(self.version.pk), "revision": 1}
 
         def store():
-            idempotency.store(self.operator, "submission.create", "same-key", payload, {"ok": True})
+            idempotency.store(
+                self.operator, "submission.create", "same-key", payload, {"ok": True},
+                target_id=str(self.task.pk),
+            )
             return "ok"
 
         results = run_concurrently(store)

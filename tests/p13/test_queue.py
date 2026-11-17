@@ -189,7 +189,6 @@ class QueueTests(TestCase):
         response = self.client.post(f"/api/v1/versions/{self.version.pk}/prechecks",
             data=json.dumps({"revision": self.task.revision}), content_type="application/json", HTTP_IDEMPOTENCY_KEY="api")
         self.assertEqual(response.status_code, 403)
-
     def test_upload_returns_before_parsing_and_engine_worker_phase(self):
         with tempfile.TemporaryDirectory() as root, override_settings(CUSTOMS_FILE_ROOT=Path(root)):
             with patch.object(services, "evaluate_row", side_effect=AssertionError("request called engine")):

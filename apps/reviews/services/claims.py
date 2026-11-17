@@ -86,7 +86,7 @@ def _claim_once(user, task_id, key):
         owned = TaskAssignment.objects.filter(task=task, user=user, role=Role.OPERATOR).exists()
         if not owned and not scope_tasks(user).filter(pk=task.pk).exists():
             raise Http404("任务不存在或不在可认领范围")
-        replay = idempotency.begin(user, CLAIM, key, payload)
+        replay = idempotency.begin(user, CLAIM, key, payload, target_id=str(task.pk))
         if replay is not None:
             return replay
         claim = TaskClaim.objects.filter(task=task).first()
@@ -101,7 +101,7 @@ def _claim_once(user, task_id, key):
                 "operator_id": str(user.pk), "claimed_at": claim.claimed_at.isoformat(),
             })
             response = _response(claim)
-        idempotency.store(user, CLAIM, key, payload, response)
+        idempotency.store(user, CLAIM, key, payload, response, target_id=str(task.pk))
         return response
 
 
