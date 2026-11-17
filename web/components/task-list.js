@@ -4,7 +4,7 @@ export const TASK_STAGES = Object.freeze({
   submitted: "已提交专家", approved: "已通过", returned: "已退回",
 });
 export const RUN_STATUSES = Object.freeze({
-  queued: "排队中", running: "执行中", succeeded: "执行完成", failed: "执行失败",
+  queued: "排队中", running: "执行中", succeeded: "执行完成", failed: "执行失败", superseded: "已作废",
 });
 export const RUN_KINDS = Object.freeze({ precheck: "AI预审", expert_check: "专家AI核查" });
 
@@ -54,7 +54,7 @@ export function renderTaskList(host, state) {
 }
 
 /** Mount once. Host auth/session changes must destroy and remount this controller. */
-export function createTaskList(host, { client, onSelectTask = () => {}, pageSize = 10 } = {}) {
+export function createTaskList(host, { client, onSelectTask = () => {}, onSelectionStart = () => {}, pageSize = 10 } = {}) {
   if (!host || !client?.listTasks || !client?.getTask) throw new TypeError("需要容器和统一任务client");
   let state = {items: [], stage: "", query: "", page: 0, nextCursor: null,
     loading: false, error: null, selectionError: null, selectedId: null, selecting: false};
@@ -85,6 +85,7 @@ export function createTaskList(host, { client, onSelectTask = () => {}, pageSize
     if (!alive || !state.items.some(t => t.task_id === taskId)) return;
     if (state.selecting && taskId === state.selectedId) return;
     const request = ++selectionToken;
+    onSelectionStart(taskId);
     state = {...state, selectedId: taskId, selecting: true, selectionError: null}; draw();
     try {
       const detail = await client.getTask(taskId);
@@ -102,6 +103,7 @@ export function createTaskList(host, { client, onSelectTask = () => {}, pageSize
     if (!alive) return;
     if (stage && !Object.hasOwn(TASK_STAGES, stage)) throw new TypeError("未知阶段筛选");
     selectionToken += 1; cursors = [null];
+    onSelectionStart(null);
     state = {...state, stage, page: 0, query: "", items: [], nextCursor: null, selectedId: null, selecting: false, selectionError: null};
     return load(0);
   }

@@ -237,3 +237,17 @@ test('unwired or unauthorized retry cannot write; missing fact messages are esca
 test('authentication, permission, missing, conflict and unimplemented errors remain distinct',()=>{
   assert.equal(new Set([401,403,404,409,501].map(status=>errorView({status}).title)).size,5);
 });
+
+test('queued current-version execution is polled before activation; state callback follows server snapshot',async()=>{
+  const node=host(),clock=scheduler(),value=activeRun({status:'queued',is_current:false});const seen=[];
+  const controller=createRunProgress(node,{client:{getRun:async()=>value},scheduler:clock,onStateChange:s=>seen.push(s)});
+  await controller.open(context(value));assert.equal(clock.pending.size,1);assert.equal(seen.at(-1).run,value);
+  controller.destroy();assert.equal(clock.pending.size,0);
+});
+
+
+test('host stage constraint rejects a wrong-kind run before rendering its results',async()=>{
+  const value=run(),node=host(),controller=createRunProgress(node,{client:{getRun:async()=>value}});
+  await controller.open({...context(value),kind:'expert_check'});
+  assert.equal(controller.getState().run,null);assert.ok(controller.getState().error);controller.destroy();
+});

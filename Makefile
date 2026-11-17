@@ -42,10 +42,9 @@ dev:
 	$(MANAGE) runserver $(BIND)
 
 workbench:
-	@echo "工作台独立演示入口：http://$(BIND)/workbench/（现有首页不变）"
-	@echo "  默认 FIXTURE 样例数据；?mode=live 读 /api/v1，?mode=demo 内置演示。"
-	@echo "  还有商品未确认时显示『还有 N 条待确认』并禁用整批提交。"
-	@echo "  真实读/审批接通后再设为首页；写动作待后端 P 任务。"
+	@echo "正式工作台：http://$(BIND)/workbench/（真实登录会话与 API）"
+	@echo "  样例仅 DEBUG 下显式 ?mode=fixture 或 ?mode=demo。"
+	@echo "  P13 队列/重试及专家工作簿布局仍待交付；mock AI 不构成申报依据。"
 	$(MANAGE) runserver $(BIND)
 
 check:

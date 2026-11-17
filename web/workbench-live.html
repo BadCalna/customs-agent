@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>关务审核工作台</title>
+  <link rel="stylesheet" href="/workbench/assets/styles.css">
+  <link rel="stylesheet" href="/workbench/assets/styles/commodity.css">
+  <link rel="stylesheet" href="/workbench/assets/styles/review-actions.css">
+  <link rel="stylesheet" href="/workbench/assets/styles/tasks.css">
+  <link rel="stylesheet" href="/workbench/assets/styles/workbench-live.css">
+</head>
+<body>
+  <div id="root"><p>正在读取登录会话…</p></div>
+  <script type="module">
+    import {mountWorkbench} from "/workbench/assets/workbench-live.js";
+    await mountWorkbench(document.querySelector("#root"));
+  </script>
+</body>
+</html>

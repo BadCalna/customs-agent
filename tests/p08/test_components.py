@@ -13,7 +13,7 @@ class JavascriptBehaviorTests(SimpleTestCase):
         if not node:
             self.fail("Node is required for P08 behavior tests; set P08_NODE to its executable")
         result = subprocess.run(
-            [node, "--test", "tests/p08/components.test.mjs"],
+            [node, "--test", "tests/p08/components.test.mjs", "tests/p08/workbench.test.mjs"],
             cwd=settings.BASE_DIR, capture_output=True, text=True, encoding="utf-8", timeout=45,
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)

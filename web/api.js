@@ -31,6 +31,19 @@ export class ApiError extends Error {
   }
 }
 
+export function attachmentFilename(disposition) {
+  const extended = /filename\*\s*=\s*UTF-8'[^']*'([^;]+)/i.exec(disposition || "");
+  let name = "";
+  if (extended) { try { name = decodeURIComponent(extended[1].trim()); } catch {} }
+  if (!name) {
+    const ordinary = /filename\s*=\s*(?:"((?:[^"\\]|\\.)*)"|([^;]+))/i.exec(disposition || "");
+    name = ordinary ? (ordinary[1] ?? ordinary[2] ?? "").replace(/\\(.)/g, "$1").trim() : "";
+  }
+  name = name.split(/[\\/]/).pop().replace(/[\x00-\x1f\x7f]/g, "");
+  if (!name || !/\.xlsx$/i.test(name)) throw new ApiError(502, "invalid_attachment", "响应缺少有效的 XLSX 附件文件名");
+  return name;
+}
+
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
 function readCookie(name) {
@@ -90,8 +103,36 @@ function createLiveAdapter(baseUrl) {
     return csrf;
   }
 
+  async function write(method, path, body, key) {
+    csrf = readCookie("csrftoken") || await ensureCsrf();
+    return raw(method, path, {body, headers: {"X-CSRFToken": csrf, ...(key ? {"Idempotency-Key": key} : {})}});
+  }
+
   return {
     mode: "live",
+    getHistory(taskId) { return raw("GET", `/tasks/${encodeURIComponent(taskId)}/history`); },
+    confirmItem(versionId, itemId, body) { return write("PATCH", `/versions/${encodeURIComponent(versionId)}/items/${encodeURIComponent(itemId)}/confirmation`, body); },
+    submitTask(taskId, body, key) { return write("POST", `/tasks/${encodeURIComponent(taskId)}/submissions`, body, key); },
+    decideSubmission(submissionId, body, key) { return write("POST", `/submissions/${encodeURIComponent(submissionId)}/decisions`, body, key); },
+    async exportFile(versionId, body) {
+      csrf = readCookie("csrftoken") || await ensureCsrf();
+      let response;
+      try {
+        response = await fetch(baseUrl + `/versions/${encodeURIComponent(versionId)}/exports`, {
+          method: "POST", credentials: "same-origin", headers: {...JSON_HEADERS, "X-CSRFToken": csrf}, body: JSON.stringify(body),
+        });
+      } catch (e) { throw new ApiError(0, "network_error", e.message || "网络连接失败"); }
+      const mime = response.headers.get("Content-Type")?.split(";")[0].trim().toLowerCase();
+      if (!response.ok || mime !== "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") {
+        const payload = await readPayload(response), error = payload?.error || {};
+        throw new ApiError(response.ok ? 502 : response.status, error.code || "invalid_attachment", error.message || "未返回有效的审核附件", error.details, payload?.request_id);
+      }
+      const filename = attachmentFilename(response.headers.get("Content-Disposition"));
+      const blob = await response.blob();
+      const magic = new Uint8Array(await blob.slice(0, 4).arrayBuffer());
+      if (magic.length !== 4 || magic[0] !== 80 || magic[1] !== 75 || magic[2] !== 3 || magic[3] !== 4) throw new ApiError(502, "invalid_attachment", "返回内容不是 XLSX 工作簿");
+      return {blob, filename, runId: response.headers.get("X-Export-Run"), resultMode: response.headers.get("X-Result-Mode")};
+    },
 
     async me() {
       try {
@@ -178,6 +219,11 @@ function createFixtureAdapter(url) {
 
   return {
     mode: "fixture",
+    async getHistory() { throw new ApiError(501, "live_required", "任务历史接线仅支持 live API"); },
+    async confirmItem() { throw new ApiError(501, "live_required", "真实确认仅支持 live API"); },
+    async submitTask() { throw new ApiError(501, "live_required", "真实提交仅支持 live API"); },
+    async decideSubmission() { throw new ApiError(501, "live_required", "真实决定仅支持 live API"); },
+    async exportFile() { throw new ApiError(501, "live_required", "真实导出仅支持 live API"); },
     async uploadFile() { throw new ApiError(501, "live_required", "真实上传仅支持 live API"); },
     async listClaimable() { throw new ApiError(501, "live_required", "认领仅支持 live API"); },
     async claimTask() { throw new ApiError(501, "live_required", "认领仅支持 live API"); },
@@ -228,7 +274,7 @@ function createFixtureAdapter(url) {
 
 /**
  * @param {{mode?: "live"|"fixture", baseUrl?: string, fixtureUrl?: string}} options
- * @returns 统一的只读 client；两种模式的返回值形状完全一致。
+ * @returns 统一 client；fixture 写动作明确拒绝，live 使用真实会话和服务端守卫。
  */
 export function createClient({ mode = "live", baseUrl = "/api/v1", fixtureUrl = "/demo/fixtures/DEMO-SET.json" } = {}) {
   return mode === "fixture" ? createFixtureAdapter(fixtureUrl) : createLiveAdapter(baseUrl);
