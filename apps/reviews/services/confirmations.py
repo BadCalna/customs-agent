@@ -16,7 +16,8 @@ from apps.accounts.permissions import CONFIRM, require_action
 
 from ..models import AuditEvent, Confirmation, Item, Task
 
-HS_PATTERN = re.compile(r"^\d{10}$")
+# \d 会匹配全角/阿拉伯-印度数字；HS 只允许 ASCII 0-9，避免同码不同形。
+HS_PATTERN = re.compile(r"^[0-9]{10}$")
 
 
 def normalize_hs(value: str) -> str:

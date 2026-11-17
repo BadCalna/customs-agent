@@ -73,6 +73,10 @@ KEY_CONFLICT_PENALTY = 0.7
 MISSING_NAME_DISCOUNT = 0.8
 MISSING_ELEMENTS_DISCOUNT = 0.8
 DEFAULT_MIN_SCORE = 0.35
+
+#: 至少要有一条**查询与历史共同给出且一致**的属性，否则不构成"匹配"。
+#: 只看 unverified 键也能凑出 0.4 分，会把没有事实支撑的记录当命中。
+MIN_MATCHED_KEYS = 1
 DEFAULT_LIMIT = 5
 DEFAULT_STALE_DAYS = 730
 
@@ -488,7 +492,8 @@ def _name_similarity(query_name: str, record_name: str) -> float:
 
 def _clean_attributes(values: Mapping[str, Any] | None) -> dict[str, str]:
     cleaned: dict[str, str] = {}
-    if not values:
+    # 入口虽然声明 Mapping，但 model_construct 可绕过校验；非映射直接当"无属性"。
+    if not isinstance(values, Mapping) or not values:
         return cleaned
     for index, (key, value) in enumerate(values.items()):
         if index >= MAX_ATTRIBUTES:
@@ -553,7 +558,12 @@ def _parse_time(value: str | None) -> datetime | None:
         parsed = datetime.fromisoformat(text)
     except ValueError:
         return None
-    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    # 只给日期（如 valid_until=2026-12-31）表示"有效至当天结束"，不能按零点提前判过期。
+    if len(text) <= 10 and "T" not in text and " " not in text:
+        parsed = parsed.replace(hour=23, minute=59, second=59, microsecond=999999)
+    return parsed
 
 
 def _as_aware(moment: datetime) -> datetime:
@@ -766,8 +776,12 @@ class HistorySearchSource:
         record_attributes = _record_attributes(record)
         name_score = _name_similarity(query.name, record.historical_name)
         matched, diff, unverified = _compare_attributes(query_attributes, record_attributes)
-
+        # 有可比属性却一条都没对上（只靠 unverified 凑分）不算命中；
+        # 完全没有可比属性时仍走"只靠品名打折"的老路径，不能一刀切丢掉。
         total = len(matched) + len(diff) + len(unverified)
+        if total and len(matched) < MIN_MATCHED_KEYS:
+            return None
+
         attribute_score = (
             (len(matched) + 0.5 * len(unverified)) / total if total else 0.0
         )

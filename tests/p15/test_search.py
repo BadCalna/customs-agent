@@ -227,10 +227,13 @@ class KeyAttributeDiffTest(SimpleTestCase):
         self.assertIn("材质", conflict.diff_keys)
 
     def test_missing_record_attribute_is_unverified_not_matched(self):
+        # R-07 后"一个共同事实都没有"的记录不会再成为候选，因此这里补一个真实匹配键，
+        # 只观察"历史未提供的属性"如何被标注。
         result = make_source().search(
-            HistoryQuery(name="不锈钢法兰盘", elements={"表面处理": "酸洗"})
+            HistoryQuery(name="不锈钢法兰盘", elements={"材质": "不锈钢", "表面处理": "酸洗"})
         )
         candidate = next(item for item in result.candidates if item.record_id == "SYN-H-0001")
+        self.assertIn("材质", candidate.matched_keys)
         self.assertIn("表面处理", candidate.unverified_keys)
         self.assertNotIn("表面处理", candidate.matched_keys)
         self.assertNotIn("表面处理", candidate.diff_keys)
@@ -376,13 +379,15 @@ class InvalidInputTest(SimpleTestCase):
         self.assertIs(result.outcome, HistorySearchOutcome.NO_MATCH)
 
     def test_too_many_attributes_are_capped_and_flagged(self):
+        # 键0..键79 与历史记录一条都对不上：R-07 之后必须判 no_match，不能靠 unverified 凑分。
         query = HistoryQuery(
             name="不锈钢法兰盘",
             elements={f"键{index}": f"值{index}" for index in range(80)},
         )
         result = self.source.search(query)
         self.assertTrue(result.truncated)
-        self.assertIs(result.outcome, HistorySearchOutcome.MATCHED)
+        self.assertIs(result.outcome, HistorySearchOutcome.NO_MATCH)
+        self.assertEqual(result.candidates, [])
         self.assertLessEqual(len(result.query.elements), 50)
 
 

@@ -97,9 +97,7 @@ def _return(user, submission, payload, decision):
 @transaction.atomic
 def decide(user, submission_id: str, payload, idempotency_key: str | None = None) -> dict:
     task, submission = lock_submission(user, submission_id, DECIDE)
-    fingerprint = {"submission_id": str(submission.pk), "decision": payload.model_dump(mode="json")}
-
-    replay = idempotency.begin(user, ACTION, idempotency_key, fingerprint)
+    replay = idempotency.begin(user, ACTION, idempotency_key, payload, target_id=str(submission.pk))
     if replay is not None:
         return replay
 
@@ -110,6 +108,12 @@ def decide(user, submission_id: str, payload, idempotency_key: str | None = None
     elif payload.action == Decision.Action.RETURN:
         if payload.items:
             raise ApiError(422, "return_has_final_values", "退回不产生专家终值；终值只能在整批通过时给出")
+        if payload.return_to not in Decision.ReturnTo.values:
+            # 退回对象只能是已定义角色；否则会落出没有任何人能处理的退回路由。
+            raise ApiError(
+                422, "invalid_return_to", "退回对象必须是已定义的接收角色",
+                {"return_to": payload.return_to, "allowed": list(Decision.ReturnTo.values)},
+            )
     else:
         raise ApiError(422, "invalid_action", "决定只能是 approve 或 return")
 
@@ -158,7 +162,7 @@ def decide(user, submission_id: str, payload, idempotency_key: str | None = None
     )
 
     response = decision_to_out(decision, submission, task).model_dump(mode="json")
-    idempotency.store(user, ACTION, idempotency_key, fingerprint, response)
+    idempotency.store(user, ACTION, idempotency_key, payload, response, target_id=str(submission.pk))
     return response
 
 

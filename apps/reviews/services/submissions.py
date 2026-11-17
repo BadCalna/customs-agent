@@ -28,7 +28,8 @@ def _read_submission(submission_id: str) -> Submission:
     """首次读取只用于权限判断；写入前必须再走 ``lock_submission`` 拿锁后重读。"""
     try:
         submission = Submission.objects.select_related("task", "version").filter(pk=submission_id).first()
-    except (ValueError, TypeError) as exc:
+    except (ValidationError, ValueError, TypeError) as exc:
+        # 畸形 UUID 抛 Django ValidationError；与不存在同样按 404 处理，不暴露 500。
         raise Http404("提交不存在或不在可见范围") from exc
     if submission is None:
         raise Http404("提交不存在或不在可见范围")
@@ -133,7 +134,7 @@ def _validate_lines(version, payload):
     return resolved
 
 
-def _pending_replay(task, version, pairs):
+def _pending_replay(task, version, pairs, revision):
     """同版本已有待审提交：内容相同重放，不同则明确冲突，不创建第二个有效提交。"""
     pending = Submission.objects.filter(task=task, version=version, status=Submission.Status.PENDING).first()
     if pending is None:
@@ -147,6 +148,9 @@ def _pending_replay(task, version, pairs):
             "该版本已有一份待专家审核的提交，且内容不同；请先由专家处置或刷新后重试",
             {"submission_id": str(pending.pk)},
         )
+    # 首次响应丢失后的重试可能带提交前的修订；只允许它或当前修订重放同一快照。
+    if revision not in (pending.revision, task.revision):
+        return None
     run = pending.runs.order_by("-created_at").first()
     return submission_to_out(pending, run, task, replay=True).model_dump(mode="json")
 
@@ -157,8 +161,7 @@ def create_submission(user, task_id: str, payload, idempotency_key: str | None =
     require_action(user, SUBMIT, task)
     task = Task.objects.select_for_update().get(pk=task.pk)
 
-    fingerprint = {"task_id": str(task.pk), **payload.model_dump(mode="json")}
-    replay = idempotency.begin(user, ACTION, idempotency_key, fingerprint)
+    replay = idempotency.begin(user, ACTION, idempotency_key, payload, target_id=str(task.pk))
     if replay is not None:
         return replay
 
@@ -174,17 +177,18 @@ def create_submission(user, task_id: str, payload, idempotency_key: str | None =
         raise ApiError(409, "task_closed", "任务已通过，如需变更请走补料重传")
 
     resolved = _validate_lines(version, payload)
+    pairs = [(str(item.pk), str(confirmation.pk)) for item, confirmation in resolved]
+    # 无幂等键的重复提交也要能安全重放：先按内容比对，再做修订校验。
+    replayed = _pending_replay(task, version, pairs, payload.revision)
+    if replayed is not None:
+        idempotency.store(user, ACTION, idempotency_key, payload, replayed, target_id=str(task.pk))
+        return replayed
     if payload.revision != task.revision:
         raise ApiError(
             409, "stale_revision",
             "任务内容已变化，请刷新后基于最新修订重新提交",
             {"current_revision": task.revision},
         )
-
-    pairs = [(str(item.pk), str(confirmation.pk)) for item, confirmation in resolved]
-    replayed = _pending_replay(task, version, pairs)
-    if replayed is not None:
-        return replayed
 
     submission = Submission.objects.create(
         task=task, version=version, revision=task.revision, created_by=user,
@@ -215,14 +219,16 @@ def create_submission(user, task_id: str, payload, idempotency_key: str | None =
         },
     )
     response = submission_to_out(submission, run, task).model_dump(mode="json")
-    idempotency.store(user, ACTION, idempotency_key, fingerprint, response)
+    idempotency.store(user, ACTION, idempotency_key, payload, response, target_id=str(task.pk))
 
     def _dispatch():
         from apps.runs.inline import execute_expert_check
 
         execute_expert_check(submission, run=run)
 
-    transaction.on_commit(_dispatch)
+    # 已提交的快照与 queued Run 不能因派发异常向客户端伪装成 500：
+    # 异常由 Django 记录，Run 仍可由恢复流程按原 ID 处理。
+    transaction.on_commit(_dispatch, robust=True)
     return response
 
 
@@ -238,9 +244,10 @@ def withdraw_submission(user, submission_id: str, idempotency_key: str | None = 
     - 只允许撤回最新文件版本的提交，旧版本提交由补料重传自然失效。
     """
     task, submission = lock_submission(user, submission_id, SUBMIT)
-    fingerprint = {"submission_id": str(submission.pk)}
-
-    replay = idempotency.begin(user, WITHDRAW_ACTION, idempotency_key, fingerprint)
+    replay = idempotency.begin(
+        user, WITHDRAW_ACTION, idempotency_key, {"submission_id": str(submission.pk)},
+        target_id=str(submission.pk),
+    )
     if replay is not None:
         return replay
 
@@ -276,5 +283,8 @@ def withdraw_submission(user, submission_id: str, idempotency_key: str | None = 
         status=submission.status, task_stage=task.stage, task_revision=task.revision,
         idempotent_replay=False,
     ).model_dump(mode="json")
-    idempotency.store(user, WITHDRAW_ACTION, idempotency_key, fingerprint, response)
+    idempotency.store(
+        user, WITHDRAW_ACTION, idempotency_key, {"submission_id": str(submission.pk)}, response,
+        target_id=str(submission.pk),
+    )
     return response

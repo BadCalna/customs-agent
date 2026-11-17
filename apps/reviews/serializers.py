@@ -156,7 +156,8 @@ def _stages(item):
     submission_item = current_submission_item(item)
     decision_item = current_decision_item(item)
     expert = current_run_item(item, Run.Kind.EXPERT_CHECK)
-    expert_suggested = (expert.result or {}).get("suggested_hs") if expert else None
+    # 专家核查建议落在 RunItem.suggested_hs；读 result 内字段会永远拿到 null。
+    expert_suggested = expert.suggested_hs if expert else None
     return {
         "precheck": precheck,
         "expert": expert,

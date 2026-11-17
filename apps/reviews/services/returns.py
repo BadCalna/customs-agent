@@ -23,8 +23,7 @@ def return_version(user, task_id: str, payload, idempotency_key: str | None = No
     require_action(user, RETURN_TASK, task)
     task = Task.objects.select_for_update().get(pk=task.pk)
 
-    fingerprint = {"task_id": str(task.pk), **payload.model_dump(mode="json")}
-    replay = idempotency.begin(user, ACTION, idempotency_key, fingerprint)
+    replay = idempotency.begin(user, ACTION, idempotency_key, payload, target_id=str(task.pk))
     if replay is not None:
         return replay
 
@@ -85,5 +84,5 @@ def return_version(user, task_id: str, payload, idempotency_key: str | None = No
         stage=task.stage, task_revision=task.revision,
         issue_ids=[str(row.pk) for row in rows], idempotent_replay=False,
     ).model_dump(mode="json")
-    idempotency.store(user, ACTION, idempotency_key, fingerprint, response)
+    idempotency.store(user, ACTION, idempotency_key, payload, response, target_id=str(task.pk))
     return response
