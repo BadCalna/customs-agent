@@ -14,7 +14,7 @@ from django.contrib.auth import logout as django_logout
 from django.core.exceptions import PermissionDenied
 from django.http import Http404, JsonResponse
 from ninja import Router, Schema
-from ninja.errors import AuthenticationError, HttpError
+from ninja.errors import AuthenticationError, HttpError, ValidationError as RequestValidationError
 
 from .auth import enforce_csrf, session_auth
 from .errors import ApiError, AuthenticationRequired, error_payload
@@ -102,5 +102,12 @@ def install_error_handlers(api):
     def _http_error(request, exc):
         code = "csrf_failed" if exc.status_code == 403 else "error"
         return JsonResponse(error_payload(code, str(exc)), status=exc.status_code)
+
+    @api.exception_handler(RequestValidationError)
+    def _validation_error(request, exc):
+        fields = [{"location": list(e.get("loc", [])), "message": e.get("msg", ""),
+                   "type": e.get("type", "")} for e in exc.errors]
+        return JsonResponse(error_payload("validation_error", "请求字段不完整或格式不正确", {"fields": fields}), status=422)
+
 
     return api

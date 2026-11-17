@@ -168,7 +168,12 @@ class PathSafetyTests(StorageTestCase):
     def test_rejects_symlink_escape(self):
         outside = Path(self._tmp.name) / "outside"
         outside.mkdir()
-        (self.root / "tasks").symlink_to(outside, target_is_directory=True)
+        try:
+            (self.root / "tasks").symlink_to(outside, target_is_directory=True)
+        except OSError as exc:
+            if getattr(exc, "winerror", None) == 1314:
+                self.skipTest("当前 Windows 账号没有创建符号链接的权限")
+            raise
         with self.assertRaises(StorageError) as caught:
             storage.resolve_path(self.root, "tasks/t1/versions/v1/original/a.xlsx")
         self.assertEqual(caught.exception.code, "path_outside_root")

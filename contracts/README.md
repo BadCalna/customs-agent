@@ -94,6 +94,10 @@ FIX-08 不代表重试去重已可用。
   `HistorySearchResult`、`HistorySourceRef`、`HistoryDatasetInfo`，供 P16 依赖公共结构而不 import 适配器内部类。
 - 仅新增，不改既有字段与端点；`contract_version` 同步升为 `1.1.0`（FIX 样例与 DEMO-SET 已更新）。
 
+P06（2026-11-17）增量发布：`schemas/imports/` 与 OpenAPI 已包含真实 multipart 上传、补料版本、待认领池、
+认领、导入报告与受控文件读取。DTO 来源 `apps/reviews/import_schemas.py`；具体语义和错误见 D3 第 10 节。
+`POST /tasks` 和 `POST /tasks/{id}/versions` 已替换 501，占位端点测试同步更新。
+
 ## 1.1.0 增补（2026-11-17，P15 历史模板导入）
 
 - `HistoryCandidate` 新增两个可选字段：`needs_review: bool = false`、

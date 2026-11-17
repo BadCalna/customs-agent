@@ -1,6 +1,6 @@
 # D4 Agent 输入输出与证据约定
 
-版本：0.4，2026-11-17。状态：P02 第一批已发布引擎协议与 mock 实现；P14 已发布 HS 与申报要素来源适配契约（第 6 节，合成样本自验，真实官方来源未接入）；P17 已发布退税与监管来源适配契约（第 7 节，同样是合成样本自验）。协议 DTO 在 `adapters/engines/protocols.py`，固定场景实现与比较优先级在 `adapters/engines/mock.py`，JSON Schema 见 `contracts/schemas/engine/`。本文件规定系统内关务 AI 引擎；编程 Agent 的分工见 [协作与交接约定](Agent协作与交接约定.md)。
+版本：0.5，2026-11-17。状态：P02 第一批已发布引擎协议与 mock 实现；P14 已发布 HS 与申报要素来源适配契约（第 6 节，合成样本自验，真实官方来源未接入）；P17 已发布退税与监管来源适配契约（第 7 节，同样是合成样本自验）；P06 已补充 inline mock 接线与独立推荐输入隔离说明（文末）。协议 DTO 在 `adapters/engines/protocols.py`，固定场景实现与比较优先级在 `adapters/engines/mock.py`，JSON Schema 见 `contracts/schemas/engine/`。本文件规定系统内关务 AI 引擎；编程 Agent 的分工见 [协作与交接约定](Agent协作与交接约定.md)。
 
 ## 1. 引擎边界
 
@@ -305,3 +305,16 @@ P18 只有在以下条件同时满足时，才能把 P17 的结果当作“已�
 - 两个标志都必须是“否/否”才能进 `matched`；只满足一个（例如来源事实可作依据，但原值比对没对上）一律按下一条降级处理。
 
 其余情况：`conditional`/`unknown`/`not_effective` 一律记为分项 `unknown`（**不是 matched，也不是“无风险”**），把 `pending_reasons` 按 `suggested_role` 分流（`supplier` 补资料、`expert` 判专业、`operator` 补来源）。P18 不得用模型补齐 P17 未取得的条款、税率、证件名称，也不得把 `declared_none` 写成“无监管”除非 `usable_as_basis=true`；专家改码后必须以新 HS 重跑本适配器，旧结果只保留为历史。
+
+## P06 inline mock 接线补充（2026-11-17）
+
+上传事务先预登记一个 `queued, is_current=false` Run，作为持久执行凭据；解析/图片成功后，系统用
+`execute_precheck(version, run=job.precheck)` 激活同一 Run，整表执行。未解析成功不激活，不产生有效预审结果。
+该编排是 P06 inline 模式，P13 后续接队列和后台恢复。失败/中断恢复复用 ImportJob、版本、Run，不追加第二轮。
+原有 P02 显式预审入口仍可不传 run，保持兼容。预审全部行失败时导入可以成功，但 `precheck_status=failed`，
+页面分别展示解析状态与预审失败，不能写成“预审通过”。
+P06 不读取 P10 候选对照，不使用旧版本确认/审批，不调用真实 AI、官方来源或后台队列。
+
+P06 对抗性修复（2026-11-17）：`_build_recommend_input` 不再透传 Item.attributes。
+只从固定白名单取标量商品事实；`excel_fields`、原 HS、退税率、历史审核意见、未识别备注和旧结果列留库核查，
+不进入独立推荐 DTO。原码仅进入 compare 阶段；自由文本事实中可能自然出现编码，仍记录锚定风险。

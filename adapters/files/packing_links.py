@@ -503,7 +503,7 @@ def link_declarations(
     declaration: SheetExtraction,
 ) -> DeclarationMemberMap:
     """按 ``合同号 + 项号`` 关联；不按行号对齐，冲突全部报出来。"""
-    issues: list[Issue] = []
+    issues: list[Issue] = [*packing.issues, *declaration.issues]
     index: dict[tuple[str, str], list[SemanticRecord]] = defaultdict(list)
     indexed_rows: set[int] = set()
 

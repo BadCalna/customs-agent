@@ -102,12 +102,12 @@ class Item(models.Model):
     source_cells = models.CharField("单元格范围", max_length=64, blank=True, default="")
     name = models.CharField("品名", max_length=255, blank=True, default="")
     attributes = models.JSONField("归类事实", default=dict, blank=True)
-    supplier_hs_raw = models.CharField(
-        "供应商原 HS", max_length=32, blank=True, default="",
+    supplier_hs_raw = models.TextField(
+        "供应商原 HS", blank=True, default="",
         help_text="原文保留，空白即空白；任何阶段结果不得写入本字段。",
     )
     supplier_elements_raw = models.TextField("供应商申报要素原文", blank=True, default="")
-    supplier_tax_rate_raw = models.CharField("供应商退税率原文", max_length=32, blank=True, default="")
+    supplier_tax_rate_raw = models.TextField("供应商退税率原文", blank=True, default="")
     revision = models.PositiveIntegerField("商品修订", default=1, help_text="业务员每次确认修改递增；与 Confirmation.revision 同步。")
     created_at = models.DateTimeField("创建时间", auto_now_add=True)
 
@@ -470,6 +470,34 @@ class IdempotencyRecord(models.Model):
         constraints = [
             models.UniqueConstraint(fields=["user", "action", "key"], name="uniq_idempotency_user_action_key"),
         ]
+
+
+class ImportJob(models.Model):
+    """P06 持久上传凭据；先提交版本，再发布文件。失败从同一凭据继续。"""
+
+    class Status(models.TextChoices):
+        STAGED = "staged", "已暂存"
+        SUCCEEDED = "succeeded", "解析成功"
+        FAILED = "failed", "处理失败"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    version = models.OneToOneField(FileVersion, on_delete=models.CASCADE, related_name="import_job")
+    precheck = models.OneToOneField("runs.Run", on_delete=models.PROTECT, related_name="import_job")
+    sha256 = models.CharField(max_length=64, db_index=True)
+    stage_token = models.CharField(max_length=128)
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.STAGED)
+    report = models.JSONField(default=dict)
+    error = models.JSONField(default=dict)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
+class TaskClaim(models.Model):
+    """认领凭据唯一约束兜底；数据读取继续通过 TaskAssignment。"""
+
+    task = models.OneToOneField(Task, primary_key=True, on_delete=models.CASCADE, related_name="claim")
+    operator = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="claims")
+    claimed_at = models.DateTimeField(auto_now_add=True)
 
 
 # 历史记录：内容固定（fixed_input_fields）且禁止单独删除；随父记录级联删除仍允许。

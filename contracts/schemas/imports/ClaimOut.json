@@ -1,0 +1,34 @@
+{
+  "properties": {
+    "assignment_status": {
+      "const": "claimed",
+      "title": "Assignment Status",
+      "type": "string"
+    },
+    "claimed_at": {
+      "title": "Claimed At",
+      "type": "string"
+    },
+    "idempotent_replay": {
+      "default": false,
+      "title": "Idempotent Replay",
+      "type": "boolean"
+    },
+    "operator_id": {
+      "title": "Operator Id",
+      "type": "string"
+    },
+    "task_id": {
+      "title": "Task Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "task_id",
+    "operator_id",
+    "claimed_at",
+    "assignment_status"
+  ],
+  "title": "ClaimOut",
+  "type": "object"
+}
