@@ -40,6 +40,7 @@ import json
 import os
 import re
 import sys
+import tempfile
 import traceback
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -55,6 +56,27 @@ from adapters.files.dispimg import (
 )
 from adapters.files.ooxml import OoxmlError, Workbook
 from adapters.files.packing_links import map_workbook
+from adapters.sources.history_publish import PublishError, publish_staging
+from adapters.sources.history_consolidated import (
+    CONSOLIDATED_IDENTITY_VERSION,
+    FORMAT_AUTO,
+    FORMAT_CHOICES,
+    FORMAT_CONSOLIDATED,
+    FORMAT_LEGACY,
+    IMAGE_COLUMN_AMBIGUOUS,
+    IMAGE_COLUMN_MISSING,
+    IMAGE_EXTERNAL_PATH_NOT_ENABLED,
+    IMAGE_EXTERNAL_PATH_NOT_FOUND,
+    IMAGE_TEXT_UNRECOGNIZED,
+    IMAGE_EXTERNAL_PATH_UNSAFE,
+    IMAGE_EXTERNAL_URL_NOT_FETCHED,
+    IMAGE_ROW_MISSING,
+    ConsolidatedFormatError,
+    detect_workbook_format,
+    load_mapping_config,
+    parse_consolidated_workbook,
+    parse_labeled_elements,
+)
 
 if TYPE_CHECKING:  # pragma: no cover - 仅类型检查；运行时延迟到 Django 配置完成后导入
     from adapters.sources.history_search import HistoryRecord
@@ -62,26 +84,24 @@ if TYPE_CHECKING:  # pragma: no cover - 仅类型检查；运行时延迟到 Dja
 SCHEMA_VERSION = "p15.history.1"
 RECORD_ID_PREFIX = "HIST-"
 MISSING_DATE = "未提供"
-IMAGE_COLUMN_MISSING = "column_missing"
-IMAGE_COLUMN_AMBIGUOUS = "column_ambiguous"
-IMAGE_ROW_MISSING = "row_missing"
 
 SUCCESS_OUTCOME = "approved"
 SUCCESS_BASIS_REAL = (
-    "Jay 人工声明（导入批次）：第一批试点历史模板可暂视为已通过、"
-    "准确的历史案例；未独立核验海关放行凭证，仅作参考。"
+    "Jay 人工声明（导入批次）：历史成功数据可暂视为已通过、准确的历史案例参考；"
+    "文件名“历史成功数据”不等于海关放行凭证，未独立核验，仅作参考。"
 )
 SUCCESS_BASIS_SYNTHETIC = "合成样本：仅用于验证导入与检索链路，不是真实历史库。"
 
 DEFAULT_DECLARATION_NOTE = (
-    "Jay 确认第一批试点历史模板可暂视为已通过、准确的历史案例。"
-    "本批次只记录该人工声明，不伪造海关放行单据、报关日期、税则版本或其他模板中不存在的信息。"
+    "Jay 确认历史成功数据可暂视为已通过、准确的历史案例参考。"
+    "本批次只记录该人工声明；文件名“历史成功数据”不等同海关放行凭证，"
+    "不伪造海关放行单据、报关日期、税则版本或其他表中不存在的信息。"
 )
 
 DATE_HEADER_ALIASES = ("申报日期", "报关日期", "业务日期", "出口日期", "申报时间", "报关时间")
 MATERIAL_KEYS = ("材质", "材料")
 SPEC_KEYS = ("型号", "规格型号", "规格", "型号规格")
-ELEMENT_SPLIT = re.compile(r"[|｜]")
+ELEMENT_SPLIT = re.compile(r"[|｜丨]")
 ELEMENT_COLON = re.compile(r"[:：]")
 INDEXED_LABEL = re.compile(r"^(\d+)\s*[:：]\s*(.*)$")
 VALUE_AND_NEXT_LABEL = re.compile(r"^(.*?)\s+(\d+)\s*[:：]\s*(.*)$")
@@ -165,6 +185,10 @@ def parse_element_pairs(raw: str) -> tuple[dict[str, str], list[dict[str, str]]]
     text = (raw or "").strip()
     if not text:
         return {}, []
+    # 真实汇总表存在“1. 标签 [?] 值”的逐行写法；只有标签明确时才解析。
+    labeled, labeled_issues = parse_labeled_elements(text)
+    if labeled:
+        return labeled, labeled_issues
     segments = [segment.strip() for segment in ELEMENT_SPLIT.split(text) if segment.strip()]
     if not segments:
         return {}, [{"code": "element_unstructured", "message": "申报要素为空"}]
@@ -452,6 +476,17 @@ class ImportRequest:
     declaration_label: str = "申报要素"
     packing_label: str = "装箱明细"
     dataset_id: str | None = None
+    #: auto / legacy-template / consolidated；auto 只在结构明确时自动判断。
+    input_format: str = FORMAT_AUTO
+    #: 汇总表输入的可选显式映射、页签、表头行与图片根目录。
+    mapping: Path | None = None
+    sheet: str | None = None
+    header_row: int | None = None
+    image_root: Path | None = None
+    #: 业务键相同、内容不同时默认保留旧记录；显式允许才同时保留新记录。
+    accept_conflicts: bool = False
+    #: --fresh 覆盖已存在输出前，若来源数据集不同则要求显式允许。
+    allow_dataset_replace: bool = False
 
 
 @dataclass
@@ -494,7 +529,31 @@ def _image_note(status: str, cell: str, message: str) -> str:
         return "模板没有可识别的图片列（column_missing）；不能当作所有商品都无图。"
     if status == IMAGE_COLUMN_AMBIGUOUS:
         return "模板图片列存在多个候选（column_ambiguous），未做逐行归属。"
+    if status == IMAGE_ROW_MISSING:
+        return "图片列存在但该行没有返回结果（row_missing）；按未取得处理，不当作无图。"
+    if status == IMAGE_EXTERNAL_URL_NOT_FETCHED:
+        return "图片列是外部 URL；默认不联网，未读取，也不当作无图。"
+    if status == IMAGE_EXTERNAL_PATH_NOT_ENABLED:
+        return "图片列是本地路径；未提供显式图片根目录，默认不读取。"
+    if status == IMAGE_EXTERNAL_PATH_UNSAFE:
+        return "图片路径越出显式图片根目录（含目录穿越/符号链接越界），已拒绝读取。"
+    if status == IMAGE_EXTERNAL_PATH_NOT_FOUND:
+        return "显式图片根目录内找不到图片文件；不能当作无图。"
+    if status == IMAGE_TEXT_UNRECOGNIZED:
+        return "图片列文字不是可识别路径/图片线索；未读取，也不当作无图。"
     return f"图片状态未取得：{status}（{message or '原因未记录'}）。"
+
+
+def _record_value(record: Any, field_name: str) -> str:
+    try:
+        return record.value(field_name)
+    except (AttributeError, KeyError, TypeError):
+        return ""
+
+
+def _record_attr(record: Any, name: str, default: Any) -> Any:
+    value = getattr(record, name, None)
+    return default if value is None else value
 
 
 def _build_image_index(
@@ -616,9 +675,34 @@ def _build_record(
     raw_elements = record.value("elements")
     elements, element_issues = parse_element_pairs(raw_elements)
     issues.extend(element_issues)
-    material = derive_material(elements)
-    spec = derive_spec(elements)
-    recorded_at, date_cell = explicit_recorded_at(record)
+    if (_record_attr(record, "extra_attributes", {}) or {}).get("source_format") == FORMAT_CONSOLIDATED:
+        if raw_elements.strip() and not elements:
+            issues = [issue for issue in issues if issue.get("code") != "element_unstructured"]
+            issues.append({
+                "code": "element_unstructured", "severity": "warning", "blocking": False,
+                "message": "申报要素原文非空但未取得可靠键值；原文保留，默认检索排除待核记录",
+                "sheet": record.sheet, "row": record.row, "cell": record.cell("elements"),
+            })
+            record.requires_review = True
+        embedded = [
+            key for key, value in elements.items()
+            if re.search(r"(?:材质|材料|种类|加工方法|规格|型号|用途|品牌|成分含量)\s*[:：]", value)
+        ]
+        if embedded:
+            issues.append({
+                "code": "element_embedded_label", "severity": "warning", "blocking": False,
+                "message": "要素值内嵌其他已知标签，可能缺分隔符；保留原文不猜拆，标待核",
+                "sheet": record.sheet, "row": record.row, "cell": record.cell("elements"),
+                "details": {"keys": embedded},
+            })
+            record.requires_review = True
+    # 汇总表可能有独立的规格/材质列；有则优先使用，没有才从申报要素键值推导。
+    material = _normalize(_record_value(record, "material")) or derive_material(elements)
+    spec = _normalize(_record_value(record, "spec")) or derive_spec(elements)
+    recorded_at = _normalize(_record_attr(record, "recorded_at_value", ""))
+    date_cell = _normalize(_record_attr(record, "recorded_at_cell", ""))
+    if not recorded_at:
+        recorded_at, date_cell = explicit_recorded_at(record)
     if not recorded_at:
         recorded_at = MISSING_DATE
         missing_fields.append("recorded_at")
@@ -637,7 +721,7 @@ def _build_record(
         )
     if not contract:
         missing_fields.append("contract_no")
-    if not item:
+    if not item and _record_attr(record, "expects_item", True):
         missing_fields.append("item_no")
     if not material:
         missing_fields.append("material")
@@ -686,6 +770,27 @@ def _build_record(
                 "details": {},
             }
         )
+    if _record_attr(record, "requires_review", False):
+        review_codes = sorted(
+            {
+                str(issue.get("code", ""))
+                for issue in issues
+                if issue.get("code") and issue.get("severity") in {"warning", "error"}
+            }
+        )
+        issues.append(
+            {
+                "code": "import_requires_review",
+                "message": "该行有数据质量疑点，导入后标待核；默认检索会排除，审计时可显式包含",
+                "sheet": record.sheet,
+                "cell": "",
+                "row": record.row,
+                "field": "",
+                "severity": "warning",
+                "blocking": False,
+                "details": {"review_codes": review_codes},
+            }
+        )
     if link is not None:
         for link_issue in link.issues:
             issues.append(_issue_dict(link_issue))
@@ -731,14 +836,23 @@ def _build_record(
         image_format = ""
     image_note = _image_note(image_status, image_cell, image_message)
 
-    source_key = _source_key(source.source_id, record.sheet, record.row, contract, item)
-    record_id = _record_id(source.source_id, record.sheet, record.row, contract, item)
-    locator_parts = [f"{record.sheet}!第{record.row}行"]
-    locator_parts.append(f"合同 {contract or '未提供'}")
-    locator_parts.append(f"项号 {item or '未提供'}")
-    if record.source_cells:
-        locator_parts.append(f"单元格 {record.source_cells}")
-    locator = "；".join(locator_parts)
+    source_key = _normalize(_record_attr(record, "source_key", "")) or _source_key(
+        source.source_id, record.sheet, record.row, contract, item
+    )
+    record_id = _normalize(_record_attr(record, "record_id", "")) or _record_id(
+        source.source_id, record.sheet, record.row, contract, item
+    )
+    locator = _normalize(_record_attr(record, "locator", ""))
+    if not locator:
+        locator_parts = [f"{record.sheet}!第{record.row}行"]
+        locator_parts.append(f"合同 {contract or '未提供'}")
+        locator_parts.append(f"项号 {item or '未提供'}")
+        if record.source_cells:
+            locator_parts.append(f"单元格 {record.source_cells}")
+        locator = "；".join(locator_parts)
+    source_system = _normalize(_record_attr(record, "source_system", "")) or (
+        "historical-template-import" if dataset_kind == "real" else "synthetic-history-template"
+    )
 
     attributes: dict[str, str] = {
         "source_key": source_key,
@@ -764,6 +878,10 @@ def _build_record(
         "success_basis": success_basis,
         "dataset_kind": dataset_kind,
     }
+    for key, value in (_record_attr(record, "extra_attributes", {}) or {}).items():
+        attributes.setdefault(str(key), str(value))
+    if missing_fields:
+        attributes.setdefault("missing_fields", ",".join(sorted(set(missing_fields))))
     if date_cell:
         attributes["recorded_at_cell"] = date_cell
     if MISSING_DATE == recorded_at:
@@ -780,10 +898,26 @@ def _build_record(
     )
     if blocking_codes:
         attributes["blocking_issue_codes"] = ",".join(blocking_codes)
-    attributes["needs_review"] = "true" if (blocking_codes or record.status != "identified") else "false"
+    review_codes = sorted(
+        {
+            str(issue.get("code", ""))
+            for issue in issues
+            if issue.get("code") and issue.get("severity") in {"warning", "error"}
+        }
+    )
+    if review_codes and (
+        blocking_codes or _record_attr(record, "requires_review", False)
+    ):
+        attributes["review_issue_codes"] = ",".join(review_codes)
+    attributes["needs_review"] = (
+        "true"
+        if (blocking_codes or record.status != "identified" or _record_attr(record, "requires_review", False))
+        else "false"
+    )
 
     notes_parts = [
-        "历史模板导入；仅作参考线索，不直接作为当前归类结论。",
+        _normalize(_record_attr(record, "notes_prefix", ""))
+        or "历史模板导入；仅作参考线索，不直接作为当前归类结论。",
         f"导入批次 {batch_id}；成功依据：{success_basis}",
         "原模板未提供税则版本/适用范围/有效期时保持为空，不推断。",
     ]
@@ -816,9 +950,30 @@ def _build_record(
         },
         "missing_fields": missing_fields,
         "issues": issues,
+        "record_status": record.status,
         "p04_status": record.status,
         "p04_issue_codes": [_issue_dict(issue).get("code", "") for issue in record.issues],
     }
+    extra_source = _record_attr(record, "source_extra", {}) or {}
+    if extra_source:
+        row_report["source"].update(extra_source)
+    extra_fields = _record_attr(record, "report_fields", {}) or {}
+    if extra_fields:
+        row_report["fields"].update(extra_fields)
+    extra_attributes = _record_attr(record, "extra_attributes", {}) or {}
+    if extra_attributes:
+        row_report["identity"] = {
+            key: extra_attributes.get(key)
+            for key in (
+                "identity_basis",
+                "content_hash",
+                "content_occurrence",
+                "change_key",
+                "business_key",
+                "source_format",
+            )
+            if key in extra_attributes
+        }
 
     if not name or not hs:
         row_report["status"] = "skipped"
@@ -843,9 +998,7 @@ def _build_record(
                 document=f"{source.source_id}/{source.original_filename}",
                 locator=locator,
                 url=None,
-                system="historical-template-import"
-                if dataset_kind == "real"
-                else "synthetic-history-template",
+                system=source_system,
             ),
             notes=" ".join(notes_parts),
         )
@@ -874,10 +1027,10 @@ def _build_record(
     return payload, row_report, issues
 
 
-def _read_existing(path: Path) -> dict[str, Any] | None:
-    if not path.is_file():
+def _read_existing(path: Path, *, data: bytes | None = None) -> dict[str, Any] | None:
+    if data is None and not path.is_file():
         return None
-    payload = _read_json(path)
+    payload = json.loads(data) if data is not None else _read_json(path)
     if isinstance(payload, list):
         return {"schema_version": SCHEMA_VERSION, "dataset": {}, "records": payload}
     if not isinstance(payload, dict):
@@ -899,41 +1052,33 @@ BUSINESS_RECORD_KEYS = (
     "hs_version",
     "applicable_scope",
     "valid_until",
-    "source",
 )
 BUSINESS_ATTRIBUTE_KEYS = (
     "source_key",
-    "source_file_id",
-    "source_filename",
     "source_sheet",
-    "source_row",
-    "source_cells",
     "contract_no",
     "item_no",
     "quantity",
     "unit",
     "refund_rate",
     "elements_raw",
-    "image_status",
-    "image_cell",
-    "image_sha256",
-    "image_size",
-    "image_format",
     "recorded_at_cell",
     "recorded_at_missing",
-    "success_basis",
     "dataset_kind",
-    "import_issue_codes",
-    "blocking_issue_codes",
-    "needs_review",
 )
 
 
 def _business_fingerprint(payload: Mapping[str, Any]) -> str:
     attributes = payload.get("attributes") or {}
     business = {key: payload.get(key) for key in BUSINESS_RECORD_KEYS}
+    if attributes.get("source_format") == FORMAT_CONSOLIDATED:
+        # 内容哈希覆盖所有真实业务列（含备注/箱号等）；原始ID身份下这些字段
+        # 变化同样必须报告 changed。文件名、坐标、批次和图片补拷不构成业务变化。
+        keys = ("content_hash", "dataset_kind")
+    else:
+        keys = BUSINESS_ATTRIBUTE_KEYS
     business["attributes"] = {
-        key: attributes.get(key) for key in BUSINESS_ATTRIBUTE_KEYS if key in attributes
+        key: attributes.get(key) for key in keys if key in attributes
     }
     return json.dumps(business, ensure_ascii=False, sort_keys=True)
 
@@ -970,24 +1115,65 @@ def _provenance_updates(
 
     典型场景：第一次导入没加 ``--copy-images``，记录里 ``image_output_path`` 为空；
     第二次补拷后图片文件已生成，但业务指纹相同，不能把整条记录当 changed，
-    也不能继续保留旧空路径。
+    也不能继续保留旧空路径。排序/重新保存后行号、单元格范围、文件哈希变化也只
+    更新溯源位置，不改变业务身份。
     """
 
     old_attributes = current.get("attributes") or {}
     new_attributes = payload.get("attributes") or {}
     updates: dict[str, str] = {}
-    for key in ("image_output_path",):
+    for key in (
+        "image_output_path",
+        "source_row",
+        "source_cells",
+        "source_file_sha256",
+        "source_file_id",
+        "source_filename",
+        "batch_id",
+        "success_basis",
+        "image_status",
+        "image_cell",
+        "image_sha256",
+        "image_size",
+        "image_format",
+        "import_issue_codes",
+        "blocking_issue_codes",
+        "review_issue_codes",
+        "needs_review",
+    ):
         new_value = str(new_attributes.get(key, "") or "")
         old_value = str(old_attributes.get(key, "") or "")
-        if new_value and new_value != old_value:
+        clearable = key in {
+            "image_cell", "image_sha256", "image_size", "image_format",
+            "import_issue_codes", "blocking_issue_codes", "review_issue_codes",
+        }
+        if key == "image_output_path":
+            clearable = new_attributes.get("image_status") != STATUS_AVAILABLE or (
+                old_attributes.get("image_sha256") != new_attributes.get("image_sha256")
+            )
+        if (new_value or clearable) and new_value != old_value:
             updates[key] = new_value
+    # 旧快照在此增补稳定锚点，避免下一次变更退回旧的序号猜配。
+    for key in ("change_anchor", "change_key", "business_key"):
+        if new_attributes.get(key) and new_attributes.get(key) != old_attributes.get(key):
+            updates[key] = str(new_attributes[key])
     return updates
 
 
-def _with_provenance(current: Mapping[str, Any], updates: Mapping[str, str]) -> dict[str, Any]:
+def _with_provenance(
+    current: Mapping[str, Any],
+    updates: Mapping[str, str],
+    payload: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
     updated = json.loads(json.dumps(current, ensure_ascii=False))
     updated.setdefault("attributes", {})
     updated["attributes"].update(updates)
+    if payload is not None and (
+        "source_row" in updates or "source_cells" in updates or "source_filename" in updates
+    ):
+        new_source = payload.get("source")
+        if isinstance(new_source, Mapping):
+            updated["source"] = json.loads(json.dumps(new_source, ensure_ascii=False))
     return updated
 
 
@@ -1058,7 +1244,7 @@ def _merge_records(
             if same:
                 updates = _provenance_updates(current, payload)
                 if updates:
-                    updated = _with_provenance(current, updates)
+                    updated = _with_provenance(current, updates, payload)
                     final = [
                         updated if str(item.get("record_id", "")) == record_id else item
                         for item in final
@@ -1096,7 +1282,7 @@ def _merge_records(
             if same:
                 updates = _provenance_updates(current, payload)
                 if updates:
-                    updated = _with_provenance(current, updates)
+                    updated = _with_provenance(current, updates, payload)
                     old_id = str(current.get("record_id", ""))
                     final = [
                         updated if str(item.get("record_id", "")) == old_id else item
@@ -1165,6 +1351,351 @@ def _merge_records(
     return final, duplicates, writes
 
 
+def _consolidated_record_source(payload: Mapping[str, Any]) -> dict[str, Any]:
+    attributes = payload.get("attributes") or {}
+    return {
+        "file_id": attributes.get("source_file_id", ""),
+        "filename": attributes.get("source_filename", ""),
+        "sheet": attributes.get("source_sheet", ""),
+        "row": attributes.get("source_row", ""),
+        "purchase_contract_no": attributes.get("purchase_contract_no", ""),
+        "sales_contract_no": attributes.get("sales_contract_no", ""),
+        "declaration_no": attributes.get("declaration_no", ""),
+    }
+
+
+def _consolidated_record_summary(payload: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "record_id": payload.get("record_id", ""),
+        "historical_hs": payload.get("historical_hs", ""),
+        "historical_name": payload.get("historical_name", ""),
+        "source": _consolidated_record_source(payload),
+        "content_hash": (payload.get("attributes") or {}).get("content_hash", ""),
+        "change_key": (payload.get("attributes") or {}).get("change_key", ""),
+        "business_key": (payload.get("attributes") or {}).get("business_key", ""),
+    }
+
+
+def _merge_consolidated_records(
+    existing: Mapping[str, Any] | None,
+    new_records: Sequence[dict[str, Any]],
+    *,
+    replace_changed: bool,
+    keep_business_duplicates: bool,
+    accept_conflicts: bool,
+    current_source_ids: set[str],
+) -> tuple[
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+    dict[str, str],
+    set[str],
+]:
+    """汇总表合并：内容身份 + 变更配对 + 冲突/消失报告。
+
+    返回 ``(final, duplicates, writes, conflicts, missing, actions, added_ids)``。
+    默认不覆盖旧记录、不物理删除历史记录；只有 ``replace_changed`` 才替换。
+    """
+
+    final: list[dict[str, Any]] = [
+        record for record in (existing.get("records", []) if existing else []) if isinstance(record, dict)
+    ]
+    duplicates: list[dict[str, Any]] = []
+    writes: list[dict[str, Any]] = []
+    conflicts: list[dict[str, Any]] = []
+    missing: list[dict[str, Any]] = []
+    actions: dict[str, str] = {}
+    added_ids: set[str] = set()
+    paired_old_ids: set[str] = set()
+
+    by_id: dict[str, dict[str, Any]] = {}
+    by_change: dict[str, dict[str, Any]] = {}
+    by_business: dict[str, dict[str, Any]] = {}
+    for record in final:
+        record_id = str(record.get("record_id", ""))
+        if record_id:
+            by_id[record_id] = record
+        attributes = record.get("attributes") or {}
+        change_key = str(attributes.get("change_key", ""))
+        if change_key:
+            by_change[change_key] = record
+        business_key = str(attributes.get("business_key", ""))
+        if business_key:
+            by_business[business_key] = record
+
+    # 先确定完整的 incoming ID 集合，不能按遍历顺序把稍后出现的原记录
+    # 当成“已消失”并与新增商品配对。只有同锚点恰好一个旧缺失、一个新内容时
+    # 才报告 changed；多个候选绝不按排序/行号猜配，保留 missing+added。
+    incoming_ids = {str(item.get("record_id", "")) for item in new_records}
+    original_ids = set(by_id)
+    old_by_anchor: dict[str, list[dict[str, Any]]] = {}
+    new_by_anchor: dict[str, list[dict[str, Any]]] = {}
+    for old_record in final:
+        anchor = str((old_record.get("attributes") or {}).get("change_anchor", ""))
+        if anchor and str(old_record.get("record_id", "")) not in incoming_ids:
+            old_by_anchor.setdefault(anchor, []).append(old_record)
+    for new_record in new_records:
+        anchor = str((new_record.get("attributes") or {}).get("change_anchor", ""))
+        if anchor and str(new_record.get("record_id", "")) not in original_ids:
+            new_by_anchor.setdefault(anchor, []).append(new_record)
+
+    def replace_record(record: dict[str, Any], updated: dict[str, Any]) -> None:
+        old_id = str(record.get("record_id", ""))
+        final[:] = [updated if str(item.get("record_id", "")) == old_id else item for item in final]
+        by_id[old_id] = updated
+        old_attributes = record.get("attributes") or {}
+        for key in ("change_key", "business_key"):
+            value = str(old_attributes.get(key, ""))
+            if value and by_change.get(value) is record:
+                by_change.pop(value, None)
+            if key == "business_key" and value and by_business.get(value) is record:
+                by_business.pop(value, None)
+        new_attributes = updated.get("attributes") or {}
+        for key in ("change_key", "business_key"):
+            value = str(new_attributes.get(key, ""))
+            if value:
+                (by_change if key == "change_key" else by_business)[value] = updated
+
+    def remove_record(record: dict[str, Any]) -> None:
+        record_id = str(record.get("record_id", ""))
+        final[:] = [item for item in final if str(item.get("record_id", "")) != record_id]
+        by_id.pop(record_id, None)
+        attributes = record.get("attributes") or {}
+        change_key = str(attributes.get("change_key", ""))
+        if change_key and by_change.get(change_key) is record:
+            by_change.pop(change_key, None)
+        business_key = str(attributes.get("business_key", ""))
+        if business_key and by_business.get(business_key) is record:
+            by_business.pop(business_key, None)
+
+    def append_record(record: dict[str, Any]) -> None:
+        final.append(record)
+        record_id = str(record.get("record_id", ""))
+        by_id[record_id] = record
+        attributes = record.get("attributes") or {}
+        change_key = str(attributes.get("change_key", ""))
+        if change_key:
+            by_change[change_key] = record
+        business_key = str(attributes.get("business_key", ""))
+        if business_key:
+            by_business[business_key] = record
+
+    seen_new_ids: set[str] = set()
+    seen_new_business: dict[str, dict[str, Any]] = {}
+    for payload in new_records:
+        record_id = str(payload.get("record_id", ""))
+        attributes = payload.get("attributes") or {}
+        change_key = str(attributes.get("change_key", ""))
+        business_key = str(attributes.get("business_key", ""))
+        duplicate = {
+            "record_id": record_id,
+            "source_key": str(attributes.get("source_key", "")),
+            "source": _consolidated_record_source(payload),
+        }
+        if record_id in seen_new_ids:
+            duplicates.append(duplicate | {"kind": "duplicate_within_batch", "action": "skipped"})
+            actions[record_id] = "duplicate_within_batch"
+            continue
+        seen_new_ids.add(record_id)
+
+        current = by_id.get(record_id)
+        if current is not None:
+            same = _business_fingerprint(current) == _business_fingerprint(payload)
+            if not same:
+                # 仅 original_record_id 身份会出现“同一 ID 内容变化”。
+                if not replace_changed:
+                    updates = _provenance_updates(current, payload)
+                    if updates:
+                        replace_record(current, _with_provenance(current, updates, payload))
+                    duplicate["kind"] = "changed"
+                    duplicate["action"] = "kept_existing"
+                    duplicates.append(duplicate)
+                    actions[record_id] = "changed_kept_existing"
+                    continue
+                remove_record(current)
+                append_record(payload)
+                writes.append(payload)
+                duplicate["kind"] = "changed"
+                duplicate["action"] = "replaced"
+                duplicates.append(duplicate)
+                actions[record_id] = "replaced"
+                continue
+            updates = _provenance_updates(current, payload)
+            if updates:
+                updated = _with_provenance(current, updates, payload)
+                replace_record(current, updated)
+                duplicates.append(
+                    duplicate
+                    | {
+                        "kind": "duplicate",
+                        "action": "provenance_updated",
+                        "provenance_fields": sorted(updates),
+                    }
+                )
+                actions[record_id] = "duplicate"
+            else:
+                duplicates.append(duplicate | {"kind": "duplicate", "action": "kept"})
+                actions[record_id] = "duplicate"
+            continue
+
+        anchor = str(attributes.get("change_anchor", ""))
+        if anchor:
+            old_candidates = old_by_anchor.get(anchor, [])
+            new_candidates = new_by_anchor.get(anchor, [])
+            old = old_candidates[0] if len(old_candidates) == len(new_candidates) == 1 else None
+            if old_candidates and old is None:
+                conflicts.append(
+                    duplicate | {
+                        "kind": "identity_uncertain",
+                        "action": "kept_both",
+                        "message": "同业务锚点有多个新增/消失候选，无法可靠配对；保留新增并报告消失，不猜覆盖",
+                        "old_candidate_ids": [str(item.get("record_id", "")) for item in old_candidates],
+                    }
+                )
+                attributes["needs_review"] = "true"
+                attributes["review_issue_codes"] = ",".join(filter(None, [
+                    str(attributes.get("review_issue_codes", "")), "identity_uncertain"
+                ]))
+        else:
+            # 旧快照没有 change_anchor 时不按位置序号猜配；先以重复运行增补
+            # 锚点，未能配对的旧记录报告 missing，新内容保留，绝不误覆盖。
+            old = None
+        old_id = str(old.get("record_id", "")) if old else ""
+        if old is not None and old_id and old_id not in incoming_ids and old_id not in paired_old_ids:
+            paired_old_ids.add(old_id)
+            if replace_changed:
+                remove_record(old)
+                append_record(payload)
+                writes.append(payload)
+                duplicates.append(
+                    duplicate
+                    | {
+                        "kind": "changed",
+                        "action": "replaced",
+                        "previous_record_id": old_id,
+                        "previous": _consolidated_record_summary(old),
+                    }
+                )
+                actions[record_id] = "replaced"
+            else:
+                updates = _provenance_updates(old, payload)
+                if updates:
+                    replace_record(old, _with_provenance(old, updates, payload))
+                duplicates.append(
+                    duplicate
+                    | {
+                        "kind": "changed",
+                        "action": "kept_existing",
+                        "previous_record_id": old_id,
+                        "previous": _consolidated_record_summary(old),
+                    }
+                )
+                actions[record_id] = "changed_kept_existing"
+            continue
+
+        existing_business = by_business.get(business_key) if business_key else None
+        if existing_business is not None:
+            if not anchor or not old_by_anchor.get(anchor) or len(old_by_anchor.get(anchor, [])) == len(new_by_anchor.get(anchor, [])) == 1:
+                paired_old_ids.add(str(existing_business.get("record_id", "")))
+            same = _business_fingerprint(existing_business) == _business_fingerprint(payload)
+            if same and not keep_business_duplicates:
+                duplicates.append(
+                    duplicate
+                    | {
+                        "kind": "duplicate_business_content",
+                        "action": "skipped",
+                        "existing_record_id": str(existing_business.get("record_id", "")),
+                    }
+                )
+                actions[record_id] = "duplicate_business_content"
+                continue
+            if not same and not accept_conflicts:
+                conflicts.append(
+                    duplicate
+                    | {
+                        "kind": "business_key_conflict",
+                        "action": "kept_existing",
+                        "existing": _consolidated_record_summary(existing_business),
+                        "incoming": _consolidated_record_summary(payload),
+                    }
+                )
+                actions[record_id] = "conflict_kept_existing"
+                continue
+            if not same:
+                conflicts.append(
+                    duplicate
+                    | {
+                        "kind": "business_key_conflict",
+                        "action": "kept_both",
+                        "existing": _consolidated_record_summary(existing_business),
+                        "incoming": _consolidated_record_summary(payload),
+                    }
+                )
+                actions[record_id] = "conflict_kept_both"
+
+        previous_new = seen_new_business.get(business_key) if business_key else None
+        if previous_new is not None:
+            paired_old_ids.add(str(previous_new.get("record_id", "")))
+            same = _business_fingerprint(previous_new) == _business_fingerprint(payload)
+            if same and not keep_business_duplicates:
+                duplicates.append(
+                    duplicate
+                    | {
+                        "kind": "duplicate_business_content",
+                        "action": "skipped",
+                        "existing_record_id": str(previous_new.get("record_id", "")),
+                    }
+                )
+                actions[record_id] = "duplicate_business_content"
+                continue
+            if not same:
+                # 同一业务键的多个变体（例如同一商品不同箱号/备注）不是冲突：
+                # 它们内容不同、身份不同，必须保留，只在报告里标注。
+                conflicts.append(
+                    duplicate
+                    | {
+                        "kind": "business_key_variant",
+                        "action": "kept_both",
+                        "existing": _consolidated_record_summary(previous_new),
+                        "incoming": _consolidated_record_summary(payload),
+                    }
+                )
+                actions[record_id] = "business_key_variant"
+        if business_key:
+            seen_new_business.setdefault(business_key, payload)
+        append_record(payload)
+        writes.append(payload)
+        added_ids.add(record_id)
+        actions.setdefault(record_id, "added")
+
+    current_ids = {
+        str(payload.get("record_id", "")) for payload in new_records if payload.get("record_id")
+    }
+    for record in list(final):
+        attributes = record.get("attributes") or {}
+        source_file_id = str(attributes.get("source_file_id", ""))
+        if source_file_id not in current_source_ids:
+            continue
+        if str(attributes.get("source_format", "")) != FORMAT_CONSOLIDATED:
+            continue
+        record_id = str(record.get("record_id", ""))
+        if not record_id or record_id in current_ids or record_id in paired_old_ids:
+            continue
+        if record_id in added_ids:
+            continue
+        missing.append(
+            _consolidated_record_summary(record)
+            | {
+                "kind": "missing_from_source",
+                "action": "kept",
+                "message": "该记录在本次输入中不再出现；默认保留旧记录，不自动物理删除",
+            }
+        )
+    return final, duplicates, writes, conflicts, missing, actions, added_ids
+
+
 def _dataset_payload(
     *,
     batch_id: str,
@@ -1173,16 +1704,19 @@ def _dataset_payload(
     source_count: int,
     record_count: int,
     declaration: HumanDeclaration | None,
+    input_formats: Sequence[str] = (),
+    source_files: Sequence[Mapping[str, Any]] = (),
 ) -> dict[str, Any]:
     if dataset_kind == "real":
         description = (
-            "真实历史模板导入（第一批试点）。成功状态来自 Jay 的人工声明，未独立核验海关放行凭证；"
-            "历史成功码仅作参考，不能作为当前归类结论。缺失日期/版本/有效期保持为空或“未提供”，不推断。"
+            "真实历史数据导入。成功状态来自 Jay 的人工声明，未独立核验海关放行凭证；"
+            "文件名“历史成功数据”不等于海关放行凭证。历史成功码仅作参考，不能作为当前归类结论。"
+            "缺失日期/版本/有效期保持为空或“未提供”，不推断。"
         )
         synthetic = False
     else:
         description = (
-            "合成历史模板导入样本，由测试构造器生成，品名/合同/HS/图片均为虚构；"
+            "合成历史数据导入样本，由测试构造器生成，品名/合同/HS/图片均为虚构；"
             "仅用于验证 P15 导入与检索链路，不是真实历史库。"
         )
         synthetic = True
@@ -1194,17 +1728,371 @@ def _dataset_payload(
         "import_batch_id": batch_id,
         "source_file_count": source_count,
         "record_count": record_count,
+        "input_formats": sorted(set(input_formats)),
+        "identity_version": CONSOLIDATED_IDENTITY_VERSION if FORMAT_CONSOLIDATED in input_formats else "legacy-row.1",
+        "source_files": [dict(item) for item in source_files],
         "human_declaration": declaration.as_dict(batch_id) if declaration else None,
     }
 
 
 # --------------------------------------------------------------------------- 主流程
+class ImportIncompleteError(ValueError):
+    """导入未完整完成；旧输出必须保持可用。"""
+
+    def __init__(self, message: str, *, diagnostics_path: Path | None = None):
+        self.diagnostics_path = diagnostics_path
+        super().__init__(message)
+
+
+def _copy_row_image(row_image: Any, record_id: str, image_dir: Path) -> str:
+    """把可用图片写进暂存目录；同名异内容拒绝覆盖。"""
+
+    if row_image is None or getattr(row_image, "status", "") != STATUS_AVAILABLE:
+        return ""
+    data = getattr(row_image, "data", b"") or b""
+    sha = getattr(row_image, "sha256", "") or hashlib.sha256(data).hexdigest()
+    suffix = str(getattr(row_image, "image_format", "") or "bin").lower()
+    if not re.fullmatch(r"[a-z0-9]{1,10}", suffix):
+        suffix = "bin"
+    target = image_dir / f"{record_id}.{sha[:8]}.{suffix}"
+    if target.exists() and target.read_bytes() != data:
+        raise ValueError(f"同名图片已存在且内容不同，拒绝覆盖：{target.name}")
+    if not target.exists():
+        image_dir.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(data)
+    return str(target.relative_to(image_dir.parent))
+
+
+def _publish_staging(
+    staging: Path, out_dir: Path, files: Sequence[Path], *, expected_records_sha256: str | None = None
+) -> None:
+    """完整 generation + 单指针提交；CAS 防止并发合并丢更新。"""
+    try:
+        publish_staging(staging, out_dir, files, expected_records_sha256=expected_records_sha256)
+    except PublishError as exc:
+        raise ImportIncompleteError(f"发布输出失败，旧输出未改动：{exc}") from exc
+
+
+def _parse_legacy_source(
+    *,
+    source: SourceMeta,
+    workbook: Workbook,
+    request: ImportRequest,
+    batch_id: str,
+    success_basis: str,
+    image_dir: Path,
+) -> tuple[dict[str, Any], list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    """旧多页签模板解析：保持既有 P04/P05 行为。"""
+
+    file_report: dict[str, Any] = {
+        "source_id": source.source_id,
+        "filename": source.original_filename,
+        "path": str(source.path),
+        "sha256": source.sha256,
+        "bytes": source.bytes,
+        "format": FORMAT_LEGACY,
+        "status": "parsed",
+        "declaration_sheet": None,
+        "header_row": None,
+        "source_record_count": 0,
+        "imported_count": 0,
+        "skipped_count": 0,
+        "ignored_row_count": 0,
+        "image": {},
+        "layout_warnings": [],
+        "workbook_sheets": [sheet.name for sheet in workbook.sheets],
+        "task_issues": [],
+        "row_reports": [],
+        "error": None,
+    }
+    records_out: list[dict[str, Any]] = []
+    row_reports_out: list[dict[str, Any]] = []
+    image_copy_failures: list[dict[str, Any]] = []
+    try:
+        mapped = None
+        extraction = None
+        try:
+            mapped = map_workbook(
+                workbook,
+                declaration_label=request.declaration_label,
+                packing_label=request.packing_label,
+            )
+            extraction = mapped.declaration
+            if source.declaration_sheet and extraction.layout.sheet != source.declaration_sheet:
+                file_report["layout_warnings"].append(
+                    f"manifest 声明页签为 {source.declaration_sheet}，实际定位为 {extraction.layout.sheet}"
+                )
+        except SemanticLayoutError as mapping_error:
+            extraction = extract_declarations(workbook, sheet_label=request.declaration_label)
+            file_report["task_issues"].append(
+                {
+                    "code": "packing_layout_unavailable",
+                    "message": f"装箱页签未能定位，已退回仅申报提取：{mapping_error}",
+                    "severity": "warning",
+                    "blocking": False,
+                    "details": {},
+                }
+            )
+        if extraction is None:
+            raise RuntimeError("P04 未返回申报提取结果")
+        file_report["declaration_sheet"] = extraction.layout.sheet
+        file_report["header_row"] = extraction.layout.header_row
+        file_report["layout_warnings"].extend(extraction.layout.warnings)
+        if mapped is not None:
+            for issue in mapped.issues:
+                file_report["task_issues"].append(_issue_dict(issue))
+        records = extraction.records
+        file_report["source_record_count"] = len(records)
+        if source.declaration_rows and tuple(source.declaration_rows) != tuple(
+            record.row for record in records
+        ):
+            file_report["layout_warnings"].append(
+                f"manifest 声明源行 {len(source.declaration_rows)} 条，"
+                f"P04 实际提取 {len(records)} 条，数量不一致，请核对"
+            )
+        rows = [record.row for record in records]
+        image_by_row, image_info, image_issues = _build_image_index(workbook, extraction, rows)
+        file_report["image"] = image_info
+        file_report["task_issues"].extend(image_issues)
+        for record in records:
+            link = mapped.link(record.row) if mapped is not None else None
+            row_image = image_by_row.get(record.row)
+            image_output_path = ""
+            record_id = _record_id(
+                source.source_id,
+                record.sheet,
+                record.row,
+                _normalize(record.value("contract")),
+                _normalize(record.value("item")),
+            )
+            if (
+                _normalize(record.value("name"))
+                and _normalize(record.value("hs"))
+                and request.copy_images
+                and row_image is not None
+                and row_image.status == STATUS_AVAILABLE
+            ):
+                try:
+                    image_output_path = _copy_row_image(row_image, record_id, image_dir)
+                except (OSError, ValueError) as image_error:
+                    image_copy_failures.append(
+                        {
+                            "record_id": record_id,
+                            "source": f"{source.source_id}/{record.sheet}!{record.row}",
+                            "message": str(image_error),
+                        }
+                    )
+            payload, row_report, issues = _build_record(
+                record=record,
+                link=link,
+                source=source,
+                batch_id=batch_id,
+                dataset_kind=request.dataset_kind,
+                success_basis=success_basis,
+                image=row_image,
+                image_column_status=image_info.get("column_status", IMAGE_COLUMN_MISSING),
+                image_output_path=image_output_path,
+            )
+            row_report["source"]["filename"] = source.original_filename
+            file_report["row_reports"].append(row_report)
+            row_reports_out.append(row_report)
+            if payload:
+                records_out.append(payload)
+                file_report["imported_count"] += 1
+            else:
+                file_report["skipped_count"] += 1
+    except (OoxmlError, SemanticLayoutError) as parse_error:
+        file_report["status"] = "parse_failed"
+        file_report["error"] = {
+            "code": getattr(parse_error, "code", type(parse_error).__name__),
+            "message": str(parse_error),
+        }
+    except Exception as unexpected:  # 文件级异常也要进报告，不让一条坏文件中断整批
+        file_report["status"] = "parse_failed"
+        file_report["error"] = {
+            "code": type(unexpected).__name__,
+            "message": str(unexpected),
+            "traceback": traceback.format_exc(limit=5),
+        }
+    return file_report, records_out, row_reports_out, image_copy_failures
+
+
+def _parse_consolidated_source(
+    *,
+    source: SourceMeta,
+    workbook: Workbook,
+    request: ImportRequest,
+    mapping: Mapping[str, Any],
+    batch_id: str,
+    success_basis: str,
+    image_dir: Path,
+) -> tuple[dict[str, Any], list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    file_report: dict[str, Any] = {
+        "source_id": source.source_id,
+        "filename": source.original_filename,
+        "path": str(source.path),
+        "sha256": source.sha256,
+        "bytes": source.bytes,
+        "format": FORMAT_CONSOLIDATED,
+        "status": "parsed",
+        "declaration_sheet": None,
+        "header_row": None,
+        "source_record_count": 0,
+        "imported_count": 0,
+        "skipped_count": 0,
+        "ignored_row_count": 0,
+        "image": {},
+        "layout_warnings": [],
+        "workbook_sheets": [sheet.name for sheet in workbook.sheets],
+        "task_issues": [],
+        "row_reports": [],
+        "skipped_rows": [],
+        "mapping": {},
+        "data_quality": {},
+        "row_classification": {},
+        "error": None,
+    }
+    records_out: list[dict[str, Any]] = []
+    row_reports_out: list[dict[str, Any]] = []
+    image_copy_failures: list[dict[str, Any]] = []
+    try:
+        parsed = parse_consolidated_workbook(
+            workbook,
+            path=source.path,
+            source_id=source.source_id,
+            original_filename=source.original_filename,
+            dataset_kind=request.dataset_kind,
+            mapping=mapping,
+            image_root=Path(request.image_root) if request.image_root is not None else None,
+        )
+    except ConsolidatedFormatError as format_error:
+        file_report["status"] = "parse_failed"
+        file_report["error"] = {
+            "code": format_error.code,
+            "message": str(format_error),
+            "details": format_error.details,
+        }
+        return file_report, records_out, row_reports_out, image_copy_failures
+    except OoxmlError as parse_error:
+        file_report["status"] = "parse_failed"
+        file_report["error"] = {
+            "code": getattr(parse_error, "code", type(parse_error).__name__),
+            "message": str(parse_error),
+        }
+        return file_report, records_out, row_reports_out, image_copy_failures
+    except Exception as unexpected:
+        file_report["status"] = "parse_failed"
+        file_report["error"] = {
+            "code": type(unexpected).__name__,
+            "message": str(unexpected),
+            "traceback": traceback.format_exc(limit=5),
+        }
+        return file_report, records_out, row_reports_out, image_copy_failures
+
+    file_report["declaration_sheet"] = parsed.layout.sheet
+    file_report["header_row"] = parsed.layout.header_row
+    file_report["mapping"] = {
+        "sheet": parsed.layout.sheet,
+        "header_row": parsed.layout.header_row,
+        "mapping_source": parsed.layout.mapping_source,
+        "columns": {
+            name: {
+                "header": match.header,
+                "column": match.letter,
+                "hidden": match.hidden,
+            }
+            for name, match in parsed.layout.columns.items()
+        },
+        "duplicate_columns": parsed.layout.duplicate_columns,
+        "unmatched_headers": parsed.layout.unmatched_headers,
+        "hidden_columns": parsed.layout.hidden_columns,
+        "hidden_rows": parsed.layout.hidden_rows,
+        "header_candidates": parsed.layout.header_candidates,
+        "merged_ranges": parsed.layout.merges,
+    }
+    file_report["data_quality"] = parsed.data_quality
+    file_report["row_classification"] = parsed.row_classification
+    file_report["image"] = parsed.image_info
+    file_report["task_issues"] = list(parsed.task_issues)
+    file_report["layout_warnings"] = [
+        str(issue.get("message", "")) for issue in parsed.task_issues
+    ]
+    file_report["skipped_rows"] = list(parsed.skipped_rows)
+    file_report["source_record_count"] = len(parsed.records)
+    file_report["ignored_row_count"] = len(parsed.skipped_rows)
+    for skipped in parsed.skipped_rows:
+        file_report["row_reports"].append(skipped)
+        row_reports_out.append(skipped)
+
+    for record in parsed.records:
+        row_image = record.row_image
+        image_status = record.image_status_override or parsed.image_info.get(
+            "column_status", IMAGE_COLUMN_MISSING
+        )
+        image_output_path = ""
+        if (
+            request.copy_images
+            and row_image is not None
+            and getattr(row_image, "status", "") == STATUS_AVAILABLE
+        ):
+            try:
+                image_output_path = _copy_row_image(row_image, record.record_id, image_dir)
+            except (OSError, ValueError) as image_error:
+                image_copy_failures.append(
+                    {
+                        "record_id": record.record_id,
+                        "source": f"{source.source_id}/{record.sheet}!{record.row}",
+                        "message": str(image_error),
+                    }
+                )
+        payload, row_report, issues = _build_record(
+            record=record,
+            link=None,
+            source=source,
+            batch_id=batch_id,
+            dataset_kind=request.dataset_kind,
+            success_basis=success_basis,
+            image=row_image,
+            image_column_status=image_status,
+            image_output_path=image_output_path,
+        )
+        row_report["source"]["filename"] = source.original_filename
+        file_report["row_reports"].append(row_report)
+        row_reports_out.append(row_report)
+        if payload:
+            records_out.append(payload)
+            file_report["imported_count"] += 1
+        else:
+            file_report["skipped_count"] += 1
+    return file_report, records_out, row_reports_out, image_copy_failures
+
+
 def import_history_templates(request: ImportRequest) -> ImportOutcome:
+    """Build a private candidate and always clean staging; failed runs never publish."""
+    request.out_dir.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix=".staging-", dir=request.out_dir) as raw_staging:
+        staging = Path(raw_staging)
+        try:
+            return _import_history_templates(request, staging)
+        except Exception as exc:
+            diagnostic = request.out_dir / f"import_failure-{staging.name.removeprefix('.staging-')}.json"
+            detail = staging / "import_report.partial.json"
+            _write_json(diagnostic, {
+                "status": "failed", "published": False, "generated_at": _utc_now(),
+                "error": {"code": type(exc).__name__, "message": str(exc)},
+                "details": _read_json(detail) if detail.is_file() else None,
+            })
+            raise
+
+
+def _import_history_templates(request: ImportRequest, staging: Path) -> ImportOutcome:
     if request.dataset_kind not in {"real", "synthetic"}:
         raise ValueError("dataset_kind 只能是 real 或 synthetic")
+    if request.input_format not in FORMAT_CHOICES:
+        raise ValueError(f"input_format 只能是 {FORMAT_CHOICES}")
     if request.dataset_kind == "real" and not request.declared_success:
         raise ValueError(
-            "真实历史模板导入必须显式声明 --declared-success（Jay 人工声明试点案例通过）；"
+            "真实历史数据导入必须显式声明 --declared-success（Jay 人工声明历史成功案例可作为参考）；"
             "没有声明时不能把记录写成 approved"
         )
 
@@ -1216,7 +2104,19 @@ def import_history_templates(request: ImportRequest) -> ImportOutcome:
         entry = _manifest_entry_for(manifest, Path(path)) if manifest else None
         source_metas.append(build_source_meta(Path(path), entry))
     if not source_metas:
-        raise ValueError("至少需要一个历史模板文件")
+        raise ValueError("至少需要一个历史数据文件")
+    source_ids = [meta.source_id for meta in source_metas]
+    if len(set(source_ids)) != len(source_ids):
+        duplicated = sorted({item for item in source_ids if source_ids.count(item) > 1})
+        raise ValueError(
+            f"同一批文件 source_id 重复：{duplicated}；请用 manifest 固定 source_id 或改名后分批导入"
+        )
+
+    mapping = load_mapping_config(request.mapping)
+    if request.sheet:
+        mapping["sheet"] = request.sheet
+    if request.header_row:
+        mapping["header_row"] = int(request.header_row)
 
     batch_id = batch_id_for(source_metas, request.dataset_kind)
     declaration = None
@@ -1230,29 +2130,28 @@ def import_history_templates(request: ImportRequest) -> ImportOutcome:
         )
     success_basis = SUCCESS_BASIS_REAL if declaration else SUCCESS_BASIS_SYNTHETIC
 
-    request.out_dir.mkdir(parents=True, exist_ok=True)
-    image_dir = request.out_dir / "images"
+    image_dir = staging / "images"
     if request.copy_images:
         image_dir.mkdir(parents=True, exist_ok=True)
 
-    file_reports: list[dict[str, Any]] = []
-    all_new_records: list[dict[str, Any]] = []
-    all_row_reports: list[dict[str, Any]] = []
-    image_copy_failures: list[dict[str, Any]] = []
-
+    # 先打开工作簿并识别格式；格式有歧义时拒绝并提示显式选择，不能猜。
+    file_inputs: list[tuple[SourceMeta, Workbook | None, str, dict[str, Any]]] = []
+    file_reports_pre: dict[str, dict[str, Any]] = {}
     for source in source_metas:
-        file_report: dict[str, Any] = {
+        file_report = {
             "source_id": source.source_id,
             "filename": source.original_filename,
             "path": str(source.path),
             "sha256": source.sha256,
             "bytes": source.bytes,
+            "format": "",
             "status": "parsed",
             "declaration_sheet": None,
             "header_row": None,
             "source_record_count": 0,
             "imported_count": 0,
             "skipped_count": 0,
+            "ignored_row_count": 0,
             "image": {},
             "layout_warnings": [],
             "workbook_sheets": [],
@@ -1260,181 +2159,344 @@ def import_history_templates(request: ImportRequest) -> ImportOutcome:
             "row_reports": [],
             "error": None,
         }
-        workbook = None
         try:
             workbook = Workbook.open(source.path)
             file_report["workbook_sheets"] = [sheet.name for sheet in workbook.sheets]
-            mapped = None
-            extraction = None
+            detected: str | None = None
             try:
-                mapped = map_workbook(
-                    workbook,
-                    declaration_label=request.declaration_label,
-                    packing_label=request.packing_label,
-                )
-                extraction = mapped.declaration
-                if source.declaration_sheet and extraction.layout.sheet != source.declaration_sheet:
-                    file_report["layout_warnings"].append(
-                        f"manifest 声明页签为 {source.declaration_sheet}，实际定位为 {extraction.layout.sheet}"
+                detected = detect_workbook_format(workbook, mapping)
+            except ConsolidatedFormatError:
+                detected = None
+            if request.input_format == FORMAT_AUTO:
+                if detected is None:
+                    raise ConsolidatedFormatError(
+                        "input_format_unknown",
+                        "无法自动识别输入格式；请显式选择 --input-format legacy-template 或 consolidated",
                     )
-            except SemanticLayoutError as mapping_error:
-                # 历史模板可能只有申报页签（例如合成/简化模板）；不因此丢整份文件，
-                # 退回只用 P04 申报提取，并把“装箱页签不可用”作为文件级问题报告。
-                extraction = extract_declarations(
-                    workbook, sheet_label=request.declaration_label
-                )
-                file_report["task_issues"].append(
-                    {
-                        "code": "packing_layout_unavailable",
-                        "message": f"装箱页签未能定位，已退回仅申报提取：{mapping_error}",
-                        "severity": "warning",
-                        "blocking": False,
-                        "details": {},
-                    }
-                )
-            if extraction is None:
-                raise RuntimeError("P04 未返回申报提取结果")
-            file_report["declaration_sheet"] = extraction.layout.sheet
-            file_report["header_row"] = extraction.layout.header_row
-            file_report["layout_warnings"].extend(extraction.layout.warnings)
-            if mapped is not None:
-                for issue in mapped.issues:
-                    file_report["task_issues"].append(_issue_dict(issue))
-            records = extraction.records
-            file_report["source_record_count"] = len(records)
-            if source.declaration_rows and tuple(source.declaration_rows) != tuple(
-                record.row for record in records
-            ):
-                file_report["layout_warnings"].append(
-                    f"manifest 声明源行 {len(source.declaration_rows)} 条，"
-                    f"P04 实际提取 {len(records)} 条，数量不一致，请核对"
-                )
-            rows = [record.row for record in records]
-            image_by_row, image_info, image_issues = _build_image_index(
-                workbook, extraction, rows
-            )
-            file_report["image"] = image_info
-            file_report["task_issues"].extend(image_issues)
-            for record in records:
-                link = mapped.link(record.row) if mapped is not None else None
-                row_image = image_by_row.get(record.row)
-                image_output_path = ""
-                has_required_identity = bool(
-                    _normalize(record.value("name")) and _normalize(record.value("hs"))
-                )
-                if (
-                    has_required_identity
-                    and row_image is not None
-                    and row_image.status == STATUS_AVAILABLE
-                    and request.copy_images
-                ):
-                    record_id = _record_id(
-                        source.source_id,
-                        record.sheet,
-                        record.row,
-                        _normalize(record.value("contract")),
-                        _normalize(record.value("item")),
+                chosen = detected
+            else:
+                chosen = request.input_format
+                if detected is not None and detected != chosen:
+                    raise ConsolidatedFormatError(
+                        "input_format_mismatch",
+                        f"显式指定 {chosen}，但文件结构更像 {detected}；请核对 --input-format",
                     )
-                    suffix = row_image.image_format or "bin"
-                    target = image_dir / f"{record_id}.{row_image.sha256[:8]}.{suffix}"
-                    try:
-                        if target.exists() and target.read_bytes() != row_image.data:
-                            raise ValueError("同名图片已存在且内容不同，拒绝覆盖")
-                        if not target.exists():
-                            target.write_bytes(row_image.data)
-                        image_output_path = str(target.relative_to(request.out_dir))
-                    except (OSError, ValueError) as image_error:
-                        image_copy_failures.append(
-                            {
-                                "record_id": record_id,
-                                "source": f"{source.source_id}/{record.sheet}!{record.row}",
-                                "message": str(image_error),
-                            }
-                        )
-                payload, row_report, issues = _build_record(
-                    record=record,
-                    link=link,
-                    source=source,
-                    batch_id=batch_id,
-                    dataset_kind=request.dataset_kind,
-                    success_basis=success_basis,
-                    image=row_image,
-                    image_column_status=image_info.get("column_status", IMAGE_COLUMN_MISSING),
-                    image_output_path=image_output_path,
-                )
-                row_report["source"]["filename"] = source.original_filename
-                file_report["row_reports"].append(row_report)
-                all_row_reports.append(row_report)
-                if payload:
-                    all_new_records.append(payload)
-                    file_report["imported_count"] += 1
-                else:
-                    file_report["skipped_count"] += 1
-        except (OoxmlError, SemanticLayoutError) as parse_error:
+            file_report["format"] = chosen
+            file_inputs.append((source, workbook, chosen, {}))
+        except ConsolidatedFormatError as format_error:
+            raise ValueError(f"{source.original_filename}: {format_error}") from format_error
+        except OoxmlError as parse_error:
             file_report["status"] = "parse_failed"
             file_report["error"] = {
                 "code": getattr(parse_error, "code", type(parse_error).__name__),
                 "message": str(parse_error),
             }
-        except Exception as unexpected:  # 文件级异常也要进报告，不让一条坏文件中断整批
+            file_reports_pre[source.source_id] = file_report
+            file_inputs.append((source, None, request.input_format, file_report))
+        except Exception as unexpected:
             file_report["status"] = "parse_failed"
             file_report["error"] = {
                 "code": type(unexpected).__name__,
                 "message": str(unexpected),
                 "traceback": traceback.format_exc(limit=5),
             }
+            file_reports_pre[source.source_id] = file_report
+            file_inputs.append((source, None, request.input_format, file_report))
+
+    parsed_formats = {fmt for _, workbook, fmt, _ in file_inputs if workbook is not None}
+    if len(parsed_formats) > 1:
+        raise ValueError(
+            "一次导入只支持一种输入格式（legacy-template 或 consolidated）；"
+            "请分开输出目录分别导入，避免两套身份语义混在一个数据集"
+        )
+    input_format = next(iter(parsed_formats), request.input_format)
+    if input_format == FORMAT_LEGACY and (request.mapping or request.sheet or request.header_row or request.image_root):
+        raise ValueError("--mapping/--sheet/--header-row/--image-root 仅用于 consolidated，旧模板不静默忽略这些参数")
+
+    file_reports: list[dict[str, Any]] = []
+    all_new_records: list[dict[str, Any]] = []
+    all_row_reports: list[dict[str, Any]] = []
+    image_copy_failures: list[dict[str, Any]] = []
+    parsed_source_ids: set[str] = set()
+    for source, workbook, chosen, pre_report in file_inputs:
+        if workbook is None:
+            file_reports.append(pre_report)
+            continue
+        if chosen == FORMAT_CONSOLIDATED:
+            file_report, records, row_reports, copy_failures = _parse_consolidated_source(
+                source=source,
+                workbook=workbook,
+                request=request,
+                mapping=mapping,
+                batch_id=batch_id,
+                success_basis=success_basis,
+                image_dir=image_dir,
+            )
+        else:
+            file_report, records, row_reports, copy_failures = _parse_legacy_source(
+                source=source,
+                workbook=workbook,
+                request=request,
+                batch_id=batch_id,
+                success_basis=success_basis,
+                image_dir=image_dir,
+            )
+        # 真实文件导入前后 SHA-256 必须相同；导入期间被改动则整份文件拒绝。
+        try:
+            after_sha = _file_sha256(source.path)
+        except OSError as exc:
+            after_sha = ""
+            file_report["sha256_after"] = ""
+            file_report["task_issues"].append(
+                {
+                    "code": "source_recheck_failed",
+                    "message": f"导入后无法重新计算文件哈希：{exc}",
+                    "severity": "error",
+                    "blocking": True,
+                }
+            )
+        if not after_sha or after_sha != source.sha256 or workbook.source_sha256 != source.sha256:
+            file_report["status"] = "parse_failed"
+            file_report["sha256_unchanged"] = False
+            file_report["error"] = {
+                "code": "source_changed_during_import" if after_sha else "source_recheck_failed",
+                "message": "无法证明输入文件在导入过程中未变化；本文件记录被丢弃，旧输出未改动",
+                "sha256_before": source.sha256,
+                "sha256_after": after_sha,
+            }
+            records = []
+            row_reports = []
+            image_copy_failures.extend(copy_failures)
+        else:
+            file_report["sha256_after"] = after_sha or source.sha256
+            file_report["sha256_unchanged"] = (after_sha or source.sha256) == source.sha256
+            image_copy_failures.extend(copy_failures)
+            if file_report["status"] == "parsed":
+                parsed_source_ids.add(source.source_id)
+        file_report["importable_count"] = file_report.get("imported_count", 0)
+        file_report["written_count"] = 0
         file_reports.append(file_report)
+        all_new_records.extend(records)
+        all_row_reports.extend(row_reports)
+
+    if not any(item["status"] == "parsed" for item in file_reports):
+        diagnostics = request.out_dir / f"import_failure-{_utc_now().replace(':', '').replace('+', '_')}.json"
+        _write_json(
+            diagnostics,
+            {
+                "batch_id": batch_id,
+                "generated_at": _utc_now(),
+                "input_format": input_format,
+                "files": file_reports,
+                "message": "所有输入文件解析失败；旧输出未改动",
+            },
+        )
+        raise ImportIncompleteError(
+            f"所有输入文件解析失败；诊断已写入 {diagnostics}；旧输出未改动",
+            diagnostics_path=diagnostics,
+        )
+
+    if request.copy_images and image_copy_failures:
+        diagnostics = staging / "import_report.partial.json"
+        _write_json(
+            diagnostics,
+            {
+                "batch_id": batch_id,
+                "generated_at": _utc_now(),
+                "image_copy_failures": image_copy_failures,
+                "files": file_reports,
+                "message": "图片复制失败；为避免留下被误认为完整成功的数据集，本次不发布",
+            },
+        )
+        raise ImportIncompleteError(
+            f"图片复制失败 {len(image_copy_failures)} 个；本次不发布，旧输出未改动"
+        )
 
     records_path = request.out_dir / "history_records.json"
-    existing_payload = None if request.fresh else _read_existing(records_path)
-    if existing_payload and existing_payload.get("dataset"):
-        previous_synthetic = (existing_payload.get("dataset") or {}).get("synthetic")
+    # 同一次读取的字节同时用于解析与CAS；不能读旧payload后重新读新hash。
+    existing_bytes = records_path.read_bytes() if records_path.is_file() else None
+    expected_records_sha = hashlib.sha256(existing_bytes).hexdigest() if existing_bytes is not None else ""
+    existing_snapshot = _read_existing(records_path, data=existing_bytes)
+    existing_payload = None if request.fresh else existing_snapshot
+    previous_total = 0 if request.fresh else (len(existing_snapshot.get("records", [])) if existing_snapshot else 0)
+    previous_dataset = (existing_snapshot or {}).get("dataset") or {}
+    if existing_snapshot and previous_dataset:
+        previous_synthetic = previous_dataset.get("synthetic")
         current_synthetic = request.dataset_kind == "synthetic"
-        if previous_synthetic is not None and bool(previous_synthetic) != current_synthetic:
+        if previous_synthetic is not None and bool(previous_synthetic) != current_synthetic and not (
+            request.fresh and request.allow_dataset_replace
+        ):
             raise ValueError(
                 "已有输出与本次 dataset_kind 不一致（真实/合成不能混在同一个历史 JSON）；"
-                "请换 --out-dir，或显式 --fresh 覆盖"
+                "请换 --out-dir，或显式 --fresh --allow-dataset-replace 覆盖"
+            )
+        previous_formats = previous_dataset.get("input_formats")
+        if not previous_formats and previous_dataset:
+            previous_formats = [FORMAT_LEGACY]
+        current_formats = sorted(
+            {
+                str((report.get("format") or input_format))
+                for report in file_reports
+                if report.get("status") == "parsed"
+            }
+        )
+        if previous_formats and current_formats and sorted(set(previous_formats)) != current_formats:
+            if not request.fresh:
+                raise ValueError(
+                    f"已有输出的输入格式 {previous_formats} 与本次 {current_formats} 不一致；"
+                    "请换 --out-dir，或显式 --fresh --allow-dataset-replace"
+                )
+        previous_ids = {str(item.get("source_id", "")) for item in previous_dataset.get("source_files", []) if isinstance(item, dict)}
+        current_ids = {meta.source_id for meta in source_metas}
+        if not request.fresh and previous_ids and previous_ids != current_ids:
+            raise ValueError("显式输出目录已有不同来源文件集合；不能静默丢弃来源清单，请换目录或 --fresh --allow-dataset-replace")
+        if request.fresh and not request.allow_dataset_replace:
+            previous_sources = {
+                str(item.get("source_id", "")): str(item.get("filename", ""))
+                for item in previous_dataset.get("source_files", [])
+                if isinstance(item, dict)
+            }
+            current_sources = {
+                meta.source_id: meta.original_filename for meta in source_metas
+            }
+            if previous_sources and previous_sources != current_sources:
+                raise ValueError(
+                    "--fresh 会覆盖不同来源数据集；如确认替换，请加 --allow-dataset-replace"
+                )
+
+    if existing_payload and input_format == FORMAT_CONSOLIDATED and existing_payload.get("records"):
+        prior_identity_version = previous_dataset.get("identity_version")
+        record_versions = {
+            (record.get("attributes") or {}).get("identity_version")
+            for record in existing_payload.get("records", [])
+        }
+        if prior_identity_version != CONSOLIDATED_IDENTITY_VERSION or record_versions != {CONSOLIDATED_IDENTITY_VERSION}:
+            raise ValueError(
+                "已有汇总数据身份版本缺失或不兼容；拒绝普通merge，避免整批新增。"
+                "请保留旧快照后显式 --fresh 重建（不同来源另需 --allow-dataset-replace）"
             )
 
-    final_records, duplicates, writes = _merge_records(
-        existing_payload,
-        all_new_records,
-        replace_changed=request.replace_changed,
-        keep_business_duplicates=request.keep_business_duplicates,
-    )
-    # 行报告状态同步为真实处理结果；重复记录不重复写 payload。
-    duplicate_by_id = {
-        str(item.get("record_id", "")): item for item in duplicates if item.get("kind") != "duplicate_within_batch"
-    }
-    duplicate_in_batch = [
-        item for item in duplicates if item.get("kind") == "duplicate_within_batch"
-    ]
-    for row_report in all_row_reports:
-        if row_report.get("status") != "imported":
-            continue
-        duplicate = duplicate_by_id.get(str(row_report.get("record_id", "")))
-        if duplicate is None:
-            continue
-        action = duplicate.get("action")
-        row_report["duplicate"] = duplicate
-        if action == "replaced":
-            row_report["status"] = "replaced"
-        elif action == "provenance_updated":
-            row_report["status"] = "duplicate"
-        elif action in {"kept", "kept_existing"}:
-            row_report["status"] = "duplicate"
-        elif duplicate.get("kind") == "duplicate_business_content":
-            row_report["status"] = "duplicate_business_content"
-        elif duplicate.get("kind") == "changed":
-            row_report["status"] = "changed_skipped"
+    duplicate_in_batch: list[dict[str, Any]] = []
+    conflicts: list[dict[str, Any]] = []
+    missing: list[dict[str, Any]] = []
+    actions: dict[str, str] = {}
+    added_ids: set[str] = set()
+    if input_format == FORMAT_CONSOLIDATED:
+        final_records, duplicates, writes, conflicts, missing, actions, added_ids = (
+            _merge_consolidated_records(
+                existing_payload,
+                all_new_records,
+                replace_changed=request.replace_changed,
+                keep_business_duplicates=request.keep_business_duplicates,
+                accept_conflicts=request.accept_conflicts,
+                current_source_ids=parsed_source_ids,
+            )
+        )
+        duplicate_in_batch = [
+            item for item in duplicates if item.get("kind") == "duplicate_within_batch"
+        ]
+        duplicate_by_id = {
+            str(item.get("record_id", "")): item
+            for item in duplicates
+            if item.get("kind") != "duplicate_within_batch"
+        }
+        for row_report in all_row_reports:
+            if row_report.get("status") != "imported":
+                continue
+            record_id = str(row_report.get("record_id", ""))
+            action = actions.get(record_id)
+            duplicate = duplicate_by_id.get(record_id)
+            if action is None:
+                continue
+            row_report["merge"] = {"action": action}
+            if duplicate is not None:
+                row_report["duplicate"] = duplicate
+            if action == "replaced":
+                row_report["status"] = "replaced"
+            elif action == "duplicate":
+                row_report["status"] = "duplicate"
+            elif action == "duplicate_business_content":
+                row_report["status"] = "duplicate_business_content"
+            elif action == "duplicate_within_batch":
+                row_report["status"] = "duplicate"
+            elif action == "changed_kept_existing":
+                row_report["status"] = "changed_skipped"
+            elif action == "conflict_kept_existing":
+                row_report["status"] = "conflict_skipped"
+            elif action == "business_key_variant":
+                row_report["status"] = "imported"
+    else:
+        final_records, duplicates, writes = _merge_records(
+            existing_payload,
+            all_new_records,
+            replace_changed=request.replace_changed,
+            keep_business_duplicates=request.keep_business_duplicates,
+        )
+        duplicate_by_id = {
+            str(item.get("record_id", "")): item
+            for item in duplicates
+            if item.get("kind") != "duplicate_within_batch"
+        }
+        duplicate_in_batch = [
+            item for item in duplicates if item.get("kind") == "duplicate_within_batch"
+        ]
+        for row_report in all_row_reports:
+            if row_report.get("status") != "imported":
+                continue
+            duplicate = duplicate_by_id.get(str(row_report.get("record_id", "")))
+            if duplicate is None:
+                continue
+            action = duplicate.get("action")
+            row_report["duplicate"] = duplicate
+            if action == "replaced":
+                row_report["status"] = "replaced"
+            elif action == "provenance_updated":
+                row_report["status"] = "duplicate"
+            elif action in {"kept", "kept_existing"}:
+                row_report["status"] = "duplicate"
+            elif duplicate.get("kind") == "duplicate_business_content":
+                row_report["status"] = "duplicate_business_content"
+            elif duplicate.get("kind") == "changed":
+                row_report["status"] = "changed_skipped"
+        added_ids = {
+            str(payload.get("record_id", ""))
+            for payload in writes
+            if not any(
+                item.get("action") == "replaced"
+                and str(item.get("record_id", "")) == str(payload.get("record_id", ""))
+                for item in duplicates
+            )
+        }
     written_ids = {str(payload.get("record_id", "")) for payload in writes}
     for file_report in file_reports:
-        file_report["importable_count"] = file_report["imported_count"]
+        file_report["importable_count"] = file_report.get("imported_count", 0)
         file_report["written_count"] = sum(
             1
             for row in file_report["row_reports"]
             if str(row.get("record_id", "")) in written_ids
         )
+
+    records_added = len(added_ids)
+    records_replaced = sum(1 for item in duplicates if item.get("action") == "replaced")
+    records_conflicts = sum(
+        1 for item in conflicts if item.get("kind") == "business_key_conflict"
+    )
+    business_key_variants = sum(
+        1 for item in conflicts if item.get("kind") == "business_key_variant"
+    )
+    records_rejected = sum(item.get("skipped_count", 0) for item in file_reports)
+    records_ignored = sum(item.get("ignored_row_count", 0) for item in file_reports)
+    records_needs_review = sum(
+        1
+        for record in final_records
+        if str((record.get("attributes") or {}).get("needs_review", "")).casefold() == "true"
+    )
+    reconciliation_ok = previous_total + records_added == len(final_records)
+    status = "complete"
+    if any(item["status"] != "parsed" for item in file_reports):
+        status = "partial"
+    if records_rejected or records_conflicts:
+        status = "partial"
 
     dataset = _dataset_payload(
         batch_id=batch_id,
@@ -1443,13 +2505,41 @@ def import_history_templates(request: ImportRequest) -> ImportOutcome:
         source_count=len(source_metas),
         record_count=len(final_records),
         declaration=declaration,
+        input_formats=[input_format],
+        source_files=[
+            {
+                "source_id": meta.source_id,
+                "filename": meta.original_filename,
+                "sha256": meta.sha256,
+                "bytes": meta.bytes,
+                "path": str(meta.path),
+            }
+            for meta in source_metas
+        ],
     )
     records_payload = {
         "schema_version": SCHEMA_VERSION,
         "dataset": dataset,
         "records": final_records,
     }
-    _write_json(records_path, records_payload)
+    staging_records = staging / "history_records.json"
+    _write_json(staging_records, records_payload)
+
+    if not request.skip_validation:
+        validation = validate_history_queries(staging_records)
+        validation["status"] = "executed"
+        validation["records_path"] = str(records_path)
+        if not validation.get("all_passed"):
+            status = "partial"
+    else:
+        # 新快照明确未运行；不能把上一版成功验证带到新数据集。
+        validation = {
+            "schema_version": "p15.history-import.validation.1",
+            "status": "skipped", "generated_at": _utc_now(),
+            "records_path": str(records_path), "dataset": dataset,
+            "checks": {}, "cases": [], "all_passed": False,
+            "missing_required_cases": ["hit", "no_match", "key_attribute_diff"],
+        }
 
     image_totals: dict[str, int] = {}
     for file_report in file_reports:
@@ -1459,6 +2549,8 @@ def import_history_templates(request: ImportRequest) -> ImportOutcome:
         "schema_version": "p15.history-import.report.1",
         "batch_id": batch_id,
         "dataset_kind": request.dataset_kind,
+        "input_format": input_format,
+        "status": status,
         "generated_at": _utc_now(),
         "out_dir": str(request.out_dir),
         "records_path": str(records_path),
@@ -1471,6 +2563,10 @@ def import_history_templates(request: ImportRequest) -> ImportOutcome:
                 "path": str(meta.path),
                 "sha256": meta.sha256,
                 "bytes": meta.bytes,
+                "format": next(
+                    (item["format"] for item in file_reports if item["source_id"] == meta.source_id),
+                    input_format,
+                ),
             }
             for meta in source_metas
         ],
@@ -1479,9 +2575,17 @@ def import_history_templates(request: ImportRequest) -> ImportOutcome:
             "files": len(file_reports),
             "parsed_files": sum(1 for item in file_reports if item["status"] == "parsed"),
             "parse_failed_files": sum(1 for item in file_reports if item["status"] == "parse_failed"),
-            "source_records": sum(item["source_record_count"] for item in file_reports),
+            "source_records": sum(item.get("source_record_count", 0) for item in file_reports),
             "records_imported_this_run": len(writes),
-            "records_skipped": sum(item["skipped_count"] for item in file_reports),
+            "records_added": records_added,
+            "records_replaced": records_replaced,
+            "records_skipped": records_rejected,
+            "records_ignored": records_ignored,
+            "records_rejected": records_rejected,
+            "records_needs_review": records_needs_review,
+            "records_conflicts": records_conflicts,
+            "records_business_key_variants": business_key_variants,
+            "records_missing_from_source": len(missing),
             "records_duplicate": sum(1 for item in duplicates if item.get("kind") == "duplicate"),
             "records_changed": sum(1 for item in duplicates if item.get("kind") == "changed"),
             "records_duplicate_within_batch": len(duplicate_in_batch),
@@ -1491,12 +2595,16 @@ def import_history_templates(request: ImportRequest) -> ImportOutcome:
             "records_provenance_updated": sum(
                 1 for item in duplicates if item.get("action") == "provenance_updated"
             ),
+            "previous_total_in_output": previous_total,
             "records_total_in_output": len(final_records),
+            "reconciliation_ok": reconciliation_ok,
             "image_status": image_totals,
             "image_copy_failures": len(image_copy_failures),
         },
         "duplicates": duplicates,
         "duplicate_within_batch": duplicate_in_batch,
+        "conflicts": conflicts,
+        "missing_from_source": missing,
         "image_copy_failures": image_copy_failures,
         "policy": {
             "reference_only": True,
@@ -1509,38 +2617,78 @@ def import_history_templates(request: ImportRequest) -> ImportOutcome:
             ],
             "missing_date_sentinel": MISSING_DATE,
             "duplicate_policy": (
-                "same record_id + same business fields -> duplicate/skip; business fields changed -> "
-                "changed/keep existing unless --replace-changed; same business content across different "
-                "sources (renamed/copied) -> duplicate_business_content/skip unless --keep-business-duplicates; "
-                "file hash and batch id are provenance, not business fields"
+                "content identity + occurrence; same content -> duplicate/skip; same change anchor with "
+                "different content -> changed/keep existing unless --replace-changed; same business key "
+                "with different content -> conflict/keep existing unless --accept-conflicts; records "
+                "missing from source are reported and kept, never physically deleted automatically"
             ),
+            "identity_policy": (
+                "consolidated: business-field content hash + occurrence, not row number and not file hash; "
+                "optional unique original_record_id takes precedence; legacy: source file + sheet + row + "
+                "contract + item"
+            ),
+            "merged_cells": "only anchor value is read; continuation cells stay empty and are reported",
+            "formulas": "cached value is used when present; missing cache is reported and never evaluated",
+            "images": "DISPIMG/floating images reuse P05; external URL never fetched; external local path "
+            "only under explicit --image-root with traversal/symlink checks",
             "database": "not_connected; output is a P15-compatible JSON snapshot for later DB/HistoryRecordStore integration",
         },
     }
-    report_json_path = request.out_dir / "import_report.json"
-    report_md_path = request.out_dir / "import_report.md"
+    report_json_path = staging / "import_report.json"
+    report_md_path = staging / "import_report.md"
     _write_json(report_json_path, report)
     report_md_path.write_text(render_markdown_report(report), encoding="utf-8")
 
     validation_json_path = None
     validation_md_path = None
-    if not request.skip_validation:
-        validation = validate_history_queries(records_path, out_dir=request.out_dir)
-        validation_json_path = request.out_dir / "query_validation.json"
-        validation_md_path = request.out_dir / "query_validation.md"
+    publish_files: list[Path] = [staging_records, report_json_path, report_md_path]
+    if validation is not None:
+        validation_json_path = staging / "query_validation.json"
+        validation_md_path = staging / "query_validation.md"
+        _write_json(validation_json_path, validation)
+        validation_md_path.write_text(
+            render_validation_markdown(validation), encoding="utf-8"
+        )
         report["validation"] = {
-            "path": str(validation_json_path),
+            "path": str(request.out_dir / "query_validation.json"),
+            "status": validation.get("status", "executed"),
             "checks": validation["checks"],
         }
         _write_json(report_json_path, report)
+        publish_files.extend([validation_json_path, validation_md_path])
+    if image_dir.is_dir():
+        publish_files.extend(sorted(image_dir.rglob("*")))
 
+    try:
+        _publish_staging(staging, request.out_dir, publish_files, expected_records_sha256=expected_records_sha)
+    except Exception as publish_error:
+        try:
+            import shutil
+
+            shutil.rmtree(staging)
+        except OSError:
+            pass
+        if isinstance(publish_error, ImportIncompleteError):
+            raise
+        raise ImportIncompleteError(
+            f"发布输出失败，旧输出已回滚：{type(publish_error).__name__}: {publish_error}"
+        ) from publish_error
+    try:
+        import shutil
+
+        shutil.rmtree(staging)
+    except OSError:
+        pass
+
+    final_validation_json = request.out_dir / "query_validation.json" if validation else None
+    final_validation_md = request.out_dir / "query_validation.md" if validation else None
     return ImportOutcome(
         out_dir=request.out_dir,
         records_path=records_path,
-        report_json_path=report_json_path,
-        report_md_path=report_md_path,
-        validation_json_path=validation_json_path,
-        validation_md_path=validation_md_path,
+        report_json_path=request.out_dir / "import_report.json",
+        report_md_path=request.out_dir / "import_report.md",
+        validation_json_path=final_validation_json,
+        validation_md_path=final_validation_md,
         report=report,
     )
 
@@ -1645,12 +2793,15 @@ def validate_history_queries(
     configure_django()
     from adapters.sources.history_search import HistoryQuery, HistorySearchSource
 
-    payload = _read_json(records_path)
+    stable_records_path = records_path.resolve()
+    records_bytes = stable_records_path.read_bytes()
+    validation_records_sha = hashlib.sha256(records_bytes).hexdigest()
+    payload = json.loads(records_bytes)
     records = payload.get("records", []) if isinstance(payload, dict) else payload
     cases = _read_json(queries_path) if queries_path else generate_query_cases(records)
     if isinstance(cases, dict):
         cases = cases.get("queries", [])
-    source = HistorySearchSource.load(records_path)
+    source = HistorySearchSource.load(stable_records_path)
     results: list[dict[str, Any]] = []
     checks: dict[str, bool] = {}
     for case in cases:
@@ -1734,10 +2885,18 @@ def validate_history_queries(
     }
     if out_dir is not None:
         out_dir.mkdir(parents=True, exist_ok=True)
-        _write_json(out_dir / "query_validation.json", validation)
-        (out_dir / "query_validation.md").write_text(
-            render_validation_markdown(validation), encoding="utf-8"
-        )
+        # standalone validate 也必须发布新 generation，不能穿透稳定 symlink
+        # 改写当前快照中的 Markdown（破坏不可变性）。
+        with tempfile.TemporaryDirectory(prefix=".validation-", dir=out_dir) as raw:
+            candidate = Path(raw)
+            _write_json(candidate / "query_validation.json", validation)
+            (candidate / "query_validation.md").write_text(
+                render_validation_markdown(validation), encoding="utf-8"
+            )
+            is_same_output = records_path.absolute() == (out_dir / "history_records.json").absolute()
+            _publish_staging(candidate, out_dir, [
+                candidate / "query_validation.json", candidate / "query_validation.md",
+            ], expected_records_sha256=validation_records_sha if is_same_output else None)
     return validation
 
 
@@ -1749,15 +2908,106 @@ def _md_table(headers: Sequence[str], rows: Iterable[Sequence[Any]]) -> str:
     return "\n".join(lines)
 
 
+def _mapping_lines(file_report: Mapping[str, Any]) -> list[str]:
+    mapping = file_report.get("mapping") or {}
+    quality = file_report.get("data_quality") or {}
+    if not mapping and not quality:
+        return []
+    lines: list[str] = []
+    if mapping:
+        lines.extend(
+            [
+                f"### {file_report.get('source_id')} / {mapping.get('sheet')}",
+                "",
+                f"- 表头行：{mapping.get('header_row')}；映射来源：{mapping.get('mapping_source')}",
+                f"- 未匹配表头：{mapping.get('unmatched_headers') or '无'}",
+                f"- 重复列：{mapping.get('duplicate_columns') or '无'}",
+                f"- 隐藏列：{mapping.get('hidden_columns') or '无'}；隐藏行：{mapping.get('hidden_rows') or '无'}",
+                "",
+                _md_table(
+                    ["字段", "真实列名", "列", "隐藏"],
+                    [
+                        (name, item.get("header"), item.get("column"), item.get("hidden"))
+                        for name, item in (mapping.get("columns") or {}).items()
+                    ],
+                ),
+                "",
+            ]
+        )
+    if quality:
+        hs = quality.get("hs") or {}
+        tax = quality.get("tax_classification_code") or {}
+        lines.extend(
+            [
+                "### 数据质量盘点",
+                "",
+                _md_table(
+                    ["指标", "值"],
+                    [
+                        ("行分类", quality.get("row_classification", {})),
+                        ("合并单元格范围/单元格数", f"{quality.get('merged_range_count', 0)} / {quality.get('merged_cell_count', 0)}"),
+                        ("公式列", quality.get("formula_cells", {})),
+                        ("公式缺缓存", quality.get("formula_cache_missing", {})),
+                        ("外部链接部件", quality.get("external_link_parts", [])),
+                        ("HS 长度分布", hs.get("lengths", {})),
+                        ("HS 非 10 位行", hs.get("non_10_digit_rows", [])),
+                        ("HS 文本/数值单元格", f"{hs.get('text_cells', 0)} / {hs.get('numeric_cells', 0)}"),
+                        ("税收分类代码长度分布", tax.get("normalized_lengths", {})),
+                        ("税收分类代码非 19 位行数", len(tax.get("non_19_digit_rows", []))),
+                        ("完全同内容组/多出行", f"{quality.get('duplicate_content_groups', 0)} / {quality.get('duplicate_content_extra_rows', 0)}"),
+                        ("空必填字段", quality.get("empty_required", {})),
+                        ("空可选字段", quality.get("empty_optional", {})),
+                        ("缺失列", quality.get("column_missing", {})),
+                        ("放行情况原文值", quality.get("customs_release_status_values", {})),
+                        ("图片列状态", quality.get("image_column_status", "")),
+                    ],
+                ),
+                "",
+            ]
+        )
+        if tax.get("non_19_digit_rows"):
+            lines.append(
+                "税收分类代码格式异常（前 10 条；只报告，不用于身份、不猜补）："
+            )
+            lines.append("")
+            lines.append(
+                _md_table(
+                    ["行", "原文"],
+                    [
+                        (item.get("row"), item.get("raw"))
+                        for item in tax["non_19_digit_rows"][:10]
+                    ],
+                )
+            )
+            lines.append("")
+        if quality.get("duplicate_content_samples"):
+            lines.append("完全同内容行组（前 10 组；保留多行并报告，不做危险合并）：")
+            lines.append("")
+            lines.append(
+                _md_table(
+                    ["行号"],
+                    [(", ".join(str(row) for row in item.get("rows", [])),) for item in quality["duplicate_content_samples"][:10]],
+                )
+            )
+            lines.append("")
+    return lines
+
+
 def render_markdown_report(report: Mapping[str, Any]) -> str:
     totals = report.get("totals", {})
     declaration = report.get("human_declaration")
+    fmt = report.get("input_format", "")
+    source_label = "汇总表商品行" if fmt == FORMAT_CONSOLIDATED else "P04 源记录"
     lines = [
-        f"# 历史模板导入报告（{report.get('batch_id')}）",
+        f"# 历史数据导入报告（{report.get('batch_id')}）",
         "",
+        f"- 输入格式：`{fmt}`；批次状态：`{report.get('status')}`",
         f"- 数据集类型：`{report.get('dataset_kind')}`（真实/合成标记写入 P15 dataset.synthetic）",
         f"- 生成时间：{report.get('generated_at')}",
         f"- 输出记录：`{report.get('records_path')}`",
+        f"- 对账：上一版 {totals.get('previous_total_in_output', 0)} + 本次新增 "
+        f"{totals.get('records_added', 0)} = 输出 {totals.get('records_total_in_output', 0)}"
+        f"（reconciliation_ok={totals.get('reconciliation_ok')}）",
         f"- 数据库：未接入；本次输出是 P15 可读取的 JSON 快照，后续可通过 `HistoryRecordStore` 接库。",
         "",
         "## 人工声明",
@@ -1785,12 +3035,18 @@ def render_markdown_report(report: Mapping[str, Any]) -> str:
                     ("文件数", totals.get("files", 0)),
                     ("解析成功文件", totals.get("parsed_files", 0)),
                     ("解析失败文件", totals.get("parse_failed_files", 0)),
-                    ("P04 源记录", totals.get("source_records", 0)),
-                    ("本次新写入", totals.get("records_imported_this_run", 0)),
-                    ("跳过", totals.get("records_skipped", 0)),
+                    (source_label, totals.get("source_records", 0)),
+                    ("本次新增", totals.get("records_added", 0)),
+                    ("替换", totals.get("records_replaced", 0)),
                     ("重复", totals.get("records_duplicate", 0)),
                     ("跨来源业务重复", totals.get("records_duplicate_business_content", 0)),
                     ("变化", totals.get("records_changed", 0)),
+                    ("冲突", totals.get("records_conflicts", 0)),
+                    ("业务键变体", totals.get("records_business_key_variants", 0)),
+                    ("来源中消失（保留旧记录）", totals.get("records_missing_from_source", 0)),
+                    ("拒绝/跳过", totals.get("records_rejected", 0)),
+                    ("忽略行（空/合计/说明/重复表头）", totals.get("records_ignored", 0)),
+                    ("待核记录", totals.get("records_needs_review", 0)),
                     ("批内重复", totals.get("records_duplicate_within_batch", 0)),
                     ("采集痕迹更新", totals.get("records_provenance_updated", 0)),
                     ("输出总记录", totals.get("records_total_in_output", 0)),
@@ -1801,26 +3057,29 @@ def render_markdown_report(report: Mapping[str, Any]) -> str:
             "## 文件与图片",
             "",
             _md_table(
-                ["source_id", "文件", "状态", "源记录", "可导入", "本次写入", "跳过", "图片状态"],
+                ["source_id", "文件", "格式", "状态", "源记录", "可导入", "本次写入", "拒绝", "忽略", "图片状态"],
                 [
                     (
                         item.get("source_id"),
                         item.get("filename"),
+                        item.get("format", fmt),
                         item.get("status"),
-                        item.get("source_record_count"),
-                        item.get("imported_count"),
+                        item.get("source_record_count", 0),
+                        item.get("importable_count", 0),
                         item.get("written_count", 0),
-                        item.get("skipped_count"),
+                        item.get("skipped_count", 0),
+                        item.get("ignored_row_count", 0),
                         item.get("image", {}).get("counts", {}),
                     )
                     for item in report.get("files", [])
                 ],
             ),
             "",
-            "## 重复/变化处理",
-            "",
         ]
     )
+    for file_report in report.get("files", []):
+        lines.extend(_mapping_lines(file_report))
+    lines.extend(["## 重复/变化处理", ""])
     duplicates = report.get("duplicates") or []
     if duplicates:
         lines.append(
@@ -1833,12 +3092,58 @@ def render_markdown_report(report: Mapping[str, Any]) -> str:
                         item.get("action"),
                         item.get("source", {}),
                     )
-                    for item in duplicates
+                    for item in duplicates[:40]
                 ],
             )
         )
+        if len(duplicates) > 40:
+            lines.append(
+                f"\n（仅显示前 40 条，共 {len(duplicates)} 条；完整见 `import_report.json`）"
+            )
     else:
         lines.append("无重复或变化记录。")
+    conflicts = report.get("conflicts") or []
+    lines.extend(["", "## 冲突", ""])
+    if conflicts:
+        lines.append(
+            _md_table(
+                ["kind", "action", "record_id", "说明"],
+                [
+                    (
+                        item.get("kind"),
+                        item.get("action"),
+                        item.get("record_id"),
+                        "业务键相同但内容不同；默认保留旧记录，不静默覆盖",
+                    )
+                    for item in conflicts[:40]
+                ],
+            )
+        )
+        if len(conflicts) > 40:
+            lines.append(f"\n（仅显示前 40 条，共 {len(conflicts)} 条）")
+    else:
+        lines.append("无。")
+    missing = report.get("missing_from_source") or []
+    lines.extend(["", "## 来源中消失的记录（保留旧记录）", ""])
+    if missing:
+        lines.append(
+            _md_table(
+                ["record_id", "历史HS", "品名", "来源"],
+                [
+                    (
+                        item.get("record_id"),
+                        item.get("historical_hs"),
+                        item.get("historical_name"),
+                        item.get("source", {}),
+                    )
+                    for item in missing[:40]
+                ],
+            )
+        )
+        if len(missing) > 40:
+            lines.append(f"\n（仅显示前 40 条，共 {len(missing)} 条）")
+    else:
+        lines.append("无。")
     lines.extend(["", "## 文件级问题", ""])
     file_issue_rows = []
     for file_report in report.get("files", []):
@@ -1889,7 +3194,7 @@ def render_markdown_report(report: Mapping[str, Any]) -> str:
             _md_table(["record_id", "来源", "状态", "严重度", "问题", "缺字段"], issue_rows[:80])
         )
         if len(issue_rows) > 80:
-            lines.append(f"\n（仅显示前 80 条，完整见 `{report.get('records_path')}` 同目录的 import_report.json）")
+            lines.append(f"\n（仅显示前 80 条，完整见 import_report.json）")
     else:
         lines.append("无。")
     lines.extend(
@@ -1898,9 +3203,12 @@ def render_markdown_report(report: Mapping[str, Any]) -> str:
             "## 口径",
             "",
             "- 历史成功记录只作参考，不直接作为当前归类结论。",
-            "- 原模板缺失日期/税则版本/适用范围/有效期时保留为空或“未提供”，不推断。",
-            "- 图片按“页签+行号+图片列”精确关联；列缺失 ≠ 无图，读取失败 ≠ 无图。",
-            "- 重复导入按稳定 record_id/source_key 与业务指纹识别；重复、变化、批内重复和跨来源业务重复均写入本报告。",
+            "- 文件名“历史成功数据”不等于海关放行凭证；成功口径来自人工声明，未独立核验。",
+            "- 汇总表缺失日期/税则版本/适用范围/有效期时保留为空或“未提供”，不推断。",
+            "- 合并单元格只取锚点值；续行留空并报告，不向下填 HS/要素/图片。",
+            "- 图片按“页签+行号+图片列”精确关联；列缺失 ≠ 无图，读取失败 ≠ 无图；外部 URL 不联网。",
+            "- 汇总表身份使用业务字段内容哈希 + 同内容出现序号；排序/插行/重新保存不改变身份；",
+            "  来源中消失的记录只报告保留，不自动物理删除；显式 --replace-changed 才替换。",
         ]
     )
     return "\n".join(lines) + "\n"
@@ -1912,6 +3220,7 @@ def render_validation_markdown(validation: Mapping[str, Any]) -> str:
         "",
         f"- 记录文件：`{validation.get('records_path')}`",
         f"- 生成时间：{validation.get('generated_at')}",
+        f"- 执行状态：{validation.get('status', 'executed')}",
         f"- 全部通过：{validation.get('all_passed')}",
         f"- 缺失必需用例：{validation.get('missing_required_cases') or '无'}",
         "",
@@ -1944,7 +3253,17 @@ def _parser() -> argparse.ArgumentParser:
     imp = sub.add_parser("import", help="导入历史模板并生成 P15 JSON、导入报告与查询验证")
     imp.add_argument("--files", nargs="+", required=True, help="历史 Excel 文件（可多份）")
     imp.add_argument("--manifest", help="可选 manifest.json：用于 source_id、原始文件名、SHA256 与页签核对")
-    imp.add_argument("--out-dir", help="输出目录；默认 data/private/p15-import/<batch_id>")
+    imp.add_argument("--out-dir", help="输出目录；默认 data/private/p15-import/<storage_key>")
+    imp.add_argument(
+        "--input-format",
+        choices=FORMAT_CHOICES,
+        default=FORMAT_AUTO,
+        help="输入格式：legacy-template=旧多页签模板；consolidated=历史汇总表；auto=仅在结构明确时自动判断",
+    )
+    imp.add_argument("--mapping", help="汇总表列映射 JSON；可指定 sheet/header_row/fields 别名")
+    imp.add_argument("--sheet", help="汇总表页签；默认自动选择唯一可识别页签")
+    imp.add_argument("--header-row", type=int, help="汇总表表头行；默认自动识别唯一候选")
+    imp.add_argument("--image-root", help="显式允许读取的本地图片根目录；URL 仍不联网")
     imp.add_argument("--dataset-kind", choices=("real", "synthetic"), default="real")
     imp.add_argument("--dataset-id", help="覆盖 P15 dataset_id")
     imp.add_argument("--declared-success", action="store_true", help="真实模板必须显式声明：Jay 已确认试点案例可视为通过")
@@ -1954,7 +3273,9 @@ def _parser() -> argparse.ArgumentParser:
     imp.add_argument("--copy-images", action="store_true", help="把可用图片写到输出目录 images/（不提交 Git）")
     imp.add_argument("--replace-changed", action="store_true", help="同 source_key 内容变化时替换旧记录")
     imp.add_argument("--keep-business-duplicates", action="store_true", help="不同来源文件业务内容相同时仍保留多份来源")
-    imp.add_argument("--fresh", action="store_true", help="忽略已有输出，重新开始")
+    imp.add_argument("--fresh", action="store_true", help="忽略已有输出，重新开始（不同来源需 --allow-dataset-replace）")
+    imp.add_argument("--allow-dataset-replace", action="store_true", help="允许 --fresh 覆盖不同来源数据集")
+    imp.add_argument("--accept-conflicts", action="store_true", help="业务键相同但内容不同的记录也保留（默认保留旧记录）")
     imp.add_argument("--skip-validation", action="store_true", help="不执行命中/无命中/关键差异查询验证")
     imp.add_argument("--declaration-label", default="申报要素")
     imp.add_argument("--packing-label", default="装箱明细")
@@ -1969,16 +3290,19 @@ def _parser() -> argparse.ArgumentParser:
 def _print_summary(outcome: ImportOutcome) -> None:
     totals = outcome.report["totals"]
     print(f"batch: {outcome.report['batch_id']}")
+    print(f"status: {outcome.report.get('status')}")
+    print(f"format: {outcome.report.get('input_format')}")
     print(f"records: {outcome.records_path}")
     print(f"report: {outcome.report_json_path}")
     if outcome.validation_json_path:
         print(f"validation: {outcome.validation_json_path}")
     print(
         "summary: files={files} parsed={parsed_files} source_records={source_records} "
-        "written={records_imported_this_run} duplicate={records_duplicate} "
+        "added={records_added} replaced={records_replaced} duplicate={records_duplicate} "
         "business_duplicate={records_duplicate_business_content} "
-        "provenance_updated={records_provenance_updated} "
-        "changed={records_changed} skipped={records_skipped} total={records_total_in_output}".format(
+        "changed={records_changed} conflicts={records_conflicts} missing={records_missing_from_source} "
+        "rejected={records_rejected} needs_review={records_needs_review} "
+        "total={records_total_in_output} previous={previous_total_in_output}".format(
             **totals
         )
     )
@@ -2005,6 +3329,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     files = [Path(item) for item in args.files]
     requested_out = Path(args.out_dir) if args.out_dir else None
     manifest = Path(args.manifest) if args.manifest else None
+    try:
+        mapping = load_mapping_config(Path(args.mapping) if args.mapping else None)
+        if args.sheet:
+            mapping["sheet"] = args.sheet
+        if args.header_row:
+            mapping["header_row"] = args.header_row
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
     if requested_out is None:
         # 批 ID 需要先读 manifest/哈希；这里先算一次元数据，再定默认目录。
         manifest_payload = load_manifest(manifest)
@@ -2017,7 +3350,23 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
             for item in files
         ]
-        requested_out = Path("data/private/p15-import") / storage_key_for(metas, args.dataset_kind)
+        detected_formats = set()
+        try:
+            for item in files:
+                workbook = Workbook.open(item)
+                detected = (
+                    detect_workbook_format(workbook, mapping)
+                    if args.input_format == FORMAT_AUTO
+                    else args.input_format
+                )
+                detected_formats.add(detected)
+        except (ConsolidatedFormatError, OoxmlError, OSError, ValueError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        default_key = storage_key_for(metas, args.dataset_kind)
+        if FORMAT_CONSOLIDATED in detected_formats:
+            default_key += "-consolidated"
+        requested_out = Path("data/private/p15-import") / default_key
     request = ImportRequest(
         files=files,
         out_dir=requested_out,
@@ -2035,15 +3384,27 @@ def main(argv: Sequence[str] | None = None) -> int:
         declaration_label=args.declaration_label,
         packing_label=args.packing_label,
         dataset_id=args.dataset_id,
+        input_format=args.input_format,
+        mapping=Path(args.mapping) if args.mapping else None,
+        sheet=args.sheet,
+        header_row=args.header_row,
+        image_root=Path(args.image_root) if args.image_root else None,
+        accept_conflicts=args.accept_conflicts,
+        allow_dataset_replace=args.allow_dataset_replace,
     )
     try:
         outcome = import_history_templates(request)
+    except ImportIncompleteError as exc:
+        print(f"incomplete: {exc}", file=sys.stderr)
+        return 1
     except (ValueError, FileNotFoundError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
     _print_summary(outcome)
     totals = outcome.report["totals"]
-    if totals["parse_failed_files"] or totals["records_total_in_output"] == 0:
+    if outcome.report.get("status") != "complete":
+        return 1
+    if totals["records_total_in_output"] == 0:
         return 1
     checks = (outcome.report.get("validation") or {}).get("checks") or {}
     if checks and not all(checks.values()):
