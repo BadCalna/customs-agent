@@ -1,7 +1,7 @@
 # 云端多人测试环境部署（单台云服务器 · Docker Compose）
 
-> **状态（2026-11-17）**：部署准备与备份恢复演练完成，**项目尚未上线**，也没有部署到任何真实服务器。
-> 本目录给出的是一套“在一台云服务器上给少量人员试用”的方案，不是生产方案。
+> **状态（2026-11-17）**：PR #24 已合入但事后审核不通过；本轮 follow-up 修复须经独立复审。**尚未上线，真实容器构建与 Compose 恢复演练仍未验证，不可据本说明直接认定可上线。**
+> 本目录给出的是一套“在一台云服务器上给少量人员试用”的方案，不是生产方案。宿主机须具备 Python >=3.12（运维编排器使用标准库）；优先使用项目 venv，也可设置 `OPERATIONS_PYTHON`。
 > 本机没有 Docker，**容器相关步骤没有在本机实跑过**；实际跑过的部分见
 > [交接/P22.md](../docs/开发文档/交接/P22.md) 的“已验证/未验证”两栏。
 
@@ -11,11 +11,11 @@
 
 | 能力 | 现状 | 说明 |
 |---|---|---|
-| Django + Ninja 应用 | 可用 | gunicorn 运行，不是 `runserver` |
-| PostgreSQL 17 | 可用 | 容器内网，不对外开放端口 |
-| 原件/图片/导出文件持久化 | 可用 | 命名卷 `files`，按版本内容寻址 |
-| 数据库持久化 | 可用 | 命名卷 `pgdata` |
-| 迁移、静态资源、健康检查 | 可用 | 一次性 `migrate` 服务 + `/api/health` |
+| Django + Ninja 应用 | 配置已提供、容器未验证 | gunicorn 运行，不是 `runserver` |
+| PostgreSQL 17 | 配置已提供、容器未验证 | 容器内网，不对外开放端口 |
+| 原件/图片/导出文件持久化 | 配置已提供、容器未验证 | 命名卷 `files`，按版本内容寻址 |
+| 数据库持久化 | 配置已提供、容器未验证 | 命名卷 `pgdata` |
+| 迁移、静态资源、健康检查 | 配置已提供、容器未验证 | 一次性 `migrate` 服务 + `/api/health` |
 | 后台任务（Redis + worker） | **不可用** | P13 未交付；Compose 里只是预留位（`profile=queue`） |
 | 上传 / 认领 / 正式页面 | **未交付** | P06、P07/P08/P11 还在开发；当前没有上传入口 |
 | 演示壳 `/demo/`、工作台 `/workbench/` | **按设计 404** | 两者只在 `DEBUG=1` 时可用，云端必须 `DEBUG=0` |
@@ -95,7 +95,7 @@ sudo ufw allow 8080/tcp
 sudo mkdir -p /srv/customs-agent && sudo chown "$USER" /srv/customs-agent
 cd /srv/customs-agent
 git clone https://github.com/BadCalna/customs-agent.git .
-git checkout main          # 用主分支；P22 的部署文件合并后即可用
+git checkout <已审查通过的提交>  # follow-up PR 未合并时，不要用旧 main 直接上线
 
 # 3.2 生成配置文件
 cp deploy/.env.example deploy/.env
@@ -112,18 +112,26 @@ openssl rand -base64 24 | tr -d '\n'    # → CUSTOMS_PG_PASSWORD
 ```ini
 DJANGO_SECRET_KEY=<粘贴上面第一行输出>
 CUSTOMS_PG_PASSWORD=<粘贴上面第二行输出>
-CUSTOMS_ALLOWED_HOSTS=203.0.113.10     # 改成服务器公网 IP；有域名时写成 203.0.113.10,test.example.com
+CUSTOMS_ALLOWED_HOSTS=203.0.113.10     # 必填真实公网 IP/域名；设置模块校验后自动加入 localhost/127.0.0.1，供容器探针使用
 ```
 
-确认 `deploy/.env` 不会被提交：
+以上 IP 为文档保留地址，所有 `test.example.com` 也是示例。实际部署必须换成自有且获授权的域名/IP；明显 `change-me`/`*.example.com`/通配符会被启动校验拒绝。
+
+配置文件限制为本机运维可读（`chmod 600 deploy/.env`）。确认配置与备份都不会被提交：
 
 ```bash
-git check-ignore -v deploy/.env     # 应输出 .gitignore:6:.env  deploy/.env
+git check-ignore -v deploy/.env deploy/backups/probe/db.dump deploy/.state/probe deploy/certs/probe.crt
+# 四项都应命中规则；输出行号随规则调整会变化
 ```
 
 ---
 
 ## 4. 首次启动
+
+全部运维/启动命令统一显式 `--env-file deploy/.env`，避免仓库根开发 `.env` 成为 Compose 插值源。shell 中已导出的同名变量仍有更高优先级：运行前应清理意外的 `CUSTOMS_*` 导出值，核对实际配置但不要把含密钥的 config 输出粘到工单。
+
+
+镜像只授权 UID 10001 写入 `/srv/customs/files`、`/srv/customs/restores`、`/app/staticfiles`，代码与卷根保持 root 所有。**命名卷只有首次创建才继承镜像目录**：已有旧卷升级前须由运维检查并预建 `/srv/customs/restores`（属主 10001:10001），不能假定重建镜像会自动修正旧卷权限。自定义文件根也须位于持久卷的严格子目录、预建并授权；不能把文件根设置为卷根。
 
 ```bash
 cd /srv/customs-agent
@@ -132,10 +140,10 @@ cd /srv/customs-agent
 docker compose -f deploy/docker-compose.yml --env-file deploy/.env config >/dev/null && echo "compose 配置 OK"
 
 # 4.2 构建并启动（首次会拉镜像 + 装依赖，5～15 分钟）
-docker compose -f deploy/docker-compose.yml up -d --build
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --build
 
 # 4.3 看启动顺序是否按预期：db 健康 → migrate 跑完 → app 健康 → web 起来
-docker compose -f deploy/docker-compose.yml ps
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env ps
 ```
 
 启动后 `ps` 里应看到 `db`(healthy)、`app`(healthy)、`web`(healthy)，`migrate` 状态是 `exited (0)`——
@@ -143,7 +151,7 @@ docker compose -f deploy/docker-compose.yml ps
 
 ```bash
 # 4.4 迁移是否真的执行过
-docker compose -f deploy/docker-compose.yml logs migrate | tail -20
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env logs migrate | tail -20
 ```
 
 ---
@@ -151,7 +159,7 @@ docker compose -f deploy/docker-compose.yml logs migrate | tail -20
 ## 5. 启动后检查（逐条做，别跳）
 
 ```bash
-BASE=http://127.0.0.1:8080        # 服务器上用内网地址测；CUSTOMS_HTTP_PORT 改过就跟着改
+BASE=http://127.0.0.1:8080        # 修复后设置模块会自动允许回环 Host；端口变化须同步这里
 
 # 5.1 健康检查
 curl -sS "$BASE/api/health"                       # 期望 {"status":"ok"}
@@ -179,15 +187,15 @@ curl -sS -o /dev/null -w '%{http_code}\n' "$BASE/workbench/"      # 期望 404
 
 ```bash
 # 6.1 建管理员（交互式，密码自己输入，不要写进任何文件）
-docker compose -f deploy/docker-compose.yml run --rm app python manage.py createsuperuser
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env run --rm app python manage.py createsuperuser
 
 # 6.2 需要演示任务结构时再建演示数据（可选）
-docker compose -f deploy/docker-compose.yml run --rm app python manage.py seed_demo
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env run --rm app python manage.py seed_demo
 
 # 6.3 立即改掉演示账号的密码（每个账号一次），用强口令
-docker compose -f deploy/docker-compose.yml run --rm app python manage.py changepassword supplier_a
-docker compose -f deploy/docker-compose.yml run --rm app python manage.py changepassword operator_a
-docker compose -f deploy/docker-compose.yml run --rm app python manage.py changepassword expert
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env run --rm app python manage.py changepassword supplier_a
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env run --rm app python manage.py changepassword operator_a
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env run --rm app python manage.py changepassword expert
 ```
 
 给测试人员的规矩（建议直接写进通知）：
@@ -204,30 +212,35 @@ docker compose -f deploy/docker-compose.yml run --rm app python manage.py change
 纯 IP + HTTP 也能测。要上 HTTPS 时：
 
 1. 准备证书文件（不要把证书提交进仓库；放到 `deploy/certs/`，该目录已在 `.gitignore`/`.dockerignore` 里排除）。
-2. `cp deploy/nginx/https.conf.example deploy/nginx/default.conf`，改里面的 `server_name`。
+2. `cp deploy/nginx/https.conf.example deploy/nginx/https.conf`，改里面的 `server_name`；保持受版本控制的 HTTP 配置不动。
 3. compose 的 `web` 增加 443 映射，并把证书挂进容器：
    ```yaml
-   ports: ["${CUSTOMS_HTTPS_PORT:-8443}:443"]
+   ports: ["${CUSTOMS_HTTPS_PORT:-443}:443"]  # 保留原有 HTTP 端口映射与卷，新增此项
    volumes:
+     - static:/usr/share/nginx/static:ro
      - ./certs:/etc/nginx/certs:ro
+     - ./nginx/https.conf:/etc/nginx/conf.d/default.conf:ro
    ```
+   **必须替换**原来的 `./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro` 挂载为 `https.conf`；不能只复制文件后仍挂 HTTP 配置，也不要同时挂两份到同一个目标。保留 static 卷和 HTTP 端口映射，另加 HTTPS 443 映射。
 4. `deploy/.env` 里设置：
    ```ini
    CUSTOMS_HTTPS=1
    CUSTOMS_CSRF_TRUSTED_ORIGINS=https://test.example.com
    CUSTOMS_ALLOWED_HOSTS=test.example.com
    ```
-5. `docker compose -f deploy/docker-compose.yml up -d --force-recreate web` 后重新跑第 5 节。
+5. 修改环境变量后重建 **app 与 web**（只重建 web 不会让 Django 重新读环境变量）：
+   `docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --no-deps --force-recreate app web`。
+   用 `BASE=https://test.example.com` 重新执行第 5 节；HTTP `/nginx-health` 仍保持 200。
 
 **CSRF 常见坑**：`CUSTOMS_CSRF_TRUSTED_ORIGINS` 必须与浏览器地址栏的协议 + 域名完全一致
-（`https://test.example.com`，不要带路径、不要漏协议）。不一致的表现是：登录成功，但一提交就 403。
+（`https://test.example.com`；若外部端口为 8443，必须写 `https://test.example.com:8443`，不要带路径、不要漏协议）。不一致的表现是：登录成功，但一提交就 403。
 
 ---
 
 ## 8. 日常操作
 
 ```bash
-DC="docker compose -f deploy/docker-compose.yml"
+DC="docker compose -f deploy/docker-compose.yml --env-file deploy/.env"
 cd /srv/customs-agent
 
 $DC ps                      # 状态
@@ -241,6 +254,25 @@ $DC down -v                 # 连卷一起删 —— 会丢数据，只在确认
 
 ### 8.1 升级（按顺序做，别跳）
 
+若从 PR #24 旧镜像升级，其 files 卷根曾整体授予 app。重建镜像不会更改旧卷元数据。**仅首次升级**先确认没有写入者、挂载的确是本部署 files 卷，再执行以下精确目录权限迁移；禁止递归 chown 全卷，避免破坏备份恢复证据：
+
+```bash
+# 已先完成备份并确认可恢复，再停写；启用队列时也停止worker。
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env stop app web
+# --no-deps 不拉起业务；只有这个受控迁移步骤用root。
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env run --rm --no-deps --user 0 app sh -eu -c '
+  test ! -L /srv/customs
+  test ! -L /srv/customs/files
+  test ! -L /srv/customs/restores
+  mkdir -p /srv/customs/files /srv/customs/restores
+  chown 0:0 /srv/customs
+  chmod 0755 /srv/customs
+  chown 10001:10001 /srv/customs/files /srv/customs/restores
+  chmod 0700 /srv/customs/files /srv/customs/restores
+'
+# 上述步骤不在本机无Docker环境实跑；必须在目标环境验证。
+```
+
 ```bash
 cd /srv/customs-agent
 
@@ -251,10 +283,10 @@ scripts/operations/backup.sh --label before-upgrade
 git fetch origin && git checkout main && git pull --ff-only
 
 # 3) 重新构建并滚动重启（migrate 会自动先跑，app 等它成功后启动）
-docker compose -f deploy/docker-compose.yml up -d --build
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --build
 
 # 4) 按第 5 节复检；再确认本次升级是否新增迁移
-docker compose -f deploy/docker-compose.yml logs migrate | tail -20
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env logs migrate | tail -20
 ```
 
 ### 8.2 回退（代码回退 + 数据回退，两件事分开）
@@ -264,7 +296,7 @@ docker compose -f deploy/docker-compose.yml logs migrate | tail -20
 ```bash
 cd /srv/customs-agent
 git checkout <上一个已知good的提交或标签>
-docker compose -f deploy/docker-compose.yml up -d --build
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --build
 ```
 
 > 数据库里已经执行过的新迁移**不会**自动撤销。Django 容忍“库里有代码里没有的迁移记录”，
@@ -274,21 +306,23 @@ docker compose -f deploy/docker-compose.yml up -d --build
 
 ```bash
 # 1) 停写
-docker compose -f deploy/docker-compose.yml stop app web
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env stop app web
+# P13 启用后还须停止所有 worker/其他外部写入者；本轮不代替业务侧停写协调。
 
 # 2) 把升级前的备份恢复到一个新库 + 新目录（脚本拒绝覆盖已存在的目标）
 scripts/operations/restore.sh deploy/backups/<升级前的时间戳>-before-upgrade
-#    输出会给出：恢复的库名（如 customs_agent_restore_20261117xxxxxx）与目录（/srv/customs/restore-...）
+#    stdout 为 JSON：从 target_db / target_files / state_file 字段取得目标；不要 tail 解析日志
 
 # 3) 校验恢复结果
 scripts/operations/verify_restore.sh deploy/backups/<那个备份> \
-  --target-db <上一步的库名> --target-files <上一步的目录>
+  --target-db <上一步的库名> --target-files <上一步的目录> --state-file <上一步的state_file>
 
 # 4) 把应用指向恢复出来的库与文件目录（deploy/.env）
 #    CUSTOMS_PG_NAME=customs_agent_restore_20261117xxxxxx
-#    CUSTOMS_FILE_ROOT=/srv/customs/restore-20261117xxxxxx
+#    CUSTOMS_FILE_ROOT=/srv/customs/restores/restore-20261117xxxxxx
 #    改完重建 app（不要动 db 容器）
-docker compose -f deploy/docker-compose.yml up -d app web
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --no-deps --force-recreate app web
+# 不要重建 migrate/db，不要自动把新代码迁移施加到刚恢复的旧库；代码版本必须与备份兼容。
 ```
 
 原来的库与原件目录**没有被删除**，排查完再决定怎么清理。这是本方案唯一的回退路径，
@@ -301,28 +335,28 @@ docker compose -f deploy/docker-compose.yml up -d app web
 ### 9.1 备份什么
 
 - **数据库**：`pg_dump -Fc`（自定义格式，用 `pg_restore` 还原）。
-- **受控文件**：`/srv/customs` 卷里的 `files/`（原件、提取出的图片、导出副本），排除 `incoming/` 暂存区。
-- **元信息**：表行数 + 每个文件的 sha256 清单（`counts.json`）、备份清单（`manifest.sha256`）、`meta.env`。
+- **受控文件**：应用实际 `CUSTOMS_FILE_ROOT` 指向的目录（必须位于 `/srv/customs/` 持久卷内，不能是卷根），排除 `incoming/` 暂存区。回退换目录后也必须备份新目录，禁止硬编码旧路径。
+- **元信息**：表行数与稳定行内容指纹 + 每个文件的 sha256（`counts.json`），完整性校验清单与元信息。实际格式和 CLI 契约见 [operations README](../scripts/operations/README.md)；旧版只有行数的备份不能自动冒充新版完整性证据。
 
 ```bash
-scripts/operations/backup.sh              # 默认先短暂停写再备份（最安全）
+scripts/operations/backup.sh              # 默认先短暂停写再备份；stdout 返回 JSON，日志走 stderr 并留档
 scripts/operations/backup.sh --no-quiesce # 不停写（演示库可用；数据库与文件不再同一时点）
 scripts/operations/backup.sh --label before-upgrade
 ```
 
-备份落在 `deploy/backups/<UTC时间戳>-<标签>/`（该目录已被 Git 忽略）。
+备份落在 `deploy/backups/<时间戳>-<标签>-<随机后缀>/`（目录 0700、文件 0600，已被 Git 忽略）；stdout 为 JSON，不再用 `tail -1` 从日志猜路径。未完成/失败备份明确标记，不得用于恢复。日志与状态保存在独立 `.state` 目录（路径和覆盖变量见 operations README）。
 
 ### 9.2 一致性边界（必须理解）
 
 | 做法 | 数据库与文件是否同一时点 | 服务影响 | 适用 |
 |---|---|---|---|
-| `backup.sh`（默认停写） | **是**：先停 `app`/`web`，再依次 dump 库、打包文件 | 停写期间不可访问（秒级～几分钟，取决于文件体积） | 正式备份、升级前 |
-| `backup.sh --no-quiesce` | **否**：两个相邻时点，可能出现“库里引用了还没落盘的文件” | 无 | 演示库、看一眼数量 |
+| `backup.sh`（默认停写） | **有条件是**：停止当前运行的 app/web/worker，再 dump/打包/取清单；仍须确保没有外部写库/写文件进程 | 停写期间不可访问（秒级～几分钟，取决于文件体积） | 正式备份、升级前 |
+| `backup.sh --no-quiesce` | **否**：数据库、文件包和清单是三个相邻时点，可能相互不一致 | 无 | 演示库、看一眼数量 |
 | 只备份数据库 | 只有库 | 无 | 不推荐：文件丢了就再也对不上 |
 
 另外两条边界：
 
-- 备份期间**不删除**任何现有库或文件；脚本里的 `pg_dump`/`tar` 只读。
+- 备份阶段只读业务库与原件；恢复/演练清理仅限有本次创建身份凭证的隔离目标，不得触碰生产库/原件。
 - 容器内 `incoming/` 是“上传已落暂存、事务未提交”的半成品，**不进备份**；
   恢复后这些半成品会消失，属于预期行为（它们本来就不该被当成业务数据）。
 
@@ -336,19 +370,29 @@ scripts/operations/drill.sh
 scripts/operations/drill.sh --keep
 ```
 
-判定通过的标志：`演练结果：通过`，且比对输出里“表行数与文件哈希均与备份相符”。
-判定器会真的失败：改一行行数或改一个文件哈希，`compare_counts.py` 就返回非 0 并列出差异。
+判定通过须同时有脚本零退出码与持久化演练记录，不以终端里孤立的一行绿字为证。
+清单必须校验表行数、内容指纹与文件哈希，并确认实际统计的是目标恢复库和目标文件目录。空文件目录可以合法，但清单缺少文件字段、目录不存在或实际目标不符不能报通过。
+真实 Compose 分支未实跑前，本机原生验证和假 Docker 桩测试均不能替代容器恢复验收。
 
 ### 9.4 恢复到独立新环境（换机器 / 换服务器）
 
 ```bash
-# 新服务器上：装 Docker、克隆代码、写 deploy/.env（同第 2、3 节）
-scripts/operations/backup.sh ...            # 老环境先备份
-# 把整个备份目录拷到新服务器（scp/对象存储都可以），然后：
+# 新服务器上：装 Docker、Python>=3.12、克隆代码、写 deploy/.env（同第 2、3 节）
+# 先构建应用镜像，但不启动app/web，不要先执行migrate修改恢复库。
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env build app
+# 运维脚本会exec db，必须先启动数据库并等待健康（Compose>=2.20）。
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --wait db
+# 用一次性容器按8.1的精确目录步骤确认files/restores已在持久卷中初始化且UID10001可写。
+# 把老环境完整备份目录拷到新服务器（含COMPLETE、manifest等），然后：
 scripts/operations/restore.sh /path/to/backup-dir
-scripts/operations/verify_restore.sh /path/to/backup-dir --target-db ... --target-files ...
-# 改 deploy/.env 指向恢复出来的库/目录，up -d，再跑第 5 节 + 抽查一条业务数据：
-#   任务列表 → V1/V2 → 商品行 → 附图能打开 → 提交快照 → 专家决定 → 历史日志
+scripts/operations/verify_restore.sh /path/to/backup-dir --target-db ... --target-files ... --state-file ...
+# 校验通过且代码与备份结构兼容后，改deploy/.env指向恢复库/目录。
+# 只收集静态文件，不执行migrate；新机static空卷否则管理后台样式会404。
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env run --rm --no-deps app python manage.py collectstatic --noinput
+# 无migrate健康前置的灾备启动，显式不要重跑migrate/db：
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --no-deps app
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --no-deps web
+# app/web健康后，再跑第5节 + 任务→版本→附件→提交快照→专家决定→历史日志抽查。
 ```
 
 ---
@@ -368,7 +412,7 @@ scripts/operations/verify_restore.sh /path/to/backup-dir --target-db ... --targe
 | 应用运行 | gunicorn 3 worker，单机 | 多实例/滚动发布、健康检查接入负载均衡、优雅重启 |
 | 后台任务 | 无（P13 未交付） | Redis 持久化与容量、worker 并发/超时/重试、死信与告警、待派发重扫 |
 | 备份 | 手工脚本，同机目录 | 异地/对象存储、加密、保留策略、定期自动演练、RPO/RTO 指标 |
-| 日志 | `docker compose logs` | 集中日志、保留期、审计（谁的什么操作）、告警 |
+| 日志 | `docker compose logs` + 每容器有限轮转 | 集中日志、保留期、审计（谁的什么操作）、告警 |
 | 监控 | `/api/health` 手工 curl | 存活/就绪探针、指标、告警通道、磁盘水位 |
 | 密钥管理 | `deploy/.env` 文件 | 密钥托管（KMS/Secret Manager）、最小授权、审计 |
 | 迁移策略 | 启动时自动跑 | 发布流水线里受控执行、可回滚的数据迁移脚本、演练过的降级方案 |
@@ -386,6 +430,7 @@ scripts/operations/verify_restore.sh /path/to/backup-dir --target-db ... --targe
 |---|---|---|
 | `up` 直接报 `CUSTOMS_PG_PASSWORD is missing` | `deploy/.env` | 没填必填项，或 `.env` 放错目录（必须在 `deploy/` 下） |
 | 容器起不来，日志里有 `CUSTOMS_ALLOWED_HOSTS` | `logs app` | 没填公网 IP/域名；填了但没重跑 `up -d` |
+| `app` unhealthy / `web` 未启动 | `logs app`、容器 health 日志 | 先查配置必填、回环 Host、数据库、文件根；修复前旧版会因探针 Host 400 卡住 |
 | 浏览器 400 `Bad Request (400)` | `deploy/.env` | 访问用的 Host 不在 `CUSTOMS_ALLOWED_HOSTS` 里 |
 | 登录成功但马上变匿名 / 提交 403 | `deploy/.env` | `CUSTOMS_HTTPS=1` 但实际走 HTTP（Secure cookie 不发送）；或 CSRF 来源不匹配 |
 | `/static/...` 404 | `logs migrate`、`logs web` | 没跑 collectstatic / static 卷没挂 |
@@ -417,7 +462,9 @@ P22 只**新增**文件，不改 P06 正在改的上传/认领/页面/业务逻�
   部署专用开关放在 `deploy/settings_cloud.py`（`from config.settings import *` 后覆盖），
   通过 `DJANGO_SETTINGS_MODULE=deploy.settings_cloud` 生效，开发默认行为完全不变。
 
-潜在冲突只有一处：**如果 P06 之后要在 `config/settings.py` 里加 `DEBUG`/`ALLOWED_HOSTS`/
+与 P06 已确认的文本冲突是 `docs/开发文档/运行与交接说明.md` 的末尾追加，两边内容应保留；P06 合并时应同步新增 `CUSTOMS_*` 变量到部署模板。
+
+另一个语义重叠是：**如果 P06 之后要在 `config/settings.py` 里加 `DEBUG`/`ALLOWED_HOSTS`/
 `CSRF_TRUSTED_ORIGINS` 的环境变量支持**，两套逻辑会重叠。届时应由主控决定把部署开关
 收进 `config/settings.py`，并把 `deploy/settings_cloud.py` 缩减为只保留 `STATIC_ROOT` 等壳配置。
 在此之前，云端用哪个设置模块由 `DJANGO_SETTINGS_MODULE` 决定，互不干扰。
@@ -440,6 +487,19 @@ P22 只**新增**文件，不改 P06 正在改的上传/认领/页面/业务逻�
 | `scripts/operations/restore.sh` | 恢复到**隔离**的新库/新目录，拒绝覆盖 |
 | `scripts/operations/verify_restore.sh` | 恢复后逐项比对 |
 | `scripts/operations/drill.sh` | 备份→恢复→比对→清理的一键演练 |
-| `scripts/operations/table_counts.py` | 表行数 + 文件哈希清单（备份/恢复共用） |
+| `scripts/operations/table_counts.py` | 表行数/稳定内容指纹 + 文件哈希清单（备份/恢复共用） |
 | `scripts/operations/compare_counts.py` | 一致性判定器（一致=0，不一致=1） |
 | `tests/p22/` | 部署资产与设置模块的检查（`make test TASK=P22`） |
+
+
+## 15. Follow-up 验证与边界
+
+- 补审与修复记录见 [P22-followup 回交](../docs/开发文档/交接/P22-followup.md)。
+- 本机验证先安装锁定依赖并设置仅测试用的 `DJANGO_SECRET_KEY`（或 `make setup`），再 `make test TASK=P22`；项目使用 Django test runner，不是 pytest。
+- 单纯 `manage.py test` 无标签不会自动发现全仓。全仓须显式列出 `tests/p00` 等各任务目录，不能把“0 tests”当全仓通过。
+- `deploy/.env` 与证书允许存在于本地；安全测试检查它们没有被 Git 跟踪，而不是要求运维机器没有配置文件。
+- Docker 组等价于 root 权限；不要把配置解析输出原文贴到工单（含密钥）。镜像拉取受网络影响时须配置可信镜像源，不能绕过校验。
+- `seed_demo` 会创建全部五个演示账户；如确需执行，先隔离外部流量，并逐一更改 supplier_a、supplier_b、operator_a、operator_b、expert 的口令后再开放。
+- 当前镜像 Python 3.13、开发验证 Python 3.14；gunicorn 23.0.0 固定版本但未纳入 uv.lock，这是已知复现边界。真实镜像构建必须在目标平台补测。
+- DB locale/collation、HTTPS 证书、静态卷权限和磁盘轮转须在真实容器上验证；不能据 YAML 字符串断言宣称验证完成。
+- 本机 SQLite 历史数据上云：先按 P12 完成 SQLite→隔离 PostgreSQL 的保精度迁移和校验，再用本包进行 PG+附件备份/恢复；不要直接把 P12 本机管理脚本当容器命令。
