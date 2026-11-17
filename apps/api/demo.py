@@ -74,3 +74,8 @@ def demo_fixture(request, path: str):
 def upload_index(request):
     """P06 开发验收入口，仅 live API。"""
     return _served_file(WEB_ROOT, "pages/p06.html")
+
+
+def tasks_index(request):
+    """P08 任务列表、筛选与运行进度页面入口，数据经 web/api.js 统一 client 读取。"""
+    return _served_file(WEB_ROOT, "pages/p08.html")

@@ -649,6 +649,55 @@
         "title": "ExpertVerdict",
         "type": "string"
       },
+      "ExportIn": {
+        "properties": {
+          "decision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision Id"
+          },
+          "excel2016_images": {
+            "default": true,
+            "title": "Excel2016 Images",
+            "type": "boolean"
+          },
+          "kind": {
+            "enum": [
+              "precheck",
+              "issues"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "submission_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Submission Id"
+          }
+        },
+        "required": [
+          "kind",
+          "run_id"
+        ],
+        "title": "ExportIn",
+        "type": "object"
+      },
       "HistoryAuditEvent": {
         "properties": {
           "action": {
@@ -3425,7 +3474,7 @@
     },
     "/api/v1/versions/{version_id}/exports": {
       "post": {
-        "operationId": "apps_api_not_implemented_pending_POST__versions_version_id_exports",
+        "operationId": "apps_reviews_api_exports_create_export",
         "parameters": [
           {
             "in": "path",
@@ -3437,14 +3486,24 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExportIn"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "description": "OK"
           }
         },
-        "summary": "Pending Post  Versions Version Id Exports",
+        "summary": "Create Export",
         "tags": [
-          "未实现端点"
+          "结果导出"
         ]
       }
     },
