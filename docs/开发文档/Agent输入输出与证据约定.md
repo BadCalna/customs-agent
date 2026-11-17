@@ -302,6 +302,6 @@ P18 只有在以下条件同时满足时，才能把 P17 的结果当作“已�
 - 退税：`usable_as_basis=true`（即 `applicability=applies`）**且** `expert_review_required=false`；原值与来源值一致只能作为**机械一致**，专业结论仍需专家；
 - 监管：`usable_as_basis=true` **且** `expert_review_required=false`，且 `outcome` 为 `measures_required`/`declared_none`；
 - 证据可定位且属于当前版本；两用物项 `verdict` 恒为 `unknown`（无论写在 `dual_use[]` 还是 `measures[].category` 里）。
-- 两个标志都必须是“否/否”才能进 `matched`；只满足一个（例如来源事实可作依据，但原值比对没对上）一律按下一条降级处理。
+- 必须同时满足 `usable_as_basis=true` 和 `expert_review_required=false` 才能进 `matched`；只满足一个（例如来源事实可作依据，但原值比对没对上）一律按下一条降级处理。
 
 其余情况：`conditional`/`unknown`/`not_effective` 一律记为分项 `unknown`（**不是 matched，也不是“无风险”**），把 `pending_reasons` 按 `suggested_role` 分流（`supplier` 补资料、`expert` 判专业、`operator` 补来源）。P18 不得用模型补齐 P17 未取得的条款、税率、证件名称，也不得把 `declared_none` 写成“无监管”除非 `usable_as_basis=true`；专家改码后必须以新 HS 重跑本适配器，旧结果只保留为历史。
