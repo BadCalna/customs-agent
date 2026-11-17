@@ -11,7 +11,7 @@
 - 状态/演练证据默认位于 `BACKUP_ROOT` 的兄弟目录 `.state/`（可设置 `OPERATIONS_STATE_ROOT`），
   必须和备份介质分离。恢复/校验只读备份介质，不在介质写 restored 标记。
 - 备份目录 `umask 077`；进行中有 `INCOMPLETE`，失败有 `FAILED`，成功才有 `COMPLETE`。
-  restore 拒绝未完成/失败备份。新增 JSON manifest 精确覆盖 dump/archive/counts；传统 SHA256 清单保留便于人工检查。
+  restore 拒绝未完成/失败备份。JSON manifest 精确覆盖 dump/archive/counts/meta；一致性元数据也必须通过摘要校验。没有一致性证据的旧备份不能充当新版完整恢复验收产物；传统 SHA256 清单保留便于人工检查。
 - Compose 从 `docker compose config --format json` 取得实际 app 数据库和文件根，
   不依赖 db 容器的初始化 POSTGRES_DB 等于当前 app 库名。原件根必须处于可写持久卷内，
   恢复目标必须在同卷边界内且与原件根无相同/祖先/后代关系；容器内再解析实际路径，拒绝符号链接和越界。
@@ -20,7 +20,8 @@
   native 的恢复边界默认原件根的父目录，可通过 `OPERATIONS_RESTORE_ROOT` 收紧。
 - 恢复只创建全新库和全新目录（已存在的空目录也不抢占）；拒绝生产库、系统库、SQL 非安全标识符、超长名称。
   解包拒绝绝对路径、`..`、软/硬链接和特殊文件。`pg_restore --exit-on-error`；失败只按 OID/inode 身份清理自身创建目标。
-- 停写前记录运行服务；除 db/redis 外全部停止（含 worker 和未来写入者），只 `start` 原运行服务，不 `up` 意外启动原来关闭服务。
+- 两种模式都要求可执行的一致性边界，`--no-quiesce` 失败，不能生成 COMPLETE。native 取得 public 表 SHARE 锁、序列锁及本机文件排他锁，将导出的事务 snapshot 传给 `pg_dump`，归档后比较前后数据库/文件指纹，释放锁成功后才标记 COMPLETE；任何一步失败都留 FAILED。文件写入者必须已加载本版本的 storage 协作锁；它只覆盖同机同用户代码路径，旧进程、外部手工文件修改、跨主机写入及 DDL 仍须运维停写。锁文件位于固定 `/tmp/customs-file-guards-<uid>/`，不随 TMPDIR 改变。
+- Compose 停写前记录运行服务；除 db/redis 外全部停止（含 worker 和未来写入者），只 `start` 原运行服务，不 `up` 意外启动原来关闭服务。
   文件归档始终使用一次性 app 容器，绝不 exec 已停止的 app。SIGTERM/SIGINT 走恢复 finally；SIGKILL/主机掉电仍需按 services-before 证据人工处理。
 - 整个 deployment 的 backup/restore/verify/drill 使用非阻塞排他锁，防止并发操作；不同备份目录或切换 app 库名不绕过同 Compose 项目锁。
   锁路径固定为 `/tmp/customs-operations-<uid>/`，不读取登录/cron 的 `TMPDIR`，避免跨会话绕过。
@@ -73,7 +74,7 @@ scripts/operations/drill.sh
 
 | 脚本 | 做什么 | 破坏性 |
 |---|---|---|
-| `backup.sh` | 停写（默认）→ `pg_dump -Fc` → 打包文件 → 行数/哈希清单 → manifest | **无**（只读；不停写时用 `--no-quiesce`） |
+| `backup.sh` | 执行停写/锁保护 → `pg_dump -Fc` → 打包文件 → 前后指纹一致 → manifest + 一致性证据 | 不修改业务数据；native 暂时阻塞写入，Compose 暂停原运行服务 |
 | `restore.sh` | 校验 manifest → 建**新库** → `pg_restore` → 解包到**新目录** | 只写入新目标；目标已存在即拒绝 |
 | `verify_restore.sh` | 统计恢复目标的表行数与文件哈希，和备份比对 | 无 |
 | `drill.sh` | 备份 → 恢复 → 比对 → 清理隔离目标 | 清理只删本次演练新建的库/目录 |
@@ -83,7 +84,9 @@ scripts/operations/drill.sh
 ## 约定
 
 - 备份目录默认 `deploy/backups/<UTC时间戳>-<标签>/`，已被 Git 忽略；**不要**提交进仓库。
-- `incoming/` 暂存区不进备份：那是“上传已落暂存、事务未提交”的半成品。
+- `incoming/` 不进完整备份，但其中原件/发布回执可能属于**已经提交**的 failed/staged ImportJob，仍是原请求幂等重试的恢复材料。备份在 native 持锁 / Compose 停写边界内、dump 和归档之前拒绝所有 `ImportJob.status != succeeded`（包括未知状态）；失败留 FAILED，无 COMPLETE。空正式路径或空文件清单不能绕过检查。
+- 收到“未完成导入”时，按终端日志中的 import_id，在**原数据库、原文件根**用原幂等键重试，或执行 `python manage.py resume_import <import_id>`。全部成功后重新停写备份；不要清空 `incoming/`、删除任务或手工改 succeeded 以绕过检查。原件/回执已缺失时需先修复原部署的恢复材料。
+- 编排器调用 `table_counts.py --require-complete-imports`，恢复后的 `verify_restore` 也检查此条件。独立运行 table_counts 而不带该 flag 仅导出诊断清单，可观察失败任务，不能据此宣称完整备份可恢复；旧备份也须经过新版 verify_restore，不可只看历史 COMPLETE。
 - 恢复**不覆盖**正在用的库或文件目录；要回到旧数据请用“换指向”的方式（见 deploy/README.md 第 8.2 节）。
 - 任何脚本都不做降级迁移；结构回退靠备份 + 换库，不靠 `migrate --fake`。
 - macOS 自带 bash 3.2：脚本里变量紧跟中文时必须写 `${VAR}`，否则变量名会被认成包含中文字节。

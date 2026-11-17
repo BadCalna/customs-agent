@@ -19,7 +19,7 @@ REPO = Path(__file__).resolve().parents[2]
 OPS = REPO / "scripts/operations"
 
 FAKE = r'''#!/usr/bin/env python3
-import json, os, pathlib, re, subprocess, sys
+import json, os, pathlib, re, subprocess, sys, time
 p = pathlib.Path(os.environ["FAKE_STATE"])
 s = json.loads(p.read_text())
 a = sys.argv[1:]
@@ -48,6 +48,9 @@ if pathlib.Path(sys.argv[0]).name == "docker":
         if script.endswith("storage.py"):
             sys.exit(subprocess.call([sys.executable, script] + args, env=env))
         assert script.endswith("table_counts.py"), a
+        if s.get("incomplete_imports") and "--require-complete-imports" in args:
+            print("存在未完成导入，拒绝完整备份", file=sys.stderr)
+            sys.exit(6)
         root = pathlib.Path(env["CUSTOMS_FILE_ROOT"])
         db = env["CUSTOMS_PG_NAME"]
         # Deliberately wrong actual identity catches a lost target override.
@@ -59,8 +62,11 @@ if pathlib.Path(sys.argv[0]).name == "docker":
                 files.append({"path": str(f.relative_to(root)), "size": f.stat().st_size, "sha256": hashlib.sha256(f.read_bytes()).hexdigest()})
         st = root.stat()
         tables = {"django_migrations": 1, "business": 2}
+        s["inventories"] = s.get("inventories", 0) + 1
+        save()
+        if s.get("backup_drift") and s["inventories"] > 1: tables["business"] = 3
         if s.get("mismatch") and db != "production": tables["business"] = 9
-        print(json.dumps({"db_vendor": "postgresql", "db_name": db, "database_oid": s["dbs"][db],
+        print(json.dumps({"generated_at": str(time.time_ns()), "db_vendor": "postgresql", "db_name": db, "database_oid": s["dbs"][db],
           "file_root": str(root.resolve()), "file_identity": {"path": str(root.resolve()), "device": st.st_dev, "inode": st.st_ino},
           "tables": tables, "table_sha256": {k: "a"*64 for k in tables}, "files": files,
           "database_schema": {"relations": [], "columns": [], "constraints": [], "indexes":
@@ -158,6 +164,43 @@ class OperationsBehaviorTests(unittest.TestCase):
         self.assertFalse(any(c[0] == "exec" and "app" in c[:4] for c in state["calls"]))
         self.assertTrue(Path(result["drill_state_file"]).is_file())
         self.assertEqual(Path(result["backup_dir"]).stat().st_mode & 0o777, 0o700)
+
+    def test_incomplete_imports_abort_before_dump_and_restore_compose_services(self):
+        self.fake(incomplete_imports=True)
+        result = self.run_script("backup", ok=False)
+        self.assertIn("未完成导入", self.logs())
+        state = json.loads(self.state.read_text())
+        self.assertEqual(sorted(state["running"]), ["app", "db", "worker"])
+        self.assertFalse(any("pg_dump" in call for call in state["calls"]))
+        directory, = (self.base / "backups").iterdir()
+        self.assertTrue((directory / "FAILED").is_file())
+        self.assertFalse((directory / "COMPLETE").exists())
+        self.assertFalse((directory / "db.dump").exists())
+        self.assertFalse((directory / "files.tar.gz").exists())
+
+    def test_native_incomplete_imports_abort_before_dump(self):
+        self.native_environment()
+        self.fake(incomplete_imports=True)
+        result = self.run_script("backup", ok=False)
+        self.assertIn("未完成导入", self.logs())
+        state = json.loads(self.state.read_text())
+        self.assertFalse(any("pg_dump" in call for call in state["calls"]))
+        directory, = (self.base / "backups").iterdir()
+        self.assertTrue((directory / "FAILED").is_file())
+        self.assertFalse((directory / "COMPLETE").exists())
+        self.assertFalse((directory / "db.dump").exists())
+        self.assertFalse((directory / "files.tar.gz").exists())
+
+    def test_backup_ignores_inventory_time_but_rejects_content_drift(self):
+        directory = self.backup()
+        self.assertTrue((directory / 'COMPLETE').is_file())
+        self.assertTrue(json.loads((directory / 'counts.json').read_text())['generated_at'])
+        self.fake(backup_drift=True, inventories=0)
+        result = self.run_script('backup', ok=False)
+        self.assertIn('发生变化', result.stderr)
+        failed = next(path for path in (self.base / 'backups').iterdir() if path != directory)
+        self.assertTrue((failed / 'FAILED').is_file())
+        self.assertFalse((failed / 'COMPLETE').exists())
 
     def test_backup_failure_marks_partial_and_resumes_worker(self):
         self.fake(dump_fail=True)
@@ -268,21 +311,46 @@ class OperationsBehaviorTests(unittest.TestCase):
         result = self.run_script("restore", directory, ok=False)
         self.assertIn("禁止静默", result.stderr)
 
-    def test_native_shell_flow_with_fake_postgres(self):
-        # Native Django is replaced with the same table_counts stub; storage remains real.
+    def native_environment(self):
+        # Only orchestration is stubbed here; real locks are tested on PG separately.
         wrapper = self.bin / "native-python"
         wrapper.write_text("#!/usr/bin/env python3\nimport os,subprocess,sys\n"
                            "a=sys.argv[1:]\n"
                            "if a and a[0].endswith('table_counts.py'):\n"
                            " s=['docker','compose','-f','unused','--env-file','unused','run','--rm','--no-deps','-T','-e','CUSTOMS_PG_NAME='+os.environ['CUSTOMS_PG_NAME'],'-e','CUSTOMS_FILE_ROOT='+os.environ['CUSTOMS_FILE_ROOT'],'app','python','scripts/operations/table_counts.py']+a[1:]\n"
+                           "elif a and a[0].endswith('native_freeze.py'):\n"
+                           " import json\n"
+                           " if os.environ.get('FAKE_FREEZE_FAIL'): sys.exit(7)\n"
+                           " print(json.dumps({'method':'postgres-table-sequence-locks+local-file-lock','database':os.environ['CUSTOMS_PG_NAME'],'file_root':os.environ['CUSTOMS_FILE_ROOT'],'snapshot':'FAKE-ONLY','locked_tables':2,'locked_sequences':1}),flush=True)\n"
+                           " assert sys.stdin.readline().strip()=='RELEASE'\n"
+                           " sys.exit(0)\n"
                            "else: s=[sys.executable]+a\n"
                            "sys.exit(subprocess.call(s))\n")
         wrapper.chmod(0o700)
         self.env.update(BACKUP_MODE="native", PYTHON=str(wrapper), CUSTOMS_PG_NAME="production", CUSTOMS_PG_USER="appuser",
                         CUSTOMS_FILE_ROOT=str(self.root))
+
+    def test_native_shell_flow_with_fake_postgres(self):
+        self.native_environment()
         result = self.run_script("drill")
         self.assertEqual(result["status"], "passed")
         self.assertEqual(json.loads(self.state.read_text())["dbs"], {"production": 100})
+
+    def test_native_missing_freeze_proof_never_completes(self):
+        self.native_environment()
+        self.env['FAKE_FREEZE_FAIL'] = '1'
+        result = self.run_script('backup', ok=False)
+        self.assertIn('停写锁', result.stderr)
+        self.assertFalse(list((self.base / 'backups').glob('*/COMPLETE')))
+        self.assertEqual(len(list((self.base / 'backups').glob('*/FAILED'))), 1)
+
+    def test_no_quiesce_is_rejected_in_both_modes(self):
+        self.native_environment()
+        for mode in ('compose', 'native'):
+            self.env['BACKUP_MODE'] = mode
+            result = self.run_script('backup', '--no-quiesce', ok=False)
+            self.assertIn('--no-quiesce', result.stderr)
+            self.assertFalse((self.base / 'backups').exists())
 
     def test_bad_label_has_no_backup_directory(self):
         for label in ("../oops", "x"*49, "a/b", "quote'"):

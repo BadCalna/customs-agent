@@ -60,7 +60,7 @@ test:
 	$(MANAGE) test "$$dir"
 
 # ---------------------------------------------------------------------------
-# P12：PostgreSQL（本机集群由 scripts/database/ 管理，默认仍用 SQLite）
+# P12：推荐 PostgreSQL（scripts/database/ 管理本机集群；无配置时仍可用 SQLite）
 # ---------------------------------------------------------------------------
 pg-init:
 	scripts/database/pg_ctl.sh init
@@ -77,8 +77,13 @@ pg-status:
 db-backup:
 	scripts/database/backup.sh
 
+# SOURCE_FILES_ROOT is mandatory; target defaults to CUSTOMS_FILE_ROOT.
+# Example: make db-copy SOURCE_SQLITE=/path/source.sqlite3 SOURCE_FILES_ROOT=/path/files
+SOURCE_SQLITE ?= $(CUSTOMS_SQLITE_PATH)
+SOURCE_FILES_ROOT ?= $(CUSTOMS_SOURCE_FILE_ROOT)
+TARGET_FILES_ROOT ?= $(CUSTOMS_FILE_ROOT)
 db-copy:
-	scripts/database/copy_sqlite_to_pg.sh
+	scripts/database/copy_sqlite_to_pg.sh $(if $(SOURCE_SQLITE),"$(SOURCE_SQLITE)") $(if $(SOURCE_FILES_ROOT),--source-files-root "$(SOURCE_FILES_ROOT)") $(if $(TARGET_FILES_ROOT),--target-files-root "$(TARGET_FILES_ROOT)")
 
 # 只有“后端确实是 PostgreSQL 且连接可用”才算过；端口连通不算（D6 第 3 节）。
 check-postgres:
@@ -86,4 +91,4 @@ check-postgres:
 		echo "check-postgres 需要 PostgreSQL 后端：先 scripts/database/bootstrap.sh，并设置 CUSTOMS_DB_BACKEND=postgres 与 CUSTOMS_PG_*。" >&2; exit 2; }
 	$(MANAGE) check
 	$(MANAGE) makemigrations --check --dry-run
-	$(MANAGE) test tests/p12 tests/p09 tests/p10
+	$(MANAGE) test --noinput tests/p12 tests/p05 tests/p06 tests/p09 tests/p10
