@@ -535,6 +535,14 @@
   color: var(--ink-4, #9aa69b);
 }
 
+/* 开发说明（契约申请位置等）比业务缺口更次要：和改码原因同为 muted 小字。 */
+.commodity-recode-contract-note {
+  margin: 7px 0 0;
+  font-size: 10.5px;
+  line-height: 1.55;
+  color: var(--ink-4, #9aa69b);
+}
+
 .commodity-findings { margin-top: 9px; }
 .commodity-findings h4 {
   margin-bottom: 4px;
