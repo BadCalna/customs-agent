@@ -1,6 +1,6 @@
 # D4 Agent 输入输出与证据约定
 
-版本：0.5，2026-11-17。状态：P02 第一批已发布引擎协议与 mock 实现；P14 已发布 HS 与申报要素来源适配契约（第 6 节，合成样本自验，真实官方来源未接入）；P17 已发布退税与监管来源适配契约（第 7 节，同样是合成样本自验）；P06 已补充 inline mock 接线与独立推荐输入隔离说明（文末）。协议 DTO 在 `adapters/engines/protocols.py`，固定场景实现与比较优先级在 `adapters/engines/mock.py`，JSON Schema 见 `contracts/schemas/engine/`。本文件规定系统内关务 AI 引擎；编程 Agent 的分工见 [协作与交接约定](Agent协作与交接约定.md)。
+版本：0.6，2026-11-18。状态：P02 第一批已发布引擎协议与 mock 实现；P14 已发布 HS 与申报要素来源适配契约（第 6 节，合成样本自验，真实官方来源未接入）；P17 已发布退税与监管来源适配契约（第 7 节，同样是合成样本自验）；P06 已补充 inline mock 接线与独立推荐输入隔离说明；P23 已补充官方参考数据导入流水线（第 8 节，真实原件已导入但未复核）。协议 DTO 在 `adapters/engines/protocols.py`，固定场景实现与比较优先级在 `adapters/engines/mock.py`，JSON Schema 见 `contracts/schemas/engine/`。本文件规定系统内关务 AI 引擎；编程 Agent 的分工见 [协作与交接约定](Agent协作与交接约定.md)。
 
 ## 1. 引擎边界
 
@@ -305,6 +305,94 @@ P18 只有在以下条件同时满足时，才能把 P17 的结果当作“已�
 - 必须同时满足 `usable_as_basis=true` 和 `expert_review_required=false` 才能进 `matched`；只满足一个（例如来源事实可作依据，但原值比对没对上）一律按下一条降级处理。
 
 其余情况：`conditional`/`unknown`/`not_effective` 一律记为分项 `unknown`（**不是 matched，也不是“无风险”**），把 `pending_reasons` 按 `suggested_role` 分流（`supplier` 补资料、`expert` 判专业、`operator` 补来源）。P18 不得用模型补齐 P17 未取得的条款、税率、证件名称，也不得把 `declared_none` 写成“无监管”除非 `usable_as_basis=true`；专家改码后必须以新 HS 重跑本适配器，旧结果只保留为历史。
+
+## 8. 官方参考数据导入流水线（P23 发布，2026-11-18）
+
+### 8.1 边界与入口
+
+P23 是**数据准备层**，不参与判定：它把官方原件转换成 P14/P17 读取的 JSON 快照，
+并给出候选快照、导入报告、查询验证与显式发布，**不写业务数据库、不改 `.env`、
+不联网、不调用模型、不合并 PR**。
+
+| 入口 | 作用 |
+|---|---|
+| `scripts/import_reference_data.py scan` | 只读盘点：原件哈希/页签/表头/行数/数据类别声明 |
+| `scripts/import_reference_data.py import` | 生成候选快照 + `report.json`/`report.md` + 查询验证 |
+| `... verify` | 用真实存储类重跑 17 项查询验证 |
+| `... publish` / `releases` / `activate` / `paths` | 显式发布、列版本、回滚指针、打印数据路径 |
+
+源码：`adapters/sources/reference_import/`（转换与流程）、
+`adapters/sources/tariff_commentary.py`（品目注释读取）。
+来源清单：`data/import-basis/2026-11-17/reference-sources.json`。
+默认输出：`.local/reference-import/`（Git 忽略）。
+
+### 8.2 来源与原件
+
+- 来源清单声明：`source_id`、`kind`、`repository_path`/`local_path_hint`、`sha256`、`bytes`、
+  `roles`、`retrieved_at`、`recorded_source`；数据类别用 `datasets[]` 声明
+  `provided`/`not_provided`/`unsupported`/`input_missing`。**清单没声明的数据类别不允许出现在报告里。**
+- 原件**只读**：导入前后各核一次 SHA-256 与字节数；不一致即失败（退出码 2），不修补。
+- 每条记录必须带 `source.document`（原文件名）+ `source.locator`（`页签!单元格`）+ `retrieved_at`；
+  URL 只填来源真实给出的，没有就留空。
+- **导入时间与政策生效时间分开**：`generated_at`/`published_at` 只进报告与索引；政策有效期只来自来源。
+- 真实数据、原件与报告写入 Git 忽略目录；仓库只新增脱敏的来源清单与文档。
+
+### 8.3 字段转换规则（导入期强制）
+
+| 项 | 规则 |
+|---|---|
+| HS 编码 | 按字符串；文本单元格原样保留前导零；数值单元格只有“整数且长度正好 8/10”才采用，9 位/科学计数法/小数一律 `HS_CELL_NUMERIC_PRECISION_LOST` 拒绝，**不补零不猜位** |
+| 层级 | 8 位=`subheading`（税目/子目，`declaration_ready` 恒 false），10 位=`declaration`，其它长度拒绝；不按前缀扩造 10 位 |
+| 编码状态 | 只按来源声明；本批来源为“现行税则查询结果”，`state=active` 属**待复核假设**（`code_state_active`），不写 `expired/merged` |
+| 申报要素 | `必填标记（1/0）` → `required`/`optional`；其它值**整份清单拒绝**；条件文本、取值枚举缺失就**不写**；`order` 取来源行序并在 `note` 标注“不是官方申报顺序” |
+| 退税率 | 单元格数值只有在该单元格数字格式确为百分数时才 ×100；空白**不生成记录**（不补 0%）；`0` 只能表达为 `zero_rate`；来源标注“11 位细分税率不同”时保留数值但 `rate_state=unknown` |
+| 适用条件 | 来源没有条件列 → **不写 `conditions` 字段**（= 未声明，P17 判 `not_declared`），不写 `[]` |
+| 监管条件 | 只有代码串 → 只做原文台账，**不生成 P17 监管记录**、不拆码、不补方向/措施；空白 ≠ 无监管 |
+| 品目注释 | 正文逐字保留，按来源层级键（4 位品目 / `CH` / `CA` / `ot`）组织；不切分、不改写；**不当 10 位编码存在性依据** |
+
+### 8.4 状态、计数与退出码
+
+- 记录级状态：`imported` / `duplicate`（同键同内容，不产生重复记录）/ `conflict`（同键不同内容，保留
+  先出现的一条并转待核）/ `pending`（写入但带限制）/ `rejected`（不入快照）/ `not_imported`。
+- 每个数据类别强制对账：`input_total = imported+duplicate+conflict+pending+rejected+not_imported`，
+  且 `output_records` 等于输出数组长度；对不上让构建失败。
+- 退出码：`0` 成功、`1` 部分拒绝（有 rejected/conflict/缺失输入/验证未通过）、`2` 失败；
+  报告另写 `status=success/partial/failed`。**不能只看日志文字判断结果。**
+- 未知结构（表头找不到/重复/多页签无法区分、JSON 顶层字段不认识）一律显式报告，
+  不静默跳过；记录级字段非法只拒绝该记录并写原因。
+
+### 8.5 快照、发布与复核
+
+- 候选快照目录名 = 批次 + **业务指纹**（转换器版本 + 版本配置 + 业务内容，不含生成时间/复核状态）。
+  输入相同 → 同一快照，重复运行不产生第二份数据。
+- 原子写入：先写临时目录再 `os.replace`；失败不留半份快照，旧快照不受影响。
+- 发布到 `published/releases/<release_id>/`（不可变）+ `current.json`/`current` 指针，可 `activate` 回滚。
+- **发布门禁**：快照自检（输出文件哈希一致）→ 查询验证全部通过 → 批次为 `real` →
+  如提供复核文件，须 `decision=approved`、`reviewed_by` 非空、`reviewed_at` 带时区、
+  并**对本快照每条业务假设逐项确认**。
+- **复核不能被程序代替**：程序不填复核人；不带复核文件可以发布，但数据集保持 `unreviewed`，
+  P14/P17 因此继续 `authoritative=false`。“程序校验通过”不等于“专业复核通过”。
+- 内容变化默认拒绝覆盖已发布版本，必须显式允许并写明理由，差异写入 `release.json`。
+
+### 8.6 查询验证与下游集成
+
+- `verify` 用**真实存储类**读快照，覆盖命中、8 位子目、查无、版本待核、格式非法、来源未配置、
+  缺条件、零税率、原始值空白等场景；每条记录请求、状态与来源定位，可人工复跑。
+- 未接入适配器的数据（本批监管条件）单独记 `source_unconfigured`/`query_failed`，
+  **不写成“查询通过”**。
+- P16/P18 消费规则不变（第 6.8、7.8 节）：只有 `authoritative=true` 且版本已核才可当事实；
+  本批数据在真实复核前一律 `needs_confirmation`。
+- 品目注释是独立快照：结果带 `engine_integration="not_wired_p16"`，
+  在 P16 接入前**不得**声称该资料已被引擎检索。
+
+P23 的假设清单随快照 `manifest.json` 落盘（`assumptions[]`），每条以 `键：说明` 开头，
+键必须在复核文件 `confirmations` 里被逐项确认为 `true` 才允许发布成 reviewed。
+当前假设键：`code_state_active`、`tariff_version`、`element_order_from_file`、
+`element_requirement_from_flag`、`element_value_type_unknown`、`no_tariff_rate`、
+`tax_version`、`tax_rate_percent_from_cell_format`、`tax_rate_granularity_8digit`、
+`tax_conditions_not_declared`、`tax_state_no_abolish_inference`、
+`commentary_verbatim`、`commentary_layering`、`commentary_not_wired`、
+`commentary_xlsx_not_imported`。
 
 ## P06 inline mock 接线补充（2026-11-17）
 
