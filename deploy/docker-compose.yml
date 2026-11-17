@@ -1,0 +1,166 @@
+# P22 云端多人测试（单台服务器）的 Compose 方案。
+#
+# 用法：先 `cp deploy/.env.example deploy/.env` 填好，再
+#   cd <仓库根目录> && docker compose -f deploy/docker-compose.yml up -d --build
+# 详细步骤见 deploy/README.md。
+#
+# 设计边界：
+# - 数据库不发布端口，只在 Compose 内部网络上可达；外部只能经 nginx（web）访问。
+# - 原件/图片/数据库都落命名卷，容器重建不丢数据；卷的位置可用 docker volume inspect 找到。
+# - 迁移与 collectstatic 由一次性服务 migrate 执行，app 等它成功后再启动，避免多副本抢迁移。
+# - redis/worker 属于 P13，尚未实现，放在 profile=queue 里默认不启动（见文末说明）。
+
+name: ${CUSTOMS_COMPOSE_PROJECT:-customs-agent}
+
+# 每个长运行服务都使用轮转日志，避免磁盘被 stdout/stderr 撑满。
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-app: &app
+  build:
+    context: ..
+    dockerfile: deploy/Dockerfile
+  image: customs-agent:${CUSTOMS_IMAGE_TAG:-local}
+  env_file:
+    - .env
+  environment:
+    # 部署层设置模块负责 DEBUG/ALLOWED_HOSTS/CSRF/STATIC_ROOT；数据库与存储沿用既有变量名。
+    DJANGO_SETTINGS_MODULE: deploy.settings_cloud
+    CUSTOMS_DB_BACKEND: postgres
+    CUSTOMS_PG_HOST: db
+    CUSTOMS_PG_PORT: "5432"
+    # 卷挂在 /srv/customs，存储根是其下的 files/；回退时可指向同卷内的其他目录。
+    CUSTOMS_FILE_ROOT: ${CUSTOMS_FILE_ROOT:-/srv/customs/files}
+    CUSTOMS_STATIC_ROOT: /app/staticfiles
+  restart: unless-stopped
+  logging: *logging
+  # gunicorn 超时为 120s，留出在途请求退出时间。
+  stop_grace_period: 135s
+
+services:
+  # --- 数据库：只在内部网络，不写 ports ---
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${CUSTOMS_PG_NAME:-customs_agent}
+      POSTGRES_USER: ${CUSTOMS_PG_USER:-customs_agent}
+      # 没有默认值：deploy/.env 里必须显式设置，避免出现“默认密码”。
+      POSTGRES_PASSWORD: ${CUSTOMS_PG_PASSWORD:?deploy/.env 必须设置 CUSTOMS_PG_PASSWORD（不要用示例值）}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8"
+      TZ: Asia/Shanghai
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    expose:
+      - "5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB} -h 127.0.0.1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    shm_size: 256mb
+    restart: unless-stopped
+    logging: *logging
+    stop_grace_period: 60s
+
+  # --- 一次性发布步骤：迁移 + 静态资源收集 ---
+  migrate:
+    <<: *app
+    command: ["sh", "-c", "python manage.py migrate --noinput && python manage.py collectstatic --noinput"]
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - files:/srv/customs
+      - static:/app/staticfiles
+    restart: "no"
+
+  # --- 应用：gunicorn 提供 WSGI，不对外发布端口，只给 nginx 用 ---
+  app:
+    <<: *app
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    volumes:
+      - files:/srv/customs
+      - static:/app/staticfiles
+    healthcheck:
+      # slim 镜像里没有 curl，用标准库发请求，少装一个包。
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3).read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  # --- 对外入口：nginx 反代 + 提供 /static/ ---
+  web:
+    image: nginx:1.27-alpine
+    depends_on:
+      app:
+        condition: service_healthy
+    ports:
+      # 默认 8080，避免和服务器上可能已存在的 80 端口冲突；确认空闲后可改成 80。
+      - "${CUSTOMS_HTTP_PORT:-8080}:80"
+    volumes:
+      - static:/usr/share/nginx/static:ro
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1/nginx-health"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    restart: unless-stopped
+    logging: *logging
+    stop_grace_period: 135s
+
+  # ==========================================================================
+  # 以下两项是 P13（Redis + django-rq worker）的预留位，默认不启动：profile=queue。
+  #
+  # 现状（必须如实告知测试人员）：
+  #   - config/settings.py 的 CUSTOMS_EXECUTOR_MODE 目前只接受 inline；
+  #   - manage.py 还没有 rqworker 命令，apps/runs/ 的派发/重试用例也未落地。
+  # 因此 `--profile queue up` 现在只会得到一个启动失败或空转的 worker，
+  # 不会有任何后台任务被处理。等 P13 交付后，需要补：
+  #   1) settings 的 EXECUTOR_MODE 接受 rq、加 REDIS 连接配置；
+  #   2) 实现 apps/runs/dispatch.py 的事务后派发与待派发重扫；
+  #   3) 把 worker 的 command 改成 P13 确认过的入口（不是下面这条占位）。
+  # ==========================================================================
+  redis:
+    image: redis:7-alpine
+    profiles: ["queue"]
+    command: ["redis-server", "--appendonly", "yes", "--save", "60", "1"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+    restart: unless-stopped
+    logging: *logging
+    stop_grace_period: 60s
+
+  worker:
+    <<: *app
+    profiles: ["queue"]
+    # 占位命令：P13 未实现前启动会直接失败，这是有意的——不要让它假装在工作。
+    command: ["python", "manage.py", "rqworker", "default"]
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - files:/srv/customs
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  files:
+  static:
+  redisdata:
