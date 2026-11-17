@@ -5,7 +5,10 @@ const esc = (v) => String(v ?? "").replace(/[&<>"']/g, x => ({"&":"&amp;","<":"&
 let me=null, task=null, version=null, epoch=0, requestSequence=0, attempt=null, busy=false;
 let taskCursor=null, claimCursor=null;
 let uploadContext=0, duplicateIntent=null;
+let latestReport=null, exporting=false;
 const claimKeys=new Map();
+//: 只有这两个导出种类在契约里存在；种类、执行与版本必须同时明确才发请求。
+const EXPORTS=[["precheck","导出预审结论（xlsx）"],["issues","导出补料清单（xlsx）"]];
 function notice(text,error=false){$("#notice").textContent=text;$("#notice").className=error?"error":"";}
 function fail(error){
   const issues=error.details?.issues;
@@ -13,7 +16,61 @@ function fail(error){
 }
 async function guarded(fn){try{await fn();}catch(e){fail(e);}}
 function invalidateUploadIntent(){uploadContext++;attempt=null;duplicateIntent=null;$("#duplicate").hidden=true;}
-function resetDetail(){task=null;version=null;requestSequence++;invalidateUploadIntent();$("#task-title").textContent="选择一个任务";for(const s of ["#versions","#summary","#report","#items","#card"])$(s).innerHTML="";}
+/* --------------------------- 结果导出（LIVE 真实文件） ---------------------------
+   导出契约要求结果集必须属于请求版本指定的执行，所以引用只用服务端给的
+   version_id + precheck_run_id；引用缺失或预审未完成时只说明原因，不发请求、
+   不在前端编造 id，也不在本页兜底生成任何文件。 */
+function exportAvailability(report){
+  // 后端只允许该任务的业务员/专家导出审核结果；供应商账号在这里就被说明拦住。
+  if(!me||(me.role!=="operator"&&me.role!=="expert"))return {ready:false,reason:"当前账号不能导出审核结果（仅该任务的业务员或专家可导出）"};
+  if(!report)return {ready:false,reason:"该版本没有上传解析记录，缺少真实执行引用，不能导出"};
+  if(!report.precheck_run_id)return {ready:false,reason:"该解析记录没有预审执行编号，不能导出"};
+  if(report.precheck_status!=="succeeded")return {ready:false,reason:`预审尚未完成（${String(report.precheck_status)}），结果集不可导出`};
+  return {ready:true,reason:""};
+}
+function hideExports(){latestReport=null;const box=$("#exports");if(!box)return;box.innerHTML="";box.hidden=true;}
+function renderExports(report){
+  const box=$("#exports");if(!box)return;
+  latestReport=report||null;
+  if(!report){hideExports();return;}
+  const state=exportAvailability(report),source=String(report.result_mode||"mock").toUpperCase();
+  const note=state.ready
+    ?`结果来源 ${source}：导出文件会在文件名与结论里标注测试结果；导出不退回、不发送通知。`
+    :state.reason;
+  box.hidden=false;
+  box.innerHTML=`<h2>结果导出</h2>
+    <p class="muted">V${report.version_number} · 执行 ${esc(report.precheck_run_id||"（缺少执行编号）")} · 预审 ${esc(report.precheck_status)} · 结果来源 ${source}</p>
+    <div class="heading" style="justify-content:flex-start">${EXPORTS.map(([kind,label])=>
+      `<button data-export="${kind}" ${state.ready&&!exporting?"":"disabled"} title="${esc(state.ready?"":"导出不可用："+state.reason)}">${label}</button>`).join("")}</div>
+    <p class="muted">${esc(note)}</p>`;
+}
+function setExportButtonsDisabled(disabled){
+  for(const button of document.querySelectorAll("[data-export]"))button.disabled=disabled;
+}
+async function exportResult(kind){
+  const report=latestReport,state=exportAvailability(report);
+  if(!state.ready){notice(state.reason,true);return;}
+  if(exporting)return;
+  exporting=true;setExportButtonsDisabled(true);
+  const versionId=report.version_id,runId=report.precheck_run_id;
+  notice(`正在生成${kind==="precheck"?"预审结论":"补料清单"}…`);
+  try{
+    const result=await api.createExport(versionId,{kind,run_id:runId});
+    // 服务端回的执行必须就是本页引用的执行；不一致时报错，不把别的结果冒充成本次导出。
+    if(result.runId!==runId)throw Object.assign(new Error(`导出引用的执行 ${result.runId||"（缺失）"} 与本页执行 ${runId} 不一致，已拒绝保存`),{status:409,code:"export_reference_mismatch",details:{}});
+    if(!String(result.contentType||"").includes("spreadsheet"))throw Object.assign(new Error(`导出响应不是 xlsx（${result.contentType||"无 Content-Type"}），不保存`),{status:0,code:"unexpected_export_type",details:{}});
+    const url=URL.createObjectURL(result.blob);
+    const link=document.createElement("a");link.href=url;link.download=result.filename;link.rel="noopener";
+    document.body.appendChild(link);link.click();link.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),3000);
+    notice(`已生成 ${result.filename}（执行 ${result.runId} · 结果来源 ${String(result.resultMode||"").toUpperCase()}）`);
+  }catch(error){
+    fail(error);
+  }finally{
+    exporting=false;setExportButtonsDisabled(!exportAvailability(latestReport).ready);
+  }
+}
+function resetDetail(){task=null;version=null;latestReport=null;requestSequence++;invalidateUploadIntent();$("#task-title").textContent="选择一个任务";for(const s of ["#versions","#summary","#report","#items","#card"])$(s).innerHTML="";hideExports();}
 function identity(){
   epoch++;resetDetail();attempt=null;$("#duplicate").hidden=true;$("#file").value="";
   $("#identity").textContent=me?`${me.display_name||me.username} · ${me.role_label}`:"未登录";
@@ -37,6 +94,8 @@ async function openTask(id,preferred){
 }
 async function openVersion(id){
   invalidateUploadIntent();
+  // 切版本时先撤掉上一版本的导出区：读取期间不能留着旧版本的导出按钮让人误点。
+  hideExports();
   const seq=++requestSequence,token=epoch;version=id;$("#summary").textContent="正在读取解析结果…";$("#items").innerHTML="";$("#card").innerHTML="";$("#report").innerHTML="";
   const pages=[];let cursor=null;do{const page=await api.listItems(id,{limit:100,cursor});if(seq!==requestSequence||token!==epoch)return;pages.push(...page.items);cursor=page.next_cursor;}while(cursor);
   let report=null;try{report=await api.getImport(id);}catch(e){if(e.status!==404)throw e;}
@@ -44,6 +103,7 @@ async function openVersion(id){
   const v=task.versions.find(x=>x.version_id===id);
   $("#summary").innerHTML=report?`<b>V${report.version_number} · ${report.assignment_status==="unclaimed"?"待认领":"已认领"} · 解析 ${esc(report.parse_status)}</b><br>商品 ${report.item_count} 条 / 装箱成员 ${report.member_count} 条 / 图片 available ${report.image_counts.available} · absent ${report.image_counts.absent} · read_failed ${report.image_counts.read_failed}<br><a href="${esc(report.original_download_url)}">下载 V${report.version_number} 原件</a> · <b>MOCK</b> 预审：${esc(report.precheck_status)}`:`V${v?.number} · 旧演示版本无真实上传记录`;
   if(report){const issues=[...(report.report.issues||[]),...(report.report.links||[]).flatMap(l=>[...(l.issues||[]),...(l.record?.issues||[])])];$("#report").innerHTML=`${Object.keys(report.error).length?`<pre class="error">${esc(JSON.stringify(report.error,null,2))}</pre>`:""}<details><summary>解析问题与来源（${issues.length}）</summary><pre>${esc(JSON.stringify(issues,null,2))}</pre></details><details><summary>查看本版本完整解析及装箱关联报告</summary><pre>${esc(JSON.stringify(report.report,null,2))}</pre></details>`;}
+  renderExports(report);
   $("#items").innerHTML=pages.length?`<table><thead><tr><th>来源</th><th>品名</th><th>供应商原 HS</th><th>图片</th><th>mock 建议</th></tr></thead><tbody>${pages.map(i=>`<tr data-item="${esc(i.item_id)}"><td>${esc(i.source_location.sheet_name)} ${i.source_location.row_number}</td><td>${esc(i.name)}</td><td>${esc(i.supplier_hs_raw)}</td><td>${esc(i.image_status)}</td><td>${esc(i.precheck_suggested_hs||"未给出")}</td></tr>`).join("")}</tbody></table>`:'<p class="muted">本版本暂无商品，检查导入状态和错误。</p>';
 }
 async function openItem(id){const seq=++requestSequence,token=epoch,v=version;const c=await api.getItem(v,id);if(seq!==requestSequence||token!==epoch||v!==version)return;
@@ -96,5 +156,5 @@ $("#confirm-duplicate").onclick=()=>guarded(()=>upload(true));
 $("#cancel-duplicate").onclick=()=>{invalidateUploadIntent();notice("已取消创建重复版本");};
 $("#file").onchange=invalidateUploadIntent;
 $("#upload-target").onchange=invalidateUploadIntent;
-document.addEventListener("click",e=>{const b=e.target.closest("[data-task],[data-version],[data-item],[data-claim]");if(!b)return;guarded(async()=>{if(b.dataset.task)await openTask(b.dataset.task);else if(b.dataset.version)await openVersion(b.dataset.version);else if(b.dataset.item)await openItem(b.dataset.item);else {const id=b.dataset.claim;if(!claimKeys.has(id))claimKeys.set(id,crypto.randomUUID());await api.claimTask(id,claimKeys.get(id));notice("认领成功，已授予该任务访问权限");await refresh();await openTask(id);}});});
+document.addEventListener("click",e=>{const b=e.target.closest("[data-task],[data-version],[data-item],[data-claim],[data-export]");if(!b)return;guarded(async()=>{if(b.dataset.export){await exportResult(b.dataset.export);}else if(b.dataset.task)await openTask(b.dataset.task);else if(b.dataset.version)await openVersion(b.dataset.version);else if(b.dataset.item)await openItem(b.dataset.item);else {const id=b.dataset.claim;if(!claimKeys.has(id))claimKeys.set(id,crypto.randomUUID());await api.claimTask(id,claimKeys.get(id));notice("认领成功，已授予该任务访问权限");await refresh();await openTask(id);}});});
 guarded(async()=>{me=await api.me();identity();if(me)await refresh();});
