@@ -24,7 +24,7 @@ if __name__=="__main__":
     parser=argparse.ArgumentParser();parser.add_argument("sample",type=Path);parser.add_argument("--username",default="supplier_a")
     args=parser.parse_args();data=args.sample.read_bytes();digest=hashlib.sha256(data).hexdigest()
     workbook=Workbook(data);mapping=map_workbook(workbook)
-    client=Client();client.force_login(User.objects.get(username=args.username))
+    client=Client(SERVER_NAME="localhost");client.force_login(User.objects.get(username=args.username))
     response=client.post("/api/v1/tasks",{"file":SimpleUploadedFile(args.sample.name,data)},HTTP_IDEMPOTENCY_KEY=str(uuid.uuid4()))
     if response.status_code!=200:
         print(json.dumps(response.json(),ensure_ascii=False));sys.exit(1)

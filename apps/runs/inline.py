@@ -77,12 +77,26 @@ def _image_facts(item) -> list[ImageFact]:
     ]
 
 
+# 独立推荐只取明确的商品事实。来源快照、原码、旧意见和旧阶段结果仍留库供审计。
+_RECOMMEND_FACT_FIELDS = frozenset({
+    "name", "primary_name", "alias", "specification", "manufacturer_model", "material",
+    "usage", "brand", "model", "quantity", "unit", "process", "composition", "function",
+    "品名", "规格型号", "材质", "用途", "品牌", "型号", "成分", "工艺", "功能", "数量", "单位",
+})
+
+
+def _recommend_attributes(attributes) -> dict[str, str]:
+    # 只允许标量，不能把嵌套历史/字段对象以字符串形式藏回白名单字段。
+    return {str(key): str(value) for key, value in (attributes or {}).items()
+            if key in _RECOMMEND_FACT_FIELDS and isinstance(value, (str, int, float, bool))}
+
+
 def _build_recommend_input(run, item, scenario) -> RecommendInput:
     context = _context(run, item, scenario)
     payload = RecommendInput(
         context=context,
         name=item.name,
-        attributes={str(k): str(v) for k, v in (item.attributes or {}).items()},
+        attributes=_recommend_attributes(item.attributes),
         elements_text=item.supplier_elements_raw,
         # 申报要素原文可能自然出现编码；只记录风险，不声称已彻底消除锚定。
         anchoring_notes=["elements_text 为供应商原文，可能含编码字样"],

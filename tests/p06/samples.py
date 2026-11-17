@@ -25,3 +25,19 @@ def sample(*, order=(1, 2, 3), missing_sheet=False, missing_key=False, ambiguous
         pkg.image("xl/media/synthetic.png",png(b'\x10\x80\x20'))
     with tempfile.TemporaryDirectory() as tmp:
         return Path(pkg.build(Path(tmp)/"synthetic.xlsx")).read_bytes()
+
+
+def broken_drawing(data, *, sheet_number=1):
+    """仅损坏 optional drawing 部件，工作簿核心/商品/成员保持完整。"""
+    import io
+    from zipfile import ZipFile, ZIP_DEFLATED
+    with ZipFile(io.BytesIO(data)) as source:
+        parts={name:source.read(name) for name in source.namelist()}
+    sheet=f'xl/worksheets/sheet{sheet_number}.xml'
+    parts[sheet]=parts[sheet].replace(b'</worksheet>',b'<drawing xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:id="BrokenDrawing"/></worksheet>')
+    parts[f'xl/worksheets/_rels/sheet{sheet_number}.xml.rels']=b'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="BrokenDrawing" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/broken.xml"/></Relationships>'
+    parts['xl/drawings/broken.xml']=b'<broken'
+    output=io.BytesIO()
+    with ZipFile(output,'w',ZIP_DEFLATED) as archive:
+        for name,content in parts.items():archive.writestr(name,content)
+    return output.getvalue()

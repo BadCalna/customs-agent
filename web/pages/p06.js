@@ -4,6 +4,7 @@ const $ = (s) => document.querySelector(s);
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, x => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[x]));
 let me=null, task=null, version=null, epoch=0, requestSequence=0, attempt=null, busy=false;
 let taskCursor=null, claimCursor=null;
+let uploadContext=0, duplicateIntent=null;
 const claimKeys=new Map();
 function notice(text,error=false){$("#notice").textContent=text;$("#notice").className=error?"error":"";}
 function fail(error){
@@ -11,7 +12,8 @@ function fail(error){
   notice(`${error.status||"网络异常"} ${error.code||"request_failed"}：${error.message}${issues ? "\n"+issues.map(x=>`${x.sheet||"工作簿"} ${x.cell||""} ${x.row?`第${x.row}行`:""}：${x.code} ${x.message}`).join("\n") : ""}${error.details?.import_id ? `\n导入编号：${error.details.import_id}。重试会复用原版本。`:""}`,true);
 }
 async function guarded(fn){try{await fn();}catch(e){fail(e);}}
-function resetDetail(){task=null;version=null;requestSequence++;attempt=null;$("#duplicate").hidden=true;$("#task-title").textContent="选择一个任务";for(const s of ["#versions","#summary","#report","#items","#card"])$(s).innerHTML="";}
+function invalidateUploadIntent(){uploadContext++;attempt=null;duplicateIntent=null;$("#duplicate").hidden=true;}
+function resetDetail(){task=null;version=null;requestSequence++;invalidateUploadIntent();$("#task-title").textContent="选择一个任务";for(const s of ["#versions","#summary","#report","#items","#card"])$(s).innerHTML="";}
 function identity(){
   epoch++;resetDetail();attempt=null;$("#duplicate").hidden=true;$("#file").value="";
   $("#identity").textContent=me?`${me.display_name||me.username} · ${me.role_label}`:"未登录";
@@ -34,6 +36,7 @@ async function openTask(id,preferred){
   if(data.current_version_id)await openVersion(preferred||data.current_version_id);
 }
 async function openVersion(id){
+  invalidateUploadIntent();
   const seq=++requestSequence,token=epoch;version=id;$("#summary").textContent="正在读取解析结果…";$("#items").innerHTML="";$("#card").innerHTML="";$("#report").innerHTML="";
   const pages=[];let cursor=null;do{const page=await api.listItems(id,{limit:100,cursor});if(seq!==requestSequence||token!==epoch)return;pages.push(...page.items);cursor=page.next_cursor;}while(cursor);
   let report=null;try{report=await api.getImport(id);}catch(e){if(e.status!==404)throw e;}
@@ -47,17 +50,41 @@ async function openItem(id){const seq=++requestSequence,token=epoch,v=version;co
   $("#card").innerHTML=`<h2>${esc(c.facts.name)} · ${esc(c.source_location.cells)}</h2><p><b>MOCK</b> · 比较 ${esc(c.comparison_status)} · 图片 ${esc(c.image_status)}</p>${c.images.map(i=>`<p>${esc(i.status)} · ${esc(i.source_cell)} · ${esc(i.error_message)} ${i.download_url?`<a href="${esc(i.download_url)}">下载图片</a><br><img src="${esc(i.download_url)}" alt="${esc(c.facts.name)} 的商品图片">`:""}</p>`).join("")}<details open><summary>原文、来源位置和本版本结果</summary><pre>${esc(JSON.stringify(c,null,2))}</pre></details>`;
 }
 async function upload(confirmDuplicate=false){
-  if(busy)return;const f=$("#file").files[0];if(!f)return;
-  const target=$("#upload-target").value;
-  if(target==="current"&&!task)throw new Error("请先选择原任务，再从该任务补料");
-  const signature=[f.name,f.size,f.lastModified,target,task?.task_id,task?.current_version_id,confirmDuplicate].join("|");
-  if(!attempt||attempt.signature!==signature)attempt={signature,key:crypto.randomUUID()};
-  busy=true;$("#upload-submit").disabled=true;$("#confirm-duplicate").disabled=true;notice("正在上传、解析并执行 mock 预审，请稍候…");
-  const token=epoch;
-  try{const result=await api.uploadFile(f,{taskId:target==="current"?task.task_id:null,currentVersionId:task?.current_version_id,key:attempt.key,confirmDuplicate});
-    if(token!==epoch)return;attempt=null;$("#duplicate").hidden=true;$("#file").value="";notice(`上传成功：V${result.version_number}，${result.item_count} 条商品，${result.member_count} 条装箱成员。预审为 mock，执行 ${result.precheck_status}。`);await refresh();await openTask(result.task_id,result.version_id);
-  }catch(e){if(token!==epoch)return;if(e.code==="duplicate_file"){$("#duplicate").hidden=false;notice(`文件与 V${e.details.version_number} 相同，请确认是否创建新版本。`);}else fail(e);}
-  finally{busy=false;$("#upload-submit").disabled=false;$("#confirm-duplicate").disabled=false;}
+  if(busy)return;
+  let intent;
+  if(confirmDuplicate){
+    // 确认引用原上传意图，不重新读取当前任务或文件。
+    intent=duplicateIntent;
+    if(!intent||intent.context!==uploadContext||intent.epoch!==epoch)return;
+  }else{
+    const file=$("#file").files[0];if(!file)return;
+    const target=$("#upload-target").value;
+    if(target==="current"&&!task)throw new Error("请先选择原任务，再从该任务补料");
+    const taskId=target==="current"?task.task_id:null;
+    const currentVersionId=target==="current"?task.current_version_id:null;
+    const signature=[file.name,file.size,file.lastModified,target,taskId,currentVersionId].join("|");
+    if(!attempt||attempt.signature!==signature)attempt={signature,key:crypto.randomUUID()};
+    intent=Object.freeze({file,taskId,currentVersionId,key:attempt.key,confirmDuplicate:false,context:uploadContext,epoch});
+  }
+  const isCurrent=()=>intent.context===uploadContext&&intent.epoch===epoch;
+  busy=true;$("#upload-submit").disabled=true;$("#confirm-duplicate").disabled=true;
+  notice("正在上传、解析并执行 mock 预审，请稍候…");
+  try{
+    const result=await api.uploadFile(intent.file,{taskId:intent.taskId,currentVersionId:intent.currentVersionId,key:intent.key,confirmDuplicate:intent.confirmDuplicate});
+    if(!isCurrent())return;
+    attempt=null;duplicateIntent=null;$("#duplicate").hidden=true;$("#file").value="";
+    notice(`上传成功：V${result.version_number}，${result.item_count} 条商品，${result.member_count} 条装箱成员。预审为 mock，执行 ${result.precheck_status}。`);
+    await refresh();if(isCurrent())await openTask(result.task_id,result.version_id);
+  }catch(error){
+    if(!isCurrent())return;
+    if(error.code==="duplicate_file"){
+      duplicateIntent=Object.freeze({...intent,key:crypto.randomUUID(),confirmDuplicate:true});
+      $("#duplicate").hidden=false;
+      notice(`文件与 V${error.details.version_number} 相同，请确认是否创建新版本。`);
+    }else fail(error);
+  }finally{
+    busy=false;$("#upload-submit").disabled=false;$("#confirm-duplicate").disabled=false;
+  }
 }
 $("#login").addEventListener("submit",e=>{e.preventDefault();guarded(async()=>{const f=new FormData(e.target);me=await api.login(f.get("username"),f.get("password"));identity();notice("已登录");await refresh();});});
 $("#logout").onclick=()=>guarded(async()=>{await api.logout();me=null;identity();notice("已退出");});
@@ -66,8 +93,8 @@ $("#more-tasks").onclick=()=>guarded(()=>refresh(true));
 $("#more-claimable").onclick=()=>guarded(()=>refresh(false,true));
 $("#upload").addEventListener("submit",e=>{e.preventDefault();guarded(()=>upload());});
 $("#confirm-duplicate").onclick=()=>guarded(()=>upload(true));
-$("#cancel-duplicate").onclick=()=>{$("#duplicate").hidden=true;attempt=null;notice("已取消创建重复版本");};
-$("#file").onchange=()=>{$("#duplicate").hidden=true;attempt=null;};
-$("#upload-target").onchange=()=>{$("#duplicate").hidden=true;attempt=null;};
+$("#cancel-duplicate").onclick=()=>{invalidateUploadIntent();notice("已取消创建重复版本");};
+$("#file").onchange=invalidateUploadIntent;
+$("#upload-target").onchange=invalidateUploadIntent;
 document.addEventListener("click",e=>{const b=e.target.closest("[data-task],[data-version],[data-item],[data-claim]");if(!b)return;guarded(async()=>{if(b.dataset.task)await openTask(b.dataset.task);else if(b.dataset.version)await openVersion(b.dataset.version);else if(b.dataset.item)await openItem(b.dataset.item);else {const id=b.dataset.claim;if(!claimKeys.has(id))claimKeys.set(id,crypto.randomUUID());await api.claimTask(id,claimKeys.get(id));notice("认领成功，已授予该任务访问权限");await refresh();await openTask(id);}});});
 guarded(async()=>{me=await api.me();identity();if(me)await refresh();});

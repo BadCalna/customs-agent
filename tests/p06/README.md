@@ -11,3 +11,9 @@
 - PostgreSQL：配置独立 `CUSTOMS_PG_*` 后 `CUSTOMS_DB_BACKEND=postgres .venv-customs/bin/python manage.py test tests/p06`，四项测试使用 Barrier + ThreadPoolExecutor + 独立连接。SQLite 顺序通过不替代这项验收。
 
 实际执行记录及环境限制见 `docs/开发文档/交接/P06.md`。
+
+对抗性修复的回归入口：
+
+- `node tests/p06/test_frontend.cjs`：执行实际页面 JS，注入延迟响应，检查串任务、迟到成功、换文件失效和确认重试幂等键；不是浏览器验收。
+- `.venv-customs/bin/python tests/p06/check_claim_race.py`：独立文件 SQLite、两个线程独立连接与真实 HTTP 视图（session/CSRF），覆盖不同人竞争、同人同键重放、同键不同任务冲突。临时库自动清理，不需监听端口。
+- 两项均被 `make test TASK=P06` 收入（Node 缺失时对应测试明确跳过），另验证实际 recommend DTO 隔离和坏绘图的商品/图片状态。

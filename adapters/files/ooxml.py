@@ -586,48 +586,68 @@ class Workbook:
                 ))
         return tuple(references)
 
-    def picture_anchors(self) -> tuple[PictureAnchor, ...]:
+    def picture_anchors(self, *, sheet_name=None, on_error=None) -> tuple[PictureAnchor, ...]:
+        """默认严格读取；解析/提图调用方可收集图片部件错误并保留核心商品数据。"""
         anchors = []
         for sheet in self.sheets:
-            for relation in self._relationships(sheet.part).values():
+            if sheet_name is not None and sheet.name != sheet_name:
+                continue
+            try:
+                relations = self._relationships(sheet.part).values()
+            except OoxmlError as exc:
+                if on_error is None:
+                    raise
+                on_error(OoxmlError(exc.code, str(exc), sheet=sheet.name, cell=exc.cell))
+                continue
+            for relation in relations:
                 if not (relation.get("Type") or "").endswith("/drawing"):
                     continue
                 if relation.get("TargetMode") == "External":
                     continue
-                part = resolve_part(sheet.part, relation.get("Target", ""))
-                if part not in self._parts:
-                    raise OoxmlError("missing_drawing_part", f"绘图部件缺失：{part}", sheet=sheet.name)
-                relationships = self._relationships(part)
-                for index, anchor in enumerate(_xml(self._parts[part], part=part)):
-                    kind = anchor.tag.rsplit("}", 1)[-1]
-                    markers: dict[str, dict[str, int]] = {}
-                    for marker in anchor:
-                        local = marker.tag.rsplit("}", 1)[-1]
-                        if local in ("from", "to"):
-                            markers[local] = {
-                                e.tag.rsplit("}", 1)[-1]: int(e.text or 0) for e in marker
-                                if (e.text or "").strip().lstrip("-").isdigit()
-                            }
-                    images = []
-                    for element in anchor.iter():
-                        if not element.tag.endswith("}blip"):
-                            continue
-                        rel_id = element.get(f"{{{R}}}embed", "")
-                        relation = relationships.get(rel_id, {})
-                        external = relation.get("TargetMode") == "External"
-                        target = resolve_part(part, relation["Target"]) if relation.get("Target") else None
-                        images.append(AnchorImage(
-                            relationship_id=rel_id, external=external,
-                            media=self.media(target, external=external),
-                        ))
-                    anchors.append(PictureAnchor(
-                        sheet=sheet.name, part=part, index=index, kind=kind,
-                        top_row=markers.get("from", {}).get("row"),
-                        left_column=markers.get("from", {}).get("col"),
-                        bottom_row=markers.get("to", {}).get("row"),
-                        right_column=markers.get("to", {}).get("col"),
-                        images=tuple(images),
-                    ))
+                try:
+                    anchors.extend(self._drawing_anchors(sheet, relation))
+                except OoxmlError as exc:
+                    if on_error is None:
+                        raise
+                    on_error(OoxmlError(exc.code, str(exc), sheet=sheet.name, cell=exc.cell))
+        return tuple(anchors)
+
+    def _drawing_anchors(self, sheet, relation):
+        part = resolve_part(sheet.part, relation.get("Target", ""))
+        if part not in self._parts:
+            raise OoxmlError("missing_drawing_part", f"绘图部件缺失：{part}", sheet=sheet.name)
+        relationships = self._relationships(part)
+        anchors = []
+        for index, anchor in enumerate(_xml(self._parts[part], part=part)):
+            kind = anchor.tag.rsplit("}", 1)[-1]
+            markers: dict[str, dict[str, int]] = {}
+            for marker in anchor:
+                local = marker.tag.rsplit("}", 1)[-1]
+                if local in ("from", "to"):
+                    markers[local] = {
+                        e.tag.rsplit("}", 1)[-1]: int(e.text or 0) for e in marker
+                        if (e.text or "").strip().lstrip("-").isdigit()
+                    }
+            images = []
+            for element in anchor.iter():
+                if not element.tag.endswith("}blip"):
+                    continue
+                rel_id = element.get(f"{{{R}}}embed", "")
+                image_relation = relationships.get(rel_id, {})
+                external = image_relation.get("TargetMode") == "External"
+                target = resolve_part(part, image_relation["Target"]) if image_relation.get("Target") else None
+                images.append(AnchorImage(
+                    relationship_id=rel_id, external=external,
+                    media=self.media(target, external=external),
+                ))
+            anchors.append(PictureAnchor(
+                sheet=sheet.name, part=part, index=index, kind=kind,
+                top_row=markers.get("from", {}).get("row"),
+                left_column=markers.get("from", {}).get("col"),
+                bottom_row=markers.get("to", {}).get("row"),
+                right_column=markers.get("to", {}).get("col"),
+                images=tuple(images),
+            ))
         return tuple(anchors)
 
 

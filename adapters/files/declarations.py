@@ -388,6 +388,7 @@ class SheetExtraction:
     layout: Layout
     records: tuple[SemanticRecord, ...]
     non_item_rows: tuple[Mapping[str, Any], ...] = ()
+    issues: tuple[Issue, ...] = ()
 
     @property
     def data_rows(self) -> tuple[int, ...]:
@@ -403,6 +404,7 @@ class SheetExtraction:
             "records": [record.as_dict() for record in self.records],
             "non_item_rows": [dict(item) for item in self.non_item_rows],
             "data_rows": list(self.data_rows),
+            "issues": [issue.as_dict() for issue in self.issues],
         }
 
 
@@ -905,7 +907,7 @@ def extract_records(
     return tuple(records), tuple(non_items)
 
 
-def floating_image_rows(workbook: Workbook, layout: Layout) -> dict[int, tuple[str, ...]]:
+def floating_image_rows(workbook: Workbook, layout: Layout, *, issues=None) -> dict[int, tuple[str, ...]]:
     """普通浮图恰好锚定在附图列单个单元格上的行。
 
     只认“起止锚点都在同一单元格”的图片，用来发现**只有图片、没有文字**的申报行；
@@ -916,7 +918,15 @@ def floating_image_rows(workbook: Workbook, layout: Layout) -> dict[int, tuple[s
         return {}
     column_number = col_number(image_column)
     result: dict[int, list[str]] = defaultdict(list)
-    for anchor in workbook.picture_anchors():
+    def image_error(exc):
+        if issues is not None:
+            issues.append(Issue(
+                code="image_discovery_failed", message=f"浮图扫描失败（{exc.code}）；仅能保留文字/公式可识别商品，可能存在仅有图片而无法识别的行",
+                sheet=exc.sheet or layout.sheet, cell=layout.header_cell("image"), row=layout.header_row,
+                field="image", details={"cause": exc.code, "may_hide_image_only_rows": True},
+            ))
+
+    for anchor in workbook.picture_anchors(sheet_name=layout.sheet, on_error=image_error):
         if anchor.sheet != layout.sheet or not anchor.images:
             continue
         row = anchor.exact_cell(column_number)
@@ -956,7 +966,8 @@ def extract_declarations(
     :func:`adapters.files.packing_links.link_declarations`。
     """
     layout = layout or locate_declaration_layout(workbook, sheet_label=sheet_label)
-    floating = floating_image_rows(workbook, layout)
+    image_issues = []
+    floating = floating_image_rows(workbook, layout, issues=image_issues)
     records, non_items = extract_records(
         workbook,
         layout,
@@ -966,5 +977,5 @@ def extract_declarations(
         floating_image_rows=floating,
     )
     return SheetExtraction(
-        role="declaration", layout=layout, records=records, non_item_rows=non_items
+        role="declaration", layout=layout, records=records, non_item_rows=non_items, issues=tuple(image_issues)
     )

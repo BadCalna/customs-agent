@@ -320,3 +320,42 @@ class ImportTests(TestCase):
         response=self.client.post("/api/v1/tasks",{},content_type="application/json")
         self.assertEqual(response.status_code,422);self.assertEqual(response.json()["error"]["code"],"validation_error")
         self.assertFalse(Task.objects.exists())
+
+    def test_recommendation_only_receives_allowlisted_scalar_facts(self):
+        from adapters.engines.protocols import get_engine
+        from apps.runs.inline import _recommend_attributes
+        captured=[];engine=get_engine();recommend=type(engine).recommend
+        def capture(obj,payload):
+            captured.append(payload)
+            return recommend(obj,payload)
+        with patch.object(type(engine),'recommend',capture):self.upload()
+        self.assertEqual(len(captured),3)
+        for payload in captured:
+            self.assertNotIn('excel_fields',payload.attributes)
+            self.assertNotIn('existing_opinion',payload.attributes)
+            self.assertNotIn('refund_rate',payload.attributes)
+            self.assertNotIn('0000000000',str(payload.attributes))
+            self.assertNotIn('历史备注原文',str(payload.attributes))
+        self.assertEqual(_recommend_attributes({'material':'钢','specification':'12R20','name':{'hs':'1234567890'},'hs':'1234567890','unknown':'old result'}),
+                         {'material':'钢','specification':'12R20'})
+        self.assertIn('excel_fields',Item.objects.first().attributes)
+        self.assertEqual(Item.objects.first().supplier_hs_raw,'0000000000')
+
+    def test_broken_optional_drawing_keeps_products_and_warns_about_hidden_rows(self):
+        from tests.p06.samples import broken_drawing
+        result=self.upload(data=broken_drawing(self.data))
+        self.assertEqual(result['parse_status'],'succeeded')
+        self.assertEqual((result['item_count'],result['member_count']),(3,3))
+        self.assertEqual(result['image_counts'],{'available':1,'absent':0,'read_failed':2})
+        job=ImportJob.objects.get()
+        issue=next(i for i in job.report['issues'] if i['code']=='image_discovery_failed')
+        self.assertEqual((issue['sheet'],issue['cell'],issue['row']),('节点①申报要素','G1',1))
+        self.assertTrue(issue['details']['may_hide_image_only_rows'])
+        self.assertEqual(Item.objects.get(source_row=3).images.get().status,'read_failed')
+        self.assertIn('floating_image_scan_failed',Item.objects.get(source_row=3).images.get().error_message)
+
+    def test_unrelated_broken_drawing_does_not_poison_declaration_images(self):
+        from tests.p06.samples import broken_drawing
+        result=self.upload(data=broken_drawing(self.data,sheet_number=2))
+        self.assertEqual(result['image_counts'],{'available':1,'absent':1,'read_failed':1})
+        self.assertFalse(any(i['code']=='image_discovery_failed' for i in ImportJob.objects.get().report['issues']))

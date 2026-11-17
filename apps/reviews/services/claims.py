@@ -1,7 +1,10 @@
 """P06 认领边界。候选范围与对象读权限分开，只有认领后才授予 TaskAssignment。"""
+import sqlite3
+import time
+
 from django.conf import settings
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.db import transaction
+from django.db import IntegrityError, OperationalError, connection, transaction
 from django.db.models import Exists, OuterRef, Subquery
 from django.http import Http404
 from django.utils.module_loading import import_string
@@ -52,6 +55,26 @@ def validate_key(key):
 def claim_task(user, task_id, key):
     require_operator(user)
     validate_key(key)
+    # SQLite 的 read -> write 升级可能直接报 SQLITE_BUSY/LOCKED；必须离开失败事务后重试。
+    for attempt in range(4):
+        try:
+            return _claim_once(user, task_id, key)
+        except OperationalError as exc:
+            cause = getattr(exc, "__cause__", None)
+            code = getattr(cause, "sqlite_errorcode", 0) or 0
+            locked = (code & 0xff) in {sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED}
+            if connection.vendor != "sqlite" or not locked:
+                raise
+        except IntegrityError:
+            # 只重试已经出现认领凭据的竞争，其他完整性错误仍原样上报。
+            if not TaskClaim.objects.filter(task_id=task_id).exists():
+                raise
+        if attempt < 3:
+            time.sleep(0.025 * (attempt + 1))
+    raise ApiError(409, "claim_busy", "任务正在被认领，请刷新或用同一幂等键重试", {"retryable": True})
+
+
+def _claim_once(user, task_id, key):
     payload = {"task_id": str(task_id)}
     with transaction.atomic():
         # 同操作者的同 key 跨对象请求也串行，随后锁任务与现有人工操作共用。
