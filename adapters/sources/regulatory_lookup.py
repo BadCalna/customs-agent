@@ -423,7 +423,7 @@ class RegulatoryResult(Schema):
         if self.outcome is not expected_outcome:
             raise ValueError(f"outcome 必须由来源与基准计算，期望 {expected_outcome.value}")
         expected_usable = resolve_usable_as_basis(
-            expected_outcome, self.dataset, record, matched
+            expected_outcome, self.dataset, record, matched, fmt=self.format
         )
         if self.usable_as_basis != expected_usable:
             raise ValueError("usable_as_basis 必须按来源权威、版本、方向与可定位性计算")
@@ -542,21 +542,37 @@ def resolve_usable_as_basis(
     dataset: RegulatoryDatasetInfo | None,
     record: RegulatoryRecord | None,
     direction_ok: bool,
+    *,
+    fmt: HsFormat,
 ) -> bool:
-    """能否作为合规依据：来源权威 + 结论明确 + 方向已核 + 每条措施可定位且含义已知。
+    """能否作为合规依据：来源权威 + 结论明确 + 方向已核 + 10 位码 + 无两用物项待判。
+
+    逐条要求（任一不满足即不可用）：
+    - 查询码是 10 位：8 位子目的监管条件可能因附加编号不同，且无法确认申报编码；
+    - 来源权威（官方 + 已复核）、版本已核、申报日期在有效期、方向核对一致；
+    - 结论为 ``measures_required`` 或 ``declared_none``；
+    - 每条措施可定位、有来源给的名称、类别明确、**不是两用物项**；
+    - 记录上没有两用物项线索：两用物项是否适用必须专家判定，未判清前监管结论不算核清。
 
     只有代码没有名称时，不能“知道要办证”更不知道办什么证，只能算线索。
     """
 
     if dataset is None or record is None:
         return False
+    if fmt.state is not HsFormatState.VALID:
+        return False
     if not dataset.authoritative or not direction_ok:
         return False
     if outcome not in (RegulatoryOutcome.MEASURES_REQUIRED, RegulatoryOutcome.DECLARED_NONE):
         return False
-    return all(
-        item.located and item.meaning_known for item in (record.measures or [])
-    )
+    if record.dual_use:
+        return False
+    for measure in record.measures or []:
+        if not measure.located or not measure.meaning_known:
+            return False
+        if measure.category in (MeasureCategory.UNKNOWN, MeasureCategory.DUAL_USE):
+            return False
+    return True
 
 
 def resolve_expert_review(
@@ -564,18 +580,14 @@ def resolve_expert_review(
     usable: bool,
     record: RegulatoryRecord | None,
 ) -> bool:
-    """是否需要转专家：结论不可用、两用物项命中、措施含义未知都要转。"""
+    """是否需要转专家：结论不可用就转。
 
-    if not usable:
-        return True
-    if record is None:
-        return True
-    if record.dual_use:
-        return True
-    for measure in record.measures or []:
-        if measure.category is MeasureCategory.UNKNOWN or not measure.meaning_known:
-            return True
-    return False
+    ``usable`` 已经把 8 位码、来源非权威、方向不一致、结论待核、措施不可定位/无名称/
+    类别不明、两用物项线索（含填在措施类别里的）全部排除，所以“可用”等价于
+    “不需要专家再看”；反之任何降级都必须有人看一眼，不能自动放行。
+    """
+
+    return not usable or record is None
 
 
 # ---------------------------------------------------------------------------
@@ -865,9 +877,21 @@ class RegulatorySource:
 
         version = resolve_version(prepared.basis, snapshot.versions, dataset=snapshot.dataset)
         record = _match_record(snapshot, version, fmt, prepared.direction)
-        if record is None:
-            return self._not_found(prepared, fmt, version, snapshot, now)
-        return self._found(prepared, fmt, version, record, snapshot, now)
+        try:
+            if record is None:
+                return self._not_found(prepared, fmt, version, snapshot, now)
+            return self._found(prepared, fmt, version, record, snapshot, now)
+        except ValidationError as exc:
+            # 结果自检是最后一道防线：内部缺陷不能变成 500，也不能返回“看起来通过”的结果。
+            return self._failed(
+                QueryStatus.SOURCE_ERROR,
+                "结果自检失败（适配器内部缺陷："
+                + _summarize_validation_error(exc)
+                + "）；本次结论不成立，按缺陷上报，不能据此判定监管要求",
+                prepared,
+                fmt,
+                now,
+            )
 
     # --- 构造结果 ---
 
@@ -1086,10 +1110,17 @@ class RegulatorySource:
         outcome = resolve_outcome(
             record, version, effective, dataset=dataset, direction_ok=matched
         )
-        usable = resolve_usable_as_basis(outcome, dataset, record, matched)
+        usable = resolve_usable_as_basis(outcome, dataset, record, matched, fmt=fmt)
         issues, pending = self._found_issues(
             query, record, version, dataset, effective, matched, fmt, outcome
         )
+        if outcome is RegulatoryOutcome.UNKNOWN and not pending:
+            # 防线：任何“待核”的结论都必须写清为什么，否则下游会把空原因读成无风险。
+            pending.append(
+                "未形成监管结论（unknown）"
+                + ("：" + "、".join(item.code for item in issues) if issues else "：原因未记录")
+                + "；不能当成无监管"
+            )
         evidence = self._evidence(query, fmt, version, record, dataset, effective)
         measures = list(record.measures or [])
         dual_use = list(record.dual_use)
@@ -1233,7 +1264,35 @@ class RegulatorySource:
                 )
                 pending.append(f"第 {index} 项措施代码 {measure.code} 含义未取得")
             if measure.category is MeasureCategory.UNKNOWN:
+                issues.append(
+                    IssueEntry(
+                        code="REG_MEASURE_CATEGORY_UNKNOWN",
+                        message=(
+                            f"第 {index} 项措施未说明是监管证件、检验检疫还是两用物项；"
+                            "类别不明确前不能把监管结论当成已核清"
+                        ),
+                        field="evidence",
+                        missing="措施类别（licence / inspection_quarantine / dual_use）",
+                        suggested_role="expert",
+                    )
+                )
                 pending.append(f"第 {index} 项措施类别未说明")
+            if measure.category is MeasureCategory.DUAL_USE:
+                issues.append(
+                    IssueEntry(
+                        code="REG_MEASURE_DUAL_USE_UNVERIFIED",
+                        message=(
+                            f"第 {index} 项措施类别是两用物项；是否属于管制物项必须由专家"
+                            "按技术参数、最终用途与用户判定，不因它写在“监管措施”里就当作已核清"
+                        ),
+                        field="supplier_hs_raw",
+                        missing="两用物项清单条目与技术参数/最终用途确认",
+                        suggested_role="expert",
+                    )
+                )
+                pending.append(
+                    f"第 {index} 项措施属两用物项类别（{measure.code}），需专家判定是否受管制"
+                )
             if not measure.located:
                 issues.append(
                     IssueEntry(
@@ -1354,9 +1413,12 @@ class RegulatorySource:
                     suggested_role="supplier",
                 )
             )
+            pending.append(
+                "只有 8 位税目/子目，未确认 10 位申报编码，监管条件不能直接当依据"
+            )
 
-        if outcome is RegulatoryOutcome.DECLARED_NONE and dataset.authoritative:
-            pending.append("来源明确声明无监管要求；仍需专家确认该条政策适用于本票业务")
+        # 来源明确声明无监管要求且可作依据时不写待核原因：人工审批是业务流程（P18/专家），
+        # 不属于“来源适配器还有没核清的事”，否则会出现“无需专家却仍待核”的自相矛盾。
         return issues, pending
 
     # --- 证据 ---

@@ -249,8 +249,11 @@ P17 与 P14 同级：**只提供来源事实，不做退税判定、不做合规
 | `unknown` | 缺申报日期、版本待核、来源未声明条件、来源未声明处理方式/状态、来源非权威、8 位子目、退税代码无法核对 | 转人工/专家 |
 
 - `conditions` 字段的三种状态必须区分：字段缺失 ⇒ `not_declared`（**不等于无条件**，判 `unknown`）；空数组 ⇒ `declared_none`；非空 ⇒ `declared_unverified`（判 `conditional`）。
-- **任何非 `applies` 的结果至少带一条 `pending_reasons`**（结果校验强制），P18 据此保持 `unknown`，不能读成无风险。
+- **任何非 `applies` 的结果至少带一条 `pending_reasons`**（结果校验强制 + 构造期兜底），P18 据此保持 `unknown`，不能读成无风险。
 - `usable_as_basis` 与 `applicability=applies` 严格等价，不接受人工覆盖。
+- 8 位子目一律 `unknown`（不 `applies`）：文库若按 10 位维护，退税率可能不同，且无法确认申报编码。
+- `expert_review_required`：**只有 `applies` 且 `rate_comparison=matched` 时为 false**。`conflict`、`unverified` 与 `not_compared`（含原表空白、来源是“不予退税/免税”等非数值处理方式）都必须转专家——2026-11-17 复查修复的正是“原表 13%、来源不予退税却标无需专家”这一类（缺陷 C-18）。
+- `usable_as_basis` 与 `expert_review_required` 是**两件事**：前者说“来源事实可作依据”，后者说“这一分项还有要人看的问题”。二者都为真时（例如来源是不予退税但原值写了 13%），P18 必须按专家复核处理，不能只看 `usable_as_basis`。
 
 ### 7.5 监管条件：三态与方向
 
@@ -265,7 +268,12 @@ P17 与 P14 同级：**只提供来源事实，不做退税判定、不做合规
 - **方向是必需输入**：未给方向直接 `invalid_input`（`REG_DIRECTION_UNKNOWN`），不默认进口或“双向都行”；记录方向与查询方向不一致时返回 `not_found` 并提示 `REG_OTHER_VERSION_OR_DIRECTION`，**不能据此方向判无监管**。
 - `direction=both` 的记录**不得携带具体措施**（导入期拒绝）：来源表里 A 类进口、B 类出口必须拆成两条方向明确的记录，否则无法逐条核对方向。
 - 措施名称（`name`）与主管机关（`agency`）只来自来源；只有代码时留空并报 `REG_MEASURE_NAME_UNKNOWN`，**不得由模型或硬编码补出含义**；此时 `usable_as_basis=false`。
+- 8 位子目一律 `usable_as_basis=false`（`REG_SUBHEADING_ONLY` + 待核原因）：监管条件通常按 10 位维护，8 位只说明层级；“来源声明无监管”也不例外（缺陷 C-16）。
+- **两用物项有两个入口，行为必须一致**：`dual_use[]` 线索列表，以及 `measures[].category=dual_use`。两种写法都要求 `usable_as_basis=false`、`expert_review_required=true` 并报问题（`REG_DUAL_USE_UNVERIFIED` / `REG_MEASURE_DUAL_USE_UNVERIFIED`）；不能因为写进“监管措施”就当作已核清（缺陷 C-17）。
 - 两用物项只输出清单命中线索：`verdict` **恒为 `unknown`**（枚举只有一个取值，结果校验拒绝其它值），必须转专家按技术参数、最终用途与用户判定；不通过改名规避。
+- 措施类别不明（`category=unknown`）同样 `usable_as_basis=false` 并报 `REG_MEASURE_CATEGORY_UNKNOWN`：不知道是证件、检验检疫还是两用物项，就不能说监管结论已核清。
+- `expert_review_required == not usable_as_basis`：可用已排除 8 位码、来源非权威、方向不符、结论待核、措施不可定位/无名称/类别不明/两用物项，因此“可用”等价于“不需要专家再看”，任何降级都必须转人，不能自动放行。
+- 来源明确声明无监管且可作依据时 `pending_reasons` 为空：人工审批属于 P18/专家的业务流程，不算“适配器还有没核清的事”，避免出现“无需专家却仍挂待核”的自相矛盾。
 
 ### 7.6 证据与引用
 
@@ -291,8 +299,9 @@ P17 与 P14 同级：**只提供来源事实，不做退税判定、不做合规
 
 P18 只有在以下条件同时满足时，才能把 P17 的结果当作“已核实事实”：
 
-- 退税：`usable_as_basis=true`（即 `applicability=applies`）；原值与来源值一致只能作为**机械一致**，专业结论仍需专家；
-- 监管：`usable_as_basis=true` 且 `outcome` 为 `measures_required`/`declared_none`；
-- 证据可定位且属于当前版本；两用物项 `verdict` 恒为 `unknown`。
+- 退税：`usable_as_basis=true`（即 `applicability=applies`）**且** `expert_review_required=false`；原值与来源值一致只能作为**机械一致**，专业结论仍需专家；
+- 监管：`usable_as_basis=true` **且** `expert_review_required=false`，且 `outcome` 为 `measures_required`/`declared_none`；
+- 证据可定位且属于当前版本；两用物项 `verdict` 恒为 `unknown`（无论写在 `dual_use[]` 还是 `measures[].category` 里）。
+- 两个标志都必须是“否/否”才能进 `matched`；只满足一个（例如来源事实可作依据，但原值比对没对上）一律按下一条降级处理。
 
 其余情况：`conditional`/`unknown`/`not_effective` 一律记为分项 `unknown`（**不是 matched，也不是“无风险”**），把 `pending_reasons` 按 `suggested_role` 分流（`supplier` 补资料、`expert` 判专业、`operator` 补来源）。P18 不得用模型补齐 P17 未取得的条款、税率、证件名称，也不得把 `declared_none` 写成“无监管”除非 `usable_as_basis=true`；专家改码后必须以新 HS 重跑本适配器，旧结果只保留为历史。

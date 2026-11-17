@@ -878,9 +878,6 @@ def resolve_applicability(
 
     if dataset is None or not version.verified:
         return TaxApplicability.UNKNOWN
-    if fmt.state is not HsFormatState.VALID:
-        # 8 位子目只能说明该层级：文库若按 10 位维护，退税率可能不同。
-        return TaxApplicability.UNKNOWN
     if record.rate_kind is RateKind.UNKNOWN or record.rate_state is RateState.UNKNOWN:
         return TaxApplicability.UNKNOWN
     if record.rate_state in (RateState.ABOLISHED, RateState.SUPERSEDED):
@@ -888,6 +885,9 @@ def resolve_applicability(
     if effective is EffectiveStatus.NOT_YET_EFFECTIVE or effective is EffectiveStatus.EXPIRED:
         return TaxApplicability.NOT_EFFECTIVE
     if effective is not EffectiveStatus.EFFECTIVE:
+        return TaxApplicability.UNKNOWN
+    if fmt.state is not HsFormatState.VALID:
+        # 8 位子目只能说明该层级：文库若按 10 位维护，退税率可能不同。
         return TaxApplicability.UNKNOWN
     if record.conditions_state is ConditionsState.DECLARED_UNVERIFIED:
         return TaxApplicability.CONDITIONAL
@@ -903,11 +903,16 @@ def resolve_applicability(
 def resolve_expert_review(
     applicability: TaxApplicability, comparison: RateComparison
 ) -> bool:
-    """是否需要转专家：只有“已核可依 + 数值一致”才不需要。"""
+    """是否需要转专家：只有“已核可依 **且** 数值一致”才不需要。
+
+    ``not_compared``（原值空白、来源是非数值处理方式如“不予退税”）与 ``unverified``
+    （原值无法确定为唯一百分数）都意味着“原表与政策的关系没被核清”，必须由专家看政策原文；
+    早先只有 conflict/unverified 会转专家，导致“原表 13%、来源不予退税”被标成无需专家。
+    """
 
     if applicability is not TaxApplicability.APPLIES:
         return True
-    return comparison.status in (ComparisonStatus.CONFLICT, ComparisonStatus.UNVERIFIED)
+    return comparison.status is not ComparisonStatus.MATCHED
 
 
 # ---------------------------------------------------------------------------
@@ -1210,9 +1215,21 @@ class TaxRateSource:
 
         version = resolve_version(prepared.basis, snapshot.versions, dataset=snapshot.dataset)
         record = _match_record(snapshot, version, fmt)
-        if record is None:
-            return self._not_found(prepared, fmt, version, snapshot, now)
-        return self._found(prepared, fmt, version, record, snapshot, now)
+        try:
+            if record is None:
+                return self._not_found(prepared, fmt, version, snapshot, now)
+            return self._found(prepared, fmt, version, record, snapshot, now)
+        except ValidationError as exc:
+            # 结果自检是最后一道防线：适配器内部缺陷不能变成 500，也不能返回一个“看起来通过”的结果。
+            return self._failed(
+                QueryStatus.SOURCE_ERROR,
+                "结果自检失败（适配器内部缺陷："
+                + _summarize_validation_error(exc)
+                + "）；本次结论不成立，按缺陷上报，不能据此判定退税率",
+                prepared,
+                fmt,
+                now,
+            )
 
     # --- 构造结果 ---
 
@@ -1480,6 +1497,13 @@ class TaxRateSource:
         )
         evidence = self._evidence(query, fmt, version, record, dataset, effective)
 
+        if applicability is not TaxApplicability.APPLIES and not pending:
+            # 防线：任何“不可用”的结论都必须写清为什么，否则下游会把空原因读成无风险。
+            pending.append(
+                f"未形成可用结论（{applicability.value}）"
+                + ("：" + "、".join(item.code for item in issues) if issues else "：原因未记录")
+                + "；需人工核对后再用"
+            )
         rate_text = (
             f"{record.rate_percent:g}%"
             if record.rate_percent is not None
@@ -1763,6 +1787,7 @@ class TaxRateSource:
                     suggested_role="supplier",
                 )
             )
+            pending.append("只有 8 位税目/子目，未确认 10 位申报编码，退税率不能直接当依据")
         return issues, pending
 
     # --- 证据 ---

@@ -309,8 +309,8 @@ class DualUseTest(SimpleTestCase):
         self.assertEqual(result.dual_use[0].verdict, DualUseVerdict.UNKNOWN)
         self.assertIn("REG_DUAL_USE_UNVERIFIED", [item.code for item in result.issues])
         self.assertTrue(any("两用物项线索" in reason for reason in result.pending_reasons))
-        # 监管条件本身仍成立（措施可定位），但两用物项必须由专家判定。
-        self.assertTrue(result.usable_as_basis)
+        # 两用物项未判定前，监管分项不算核清：不可作依据、必须转专家（与措施类别=dual_use 一致）。
+        self.assertFalse(result.usable_as_basis)
         self.assertEqual(len(result.evidence), 3)
 
     def test_dual_use_evidence_is_locatable(self):
