@@ -54,7 +54,16 @@ export function renderTaskList(host, state) {
 }
 
 /** Mount once. Host auth/session changes must destroy and remount this controller. */
-export function createTaskList(host, { client, onSelectTask = () => {}, pageSize = 10 } = {}) {
+/**
+ * @param {object} options
+ * @param {object} options.client 统一只读 client
+ * @param {(detail: object) => void|Promise<void>} [options.onSelectTask] 选中任务后读到的详情
+ * @param {(items: object[], page: object) => void|Promise<void>} [options.onLoaded]
+ *   每次列表读取成功后回调。页面「刷新」按钮走的是组件内部 load()，宿主只包一层
+ *   load() 覆盖不到这条路径；需要核对已选任务是否过期时用这个回调。
+ * @param {number} [options.pageSize]
+ */
+export function createTaskList(host, { client, onSelectTask = () => {}, onLoaded = null, pageSize = 10 } = {}) {
   if (!host || !client?.listTasks || !client?.getTask) throw new TypeError("需要容器和统一任务client");
   let state = {items: [], stage: "", query: "", page: 0, nextCursor: null,
     loading: false, error: null, selectionError: null, selectedId: null, selecting: false};
@@ -80,6 +89,16 @@ export function createTaskList(host, { client, onSelectTask = () => {}, pageSize
       state = {...state, error, loading: false};
     }
     draw();
+    if (onLoaded && !state.error) {
+      try {
+        await onLoaded(state.items, {page: state.page, stage: state.stage});
+      } catch (error) {
+        // 核对失败只记在列表侧提示里，不把已经读到的一页数据判成失败。
+        if (!alive || request !== token) return;
+        state = {...state, selectionError: error};
+        draw();
+      }
+    }
   }
   async function selectTask(taskId) {
     if (!alive || !state.items.some(t => t.task_id === taskId)) return;

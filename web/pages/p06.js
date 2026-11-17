@@ -53,9 +53,20 @@ async function exportResult(kind){
   if(exporting)return;
   exporting=true;setExportButtonsDisabled(true);
   const versionId=report.version_id,runId=report.precheck_run_id;
-  notice(`正在生成${kind==="precheck"?"预审结论":"补料清单"}…`);
+  // 导出是跨 await 的动作：记下发起时的登录身份代次与详情版本。
+  // 响应回来时若身份/版本/引用已变（退出、切任务、切版本、重新选择），整份结果直接丢弃——
+  // 不下载、不提示成功、也不把旧请求的错误落到新上下文里。
+  const token=epoch,requestVersion=version;
+  // 退出登录、切任务/版本都会调用 hideExports()（latestReport 置空）并推进 epoch，
+  // 因此「上下文仍有效」= 身份代次不变 + 当前版本变量没被换掉 + 页面上仍是同一份报告。
+  const isCurrentExport=()=>token===epoch&&version===requestVersion
+    &&Boolean(latestReport)&&latestReport.version_id===versionId
+    &&latestReport.precheck_run_id===runId;
+  const pendingText=`正在生成${kind==="precheck"?"预审结论":"补料清单"}…`;
+  notice(pendingText);
   try{
     const result=await api.createExport(versionId,{kind,run_id:runId});
+    if(!isCurrentExport())return;
     // 服务端回的执行必须就是本页引用的执行；不一致时报错，不把别的结果冒充成本次导出。
     if(result.runId!==runId)throw Object.assign(new Error(`导出引用的执行 ${result.runId||"（缺失）"} 与本页执行 ${runId} 不一致，已拒绝保存`),{status:409,code:"export_reference_mismatch",details:{}});
     if(!String(result.contentType||"").includes("spreadsheet"))throw Object.assign(new Error(`导出响应不是 xlsx（${result.contentType||"无 Content-Type"}），不保存`),{status:0,code:"unexpected_export_type",details:{}});
@@ -65,9 +76,13 @@ async function exportResult(kind){
     setTimeout(()=>URL.revokeObjectURL(url),3000);
     notice(`已生成 ${result.filename}（执行 ${result.runId} · 结果来源 ${String(result.resultMode||"").toUpperCase()}）`);
   }catch(error){
+    if(!isCurrentExport())return;
     fail(error);
   }finally{
-    exporting=false;setExportButtonsDisabled(!exportAvailability(latestReport).ready);
+    exporting=false;
+    setExportButtonsDisabled(!exportAvailability(latestReport).ready);
+    // 上下文已变时不要留下「正在生成…」这种会一直挂着的进行中提示。
+    if(!isCurrentExport()&&$("#notice").textContent===pendingText)$("#notice").textContent="";
   }
 }
 function resetDetail(){task=null;version=null;latestReport=null;requestSequence++;invalidateUploadIntent();$("#task-title").textContent="选择一个任务";for(const s of ["#versions","#summary","#report","#items","#card"])$(s).innerHTML="";hideExports();}

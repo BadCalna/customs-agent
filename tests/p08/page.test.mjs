@@ -286,6 +286,58 @@ test('切换任务时旧响应不得覆盖新选择', async () => {
   page.destroy();
 });
 
+test('列表刷新到新版本后，右侧重新读详情，不把旧版本当“当前版本”', async () => {
+  // 另一个标签页上传了 V3：列表刷新会拿到新的 current_version_id / latest_run_id，
+  // 但右侧仍是上次选择时的详情。刷新按钮走组件内部 load()，页面必须靠 onLoaded 核对。
+  const oldVersion = mockTask.current_version_id;
+  const oldRun = runOf(mockTask.latest_run_id);
+  const newVersion = 'version-v3';
+  const newRun = {...copy(oldRun), run_id: 'run-v3', version_id: newVersion};
+  let listRow = {...copy(mockTask)};
+  let detailRow = {...copy(mockTask), versions: [{version_id: oldVersion, number: 2}]};
+  const calls = {getTask: 0, getRun: []};
+  const client = {
+    async me() { return {display_name: '演示账号'}; },
+    async listTasks() { return {items: [copy(listRow)], next_cursor: null}; },
+    async getTask(id) { calls.getTask += 1; return copy(detailRow); },
+    async getRun(id) { calls.getRun.push(id); return copy(id === newRun.run_id ? newRun : oldRun); },
+  };
+  const {page, runHost, summaryHost} = mount({client});
+  await page.ready;
+  await page.selectTask(mockTask.task_id);
+  assert.match(summaryHost.textContent, /当前版本 V2/);
+  assert.deepEqual(calls.getRun, [mockTask.latest_run_id]);
+
+  // 列表刷新到 V3（真实路径：组件刷新按钮 → 内部 load → onLoaded）
+  listRow = {...listRow, current_version_id: newVersion, current_version_number: 3, latest_run_id: newRun.run_id};
+  detailRow = {...copy(listRow), versions: [{version_id: newVersion, number: 3}]};
+  await page.tasks.load();
+
+  assert.equal(calls.getTask, 2, '列表显示新版本后必须重读详情');
+  assert.match(summaryHost.textContent, /当前版本 V3/, '摘要不能继续把旧版本说成当前版本');
+  assert.deepEqual(calls.getRun, [mockTask.latest_run_id, newRun.run_id], '进度必须改为读取新执行');
+  assert.match(runHost.innerHTML, new RegExp(newRun.run_id));
+  assert.doesNotMatch(runHost.innerHTML, new RegExp(oldRun.run_id));
+  page.destroy();
+});
+
+test('列表刷新但任务未变时，不重复读详情（避免每次刷新都闪一下右侧）', async () => {
+  let getTaskCount = 0;
+  const client = {
+    async me() { return {display_name: '演示账号'}; },
+    async listTasks() { return {items: [copy(mockTask)], next_cursor: null}; },
+    async getTask(id) { getTaskCount += 1; return copy(mockTask); },
+    async getRun(id) { return copy(runOf(id)); },
+  };
+  const {page} = mount({client});
+  await page.ready;
+  await page.selectTask(mockTask.task_id);
+  const before = getTaskCount;
+  await page.tasks.load();
+  assert.equal(getTaskCount, before, '版本与执行都没变时不应重新读详情');
+  page.destroy();
+});
+
 test('执行记录身份不符时停止更新并报错，不渲染成已完成', async () => {
   const mismatched = {...runOf(expertTask.latest_run_id), run_id: mockTask.latest_run_id};
   const {client} = fakeClient({runs: {[mockTask.latest_run_id]: mismatched}});

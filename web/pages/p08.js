@@ -141,7 +141,7 @@ export function mountP08Page({client, mode = MODE_LIVE, taskHost, runHost, ident
 
   // 只读挂载：不传 onRetry / retryAllowed，重试按钮保持组件默认的“未接通”禁用态。
   const progress = createRunProgress(runHost, {client});
-  const tasks = createTaskList(taskHost, {client, pageSize, onSelectTask: selectTask});
+  const tasks = createTaskList(taskHost, {client, pageSize, onSelectTask: selectTask, onLoaded: reconcileSelection});
 
   function paintNotice() {
     if (!noticeHost) return;
@@ -155,6 +155,25 @@ export function mountP08Page({client, mode = MODE_LIVE, taskHost, runHost, ident
 
   function paintSummary() {
     if (summaryHost) summaryHost.textContent = versionSummary(state.detail);
+  }
+
+  /**
+   * 列表刷新成功后核对已选任务。
+   *
+   * 任务列表与右侧详情/进度是两路数据：另一个标签页上传新版本后，列表「刷新」会拿到新的
+   * current_version_id / latest_run_id，但右侧仍是上一次选择时的详情，会继续把旧版本
+   * 说成「当前版本」。列表的刷新按钮调用的是组件内部 load()，因此核对必须挂在这个回调上。
+   */
+  async function reconcileSelection(items) {
+    if (!alive || !state.selectedId || !state.detail) return;
+    const entry = (Array.isArray(items) ? items : []).find((row) => row && row.task_id === state.selectedId);
+    if (!entry) return; // 当前页没有该任务：不动右侧，避免把「不在本页」误当成「已删除」
+    const detail = state.detail;
+    const versionChanged = (entry.current_version_id || null) !== (detail.current_version_id || null);
+    const runChanged = (entry.latest_run_id || null) !== (detail.latest_run_id || null);
+    if (!versionChanged && !runChanged) return;
+    // 重读详情后再更新右侧与进度上下文；不能拿旧详情继续自称「当前版本」。
+    await tasks.selectTask(state.selectedId);
   }
 
   async function selectTask(detail) {
