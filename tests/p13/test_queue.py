@@ -276,4 +276,3 @@ class QueueTests(TestCase):
             data=json.dumps({"item_ids": [str(self.items[0].pk)]}), content_type="application/json",
             HTTP_IDEMPOTENCY_KEY="csrf-test")
         self.assertEqual(response.status_code, 403)
-
