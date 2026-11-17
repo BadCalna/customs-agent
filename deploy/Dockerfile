@@ -32,10 +32,13 @@ RUN uv sync --locked --no-dev --no-install-project --python 3.13 \
 
 COPY . .
 
-# 两个可写目录：受控文件存储根（原件/图片/导出）与 collectstatic 输出。
-# 权限在这里一次给足，compose 的命名卷首次创建会继承这些目录的属主。
-RUN mkdir -p /srv/customs/files /app/staticfiles \
-    && chown -R app:app /srv/customs /app/staticfiles /app
+# 三个可写数据目录：当前文件、恢复版本子树与 collectstatic 输出。
+# 命名卷首次创建会继承属主；/srv/customs 卷根仍是 root，不允许应用替换根。
+# 代码与 venv 保持 root 所有且运行用户不可写。
+RUN mkdir -p /srv/customs/files /srv/customs/restores /app/staticfiles \
+    && chmod -R go-w /app \
+    && chmod 0755 /srv/customs \
+    && chown -R app:app /srv/customs/files /srv/customs/restores /app/staticfiles
 
 USER app
 
@@ -49,5 +52,6 @@ CMD ["gunicorn", "config.wsgi:application", \
      "--bind", "0.0.0.0:8000", \
      "--workers", "3", \
      "--timeout", "120", \
+     "--graceful-timeout", "120", \
      "--access-logfile", "-", \
      "--error-logfile", "-"]

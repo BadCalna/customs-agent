@@ -12,6 +12,13 @@
 
 name: ${CUSTOMS_COMPOSE_PROJECT:-customs-agent}
 
+# 每个长运行服务都使用轮转日志，避免磁盘被 stdout/stderr 撑满。
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 x-app: &app
   build:
     context: ..
@@ -29,6 +36,9 @@ x-app: &app
     CUSTOMS_FILE_ROOT: ${CUSTOMS_FILE_ROOT:-/srv/customs/files}
     CUSTOMS_STATIC_ROOT: /app/staticfiles
   restart: unless-stopped
+  logging: *logging
+  # gunicorn 超时为 120s，留出在途请求退出时间。
+  stop_grace_period: 135s
 
 services:
   # --- 数据库：只在内部网络，不写 ports ---
@@ -53,6 +63,8 @@ services:
       start_period: 10s
     shm_size: 256mb
     restart: unless-stopped
+    logging: *logging
+    stop_grace_period: 60s
 
   # --- 一次性发布步骤：迁移 + 静态资源收集 ---
   migrate:
@@ -103,6 +115,8 @@ services:
       timeout: 5s
       retries: 6
     restart: unless-stopped
+    logging: *logging
+    stop_grace_period: 135s
 
   # ==========================================================================
   # 以下两项是 P13（Redis + django-rq worker）的预留位，默认不启动：profile=queue。
@@ -128,6 +142,8 @@ services:
       timeout: 3s
       retries: 6
     restart: unless-stopped
+    logging: *logging
+    stop_grace_period: 60s
 
   worker:
     <<: *app

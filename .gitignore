@@ -8,6 +8,12 @@
 !.env.example
 *.pem
 *.key
+*.p12
+*.pfx
+**/backups/
+**/.state/
+**/certs/
+/deploy/nginx/https.conf
 
 # Python
 __pycache__/

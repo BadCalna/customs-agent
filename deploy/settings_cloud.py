@@ -21,8 +21,11 @@
 """
 from __future__ import annotations
 
+import ipaddress
 import os
+import re
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from django.core.exceptions import ImproperlyConfigured
 
@@ -44,7 +47,10 @@ def _flag(name: str, default: bool = False) -> bool:
 
 def _csv(name: str) -> list[str]:
     """逗号分隔列表；空项丢弃。"""
-    return [item.strip() for item in os.environ.get(name, "").split(",") if item.strip()]
+    raw = os.environ.get(name, "")
+    if any(ord(character) < 32 or ord(character) == 127 for character in raw):
+        raise ImproperlyConfigured(f"{name} 不能包含控制字符。")
+    return [item.strip() for item in raw.split(",") if item.strip()]
 
 
 DEBUG = _flag("CUSTOMS_DEBUG", False)
@@ -56,13 +62,68 @@ if not ALLOWED_HOSTS:
         "留空时 Django 会拒绝所有 Host 头；云端不允许沿用开发默认的 localhost。"
     )
 
+def _valid_host(host: str) -> bool:
+    """只接受明确的 IP / DNS Host，不接受通配符、端口或模板域名。"""
+    lowered = host.lower()
+    if any(token in lowered for token in ("*", "change-me", "changeme", "your-domain", "<", ">", "{", "}")):
+        return False
+    if any(lowered == domain or lowered.endswith("." + domain)
+           for domain in ("example.com", "example.org", "example.net", "example")):
+        return False
+    try:
+        ipaddress.ip_address(host[1:-1] if host.startswith("[") and host.endswith("]") else host)
+        return ":" not in host or (host.startswith("[") and host.endswith("]"))
+    except ValueError:
+        return len(host) <= 253 and all(
+            re.fullmatch(r"[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?", label)
+            for label in host.split(".")
+        )
+
+
+if not all(_valid_host(host) for host in ALLOWED_HOSTS):
+    # 不回显配置值，避免运维误把凭据放进 Host 后泄露到日志。
+    raise ImproperlyConfigured("CUSTOMS_ALLOWED_HOSTS 只能填明确的 IP / 域名，禁止 *、占位值和端口。")
+# 必须先校验显式白名单，随后才加健康检查需要的回环地址；缺配置仍然启动失败。
+ALLOWED_HOSTS = list(dict.fromkeys([*ALLOWED_HOSTS, "127.0.0.1", "[::1]", "localhost"]))
+
 # 只有走域名 + HTTPS（或明确从别的源发写请求）时才需要；纯 IP + HTTP 可留空。
 CSRF_TRUSTED_ORIGINS = _csv("CUSTOMS_CSRF_TRUSTED_ORIGINS")
 for _origin in CSRF_TRUSTED_ORIGINS:
-    if "://" not in _origin:
-        raise ImproperlyConfigured(
-            f"CUSTOMS_CSRF_TRUSTED_ORIGINS 的每一项都要带协议（http:// 或 https://）：{_origin!r}"
+    try:
+        _parsed = urlsplit(_origin)
+        _port = _parsed.port  # 非法端口必须启动失败。
+        _origin_valid = (
+            _parsed.scheme in {"http", "https"} and bool(_parsed.hostname)
+            and not _parsed.username and not _parsed.password
+            and not _parsed.path and not _parsed.query and not _parsed.fragment
         )
+    except ValueError:
+        _origin_valid = False
+    if not _origin_valid:
+        raise ImproperlyConfigured("CUSTOMS_CSRF_TRUSTED_ORIGINS 必须是 http(s)://域名[:端口]，不能带路径或凭据。")
+
+
+def _persistent_file_root(raw: str, volume: Path = Path("/srv/customs")) -> Path:
+    """根必须是命名卷的严格子目录，拒绝非规范路径和现有符号链接。
+
+    应用 UID 无权替换卷根；卷内仍须按运维约定禁止其他进程植入链接。
+    此处启动期检查不能代替文件服务自身对每次访问的防穿越检查。
+    """
+    path = Path(raw)
+    if (not path.is_absolute() or os.path.normpath(raw) != raw or ".." in path.parts
+            or any(character.isspace() or ord(character) < 32 or ord(character) == 127 for character in raw)):
+        raise ImproperlyConfigured("CUSTOMS_FILE_ROOT 必须使用 /srv/customs 内的规范绝对路径。")
+    try:
+        relative = path.relative_to(volume)
+        if not relative.parts or any(part.is_symlink() for part in (path, *path.parents)):
+            raise ValueError
+        path.resolve().relative_to(volume.resolve())
+    except (ValueError, OSError, RuntimeError):
+        raise ImproperlyConfigured("CUSTOMS_FILE_ROOT 必须是 /srv/customs 的严格子目录，且不能包含符号链接。") from None
+    return path
+
+
+CUSTOMS_FILE_ROOT = _persistent_file_root(os.environ.get("CUSTOMS_FILE_ROOT", "/srv/customs/files"))
 
 # collectstatic 的输出目录，由 nginx 以 /static/ 提供（DEBUG 关闭后 Django 不再自己服务静态文件）。
 STATIC_ROOT = Path(os.environ.get("CUSTOMS_STATIC_ROOT") or (BASE_DIR / "staticfiles"))

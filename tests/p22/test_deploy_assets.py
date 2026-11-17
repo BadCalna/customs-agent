@@ -1,15 +1,10 @@
-"""P22：部署资产（Dockerfile / compose / env 模板 / nginx / dockerignore）的结构检查。
-
-这些用例不启动容器——没有 Docker 的机器上也要能跑，所以检查的是“资产形状”而不是运行结果：
-- 运行进程不能是开发服务器；
-- 数据库不能发布端口；
-- 模板里不能出现真实凭据；
-- 破坏性操作不能出现在备份脚本里。
-真正跑容器的证据写在 docs/开发文档/交接/P22.md，不靠这些用例冒充。
-"""
+"""P22 离线资产契约：结构解析、真实 git 忽略行为；不冒充 Docker/nginx 实测。"""
 from __future__ import annotations
 
+import fnmatch
+import json
 import re
+import subprocess
 import unittest
 from pathlib import Path
 
@@ -22,141 +17,223 @@ def read(path: Path) -> str:
 
 
 def code_lines(text: str) -> str:
-    """去掉整行注释，只留下会真正执行的配置行。"""
-    return "\n".join(
-        line for line in text.splitlines() if not line.lstrip().startswith("#")
-    )
+    return "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#"))
+
+
+def mapping(text: str, indent: int = 0) -> dict[str, str]:
+    """只提取固定缩进下的 YAML 映射块（不解析值、不引入未锁定的 YAML 包）。"""
+    lines = text.splitlines()
+    starts = [(i, match.group(1)) for i, line in enumerate(lines)
+              if (match := re.match(rf"^{' ' * indent}([\w-]+):(?:\s|$)", line))]
+    return {key: "\n".join(lines[start:(starts[n + 1][0] if n + 1 < len(starts) else len(lines))])
+            for n, (start, key) in enumerate(starts)}
+
+
+def nginx_tree(text: str) -> list:
+    """解析本仓 nginx 分号/大括号结构，能区分 server return 与 location return。"""
+    text = re.sub(r"(?m)#.*$", "", text)
+    tokens = re.findall(r'"[^"\\]*(?:\\.[^"\\]*)*"|[{};]|[^\s{};]+', text)
+    root, stack, words = [], [], []
+    current = root
+    for token in tokens:
+        if token == "{":
+            child = []
+            current.append((tuple(words), child))
+            stack.append(current)
+            current, words = child, []
+        elif token == "}":
+            if words or not stack:
+                raise AssertionError("invalid nginx braces")
+            current = stack.pop()
+        elif token == ";":
+            current.append((tuple(words), None))
+            words = []
+        else:
+            words.append(token)
+    if stack or words:
+        raise AssertionError("unfinished nginx directive")
+    return root
+
+
+def docker_ignored(path: str, text: str) -> bool:
+    """本仓 ignore 模式的受限匹配器：仅覆盖 glob、目录前缀、!，非 Docker 运行证明。"""
+    ignored = False
+    for pattern in text.splitlines():
+        pattern = pattern.strip()
+        if not pattern or pattern.startswith("#"):
+            continue
+        include = pattern.startswith("!")
+        pattern = pattern.lstrip("!")
+        variants = [pattern]
+        if pattern.startswith("**/"):
+            variants.append(pattern[3:])
+        matched = any(fnmatch.fnmatchcase(path, variant) or
+                      (variant.endswith("/") and any(
+                          fnmatch.fnmatchcase("/".join(path.split("/")[:index]), variant.rstrip("/"))
+                          for index in range(1, len(path.split("/")))))
+                      for variant in variants)
+        if matched:
+            ignored = not include
+    return ignored
 
 
 class DockerfileTests(unittest.TestCase):
     def setUp(self):
-        self.text = read(DEPLOY / "Dockerfile")
+        self.code = code_lines(read(DEPLOY / "Dockerfile"))
 
-    def test_runs_gunicorn_not_dev_server(self):
-        # 只看真正会被执行的行：注释里出现 “不是 runserver” 的说明不算违规。
-        code = code_lines(self.text)
-        self.assertIn("gunicorn", code)
-        self.assertIn("config.wsgi:application", code)
-        self.assertNotIn("runserver", code, "runserver 只用于本机调试，不应出现在镜像命令里")
+    def test_runs_locked_gunicorn_nonroot(self):
+        self.assertIn("gunicorn", self.code)
+        self.assertIn("config.wsgi:application", self.code)
+        self.assertNotIn("runserver", self.code)
+        self.assertIn("uv sync --locked", self.code)
+        self.assertRegex(self.code, r"gunicorn==\d+\.\d+\.\d+")
+        self.assertRegex(self.code, r"(?m)^USER app$")
+        self.assertNotIn(":latest", self.code)
 
-    def test_compose_never_starts_dev_server(self):
-        self.assertNotIn("runserver", code_lines(read(DEPLOY / "docker-compose.yml")))
-
-    def test_base_image_pinned_and_non_root(self):
-        from_lines = [line for line in self.text.splitlines() if line.startswith("FROM ")]
-        self.assertTrue(from_lines, "Dockerfile 必须有 FROM")
-        for line in from_lines:
-            self.assertNotIn(":latest", line, f"基础镜像不要用 latest：{line}")
-            self.assertNotRegex(line, r"@?sha256", "不需要固定 digest，但版本 tag 要写清楚")
-        self.assertRegex(self.text, r"(?m)^USER app$", "必须以非 root 用户运行")
-        self.assertIn("chown -R app:app", self.text)
-
-    def test_installs_locked_dependencies(self):
-        self.assertIn("uv sync --locked", self.text)
-        # gunicorn 是部署期补充，不进 uv.lock（避免改动公共依赖锁文件）。
-        self.assertRegex(self.text, r"gunicorn==\d+\.\d+\.\d+")
+    def test_code_and_venv_are_not_runtime_user_owned(self):
+        chowns = re.findall(r"chown\s+-R\s+app:app\s+([^\n&]+)", self.code)
+        self.assertTrue(chowns)
+        targets = {path for command in chowns for path in command.split()}
+        self.assertEqual(targets, {"/srv/customs/files", "/srv/customs/restores", "/app/staticfiles"})
+        mkdir = re.search(r"mkdir\s+-p\s+([^\n&]+)", self.code)
+        self.assertIsNotNone(mkdir)
+        self.assertTrue(targets <= set(mkdir.group(1).split()))
+        self.assertIn("chmod 0755 /srv/customs", self.code)
+        self.assertIn("chmod -R go-w /app", self.code)
+        self.assertNotIn("COPY --chown=app", self.code)
+        self.assertNotIn("/srv/customs", targets, "卷根不可被运行用户替换")
 
 
 class ComposeTests(unittest.TestCase):
     def setUp(self):
-        self.text = read(DEPLOY / "docker-compose.yml")
+        self.text = code_lines(read(DEPLOY / "docker-compose.yml"))
+        self.top = mapping(self.text)
+        self.services = mapping(self.top["services"], 2)
+        self.app = mapping(self.top["x-app"], 2)
 
-    def test_required_services_present(self):
-        for service in ("db:", "app:", "migrate:", "web:"):
-            self.assertIn(service, self.text)
-        self.assertIn("image: postgres:17", self.text)
+    def test_required_services_and_only_web_ports(self):
+        self.assertTrue({"db", "app", "migrate", "web"} <= self.services.keys())
+        published = [name for name, block in self.services.items() if "ports" in mapping(block, 4)]
+        self.assertEqual(published, ["web"])
+        self.assertIn("pgdata:/var/lib/postgresql/data", self.services["db"])
+        self.assertIn("CUSTOMS_PG_PASSWORD:?", self.services["db"])
+        self.assertNotIn("runserver", self.text)
 
-    def test_only_one_service_publishes_ports(self):
-        # db 不能对外发布端口；只有 web 映射端口。
-        self.assertEqual(len(re.findall(r"(?m)^    ports:$", self.text)), 1)
+    def test_persistent_volumes_and_migrate_order(self):
+        self.assertTrue({"pgdata", "files", "static"} <= mapping(self.top["volumes"], 2).keys())
+        for name in ("migrate", "app", "worker"):
+            self.assertIn("files:/srv/customs", self.services[name])
+        self.assertIn("CUSTOMS_FILE_ROOT:-/srv/customs/files", self.app["environment"])
+        self.assertIn("service_completed_successfully", self.services["app"])
+        self.assertIn("migrate --noinput", self.services["migrate"])
+        self.assertIn("collectstatic --noinput", self.services["migrate"])
 
-    def test_database_is_not_published(self):
-        db_block = self.text.split("  db:", 1)[1].split("\n  migrate:", 1)[0]
-        self.assertNotIn("ports:", db_block)
-        self.assertIn("pgdata:/var/lib/postgresql/data", db_block)
+    def test_healthcheck_uses_the_loopback_host_covered_by_behavior_test(self):
+        block = mapping(self.services["app"], 4)["healthcheck"]
+        command = json.loads(re.search(r"test:\s*(\[.*\])", block).group(1))
+        self.assertEqual(command[:3], ["CMD", "python", "-c"])
+        self.assertIn("http://127.0.0.1:8000/api/health", command[3])
+        compile(command[3], "compose-healthcheck", "exec")
 
-    def test_persistent_volumes_declared(self):
-        volumes_block = self.text.split("\nvolumes:\n", 1)[1]
-        for name in ("pgdata:", "files:", "static:"):
-            self.assertIn(name, volumes_block)
-        self.assertIn("files:/srv/customs", self.text)
+    def test_all_services_have_bounded_logs_and_shutdown_grace(self):
+        log = self.top["x-logging"]
+        self.assertIn("driver: json-file", log)
+        self.assertIn('max-size: "10m"', log)
+        self.assertIn('max-file: "3"', log)
+        for name, block in self.services.items():
+            own = mapping(block, 4)
+            inherited = "<<: *app" in block
+            logging = own.get("logging", self.app.get("logging", "") if inherited else "")
+            grace = own.get("stop_grace_period", self.app.get("stop_grace_period", "") if inherited else "")
+            with self.subTest(service=name):
+                self.assertIn("*logging", logging)
+                seconds = int(re.search(r": (\d+)s", grace).group(1))
+                self.assertGreaterEqual(seconds, 135 if name in {"app", "migrate", "worker", "web"} else 60)
+                self.assertLessEqual(seconds, 180)
 
-    def test_password_has_no_default(self):
-        # 没有默认密码：缺变量时 compose 直接报错，而不是起一个空口令库。
-        self.assertIn("CUSTOMS_PG_PASSWORD:?", self.text)
-
-    def test_queue_services_are_opt_in_and_marked_unavailable(self):
-        self.assertIn('profiles: ["queue"]', self.text)
-        # 必须写明 P13 未实现，避免有人以为启用了队列。
-        self.assertIn("P13", self.text)
-        self.assertIn("尚未实现", self.text)
-
-    def test_migrate_runs_before_app(self):
-        self.assertIn("service_completed_successfully", self.text)
-        self.assertIn("python manage.py migrate --noinput", self.text)
-        self.assertIn("collectstatic", self.text)
+    def test_queue_remains_opt_in(self):
+        for name in ("worker", "redis"):
+            self.assertIn('profiles: ["queue"]', self.services[name])
 
 
 class EnvTemplateTests(unittest.TestCase):
-    REQUIRED_KEYS = (
-        "DJANGO_SECRET_KEY",
-        "CUSTOMS_PG_PASSWORD",
-        "CUSTOMS_ALLOWED_HOSTS",
-        "CUSTOMS_HTTP_PORT",
-        "CUSTOMS_DEBUG",
-        "CUSTOMS_CSRF_TRUSTED_ORIGINS",
-        "CUSTOMS_HTTPS",
-    )
+    def test_required_values_are_blank(self):
+        values = dict(line.split("=", 1) for line in read(DEPLOY / ".env.example").splitlines()
+                      if line and not line.startswith("#") and "=" in line)
+        for key in ("DJANGO_SECRET_KEY", "CUSTOMS_PG_PASSWORD", "CUSTOMS_ALLOWED_HOSTS"):
+            self.assertEqual(values[key], "", f"{key} 必须让部署者显式填写")
 
-    def setUp(self):
-        self.text = read(DEPLOY / ".env.example")
+    def test_sensitive_local_files_are_not_git_tracked(self):
+        result = subprocess.run(["git", "ls-files", "-z"], cwd=REPO_ROOT,
+                                capture_output=True, check=True)
+        # 只检查索引路径，允许服务器存在被忽略的 .env / https.conf；不读取或回显配置正文。
+        tracked = result.stdout.decode().split("\0")
+        bad = [path for path in tracked if path and (
+            (Path(path).name == ".env" or Path(path).name.startswith(".env."))
+            and Path(path).name != ".env.example"
+            or path == "deploy/nginx/https.conf"
+            or Path(path).suffix in {".key", ".pem", ".p12", ".pfx"})]
+        self.assertFalse(bool(bad), "git 索引包含真实环境配置或私钥；不输出具体值")
 
-    def test_required_keys_documented(self):
-        for key in self.REQUIRED_KEYS:
-            self.assertRegex(self.text, rf"(?m)^#?\s*{key}=", f"模板缺少 {key}")
-
-    def test_secret_values_are_empty(self):
-        """两项敏感值是空值：逼部署者自己生成，绝不带示例口令进仓库。"""
-        for key in ("DJANGO_SECRET_KEY", "CUSTOMS_PG_PASSWORD"):
-            match = re.search(rf"(?m)^{key}=(.*)$", self.text)
-            self.assertIsNotNone(match, f"{key} 必须有独立的行")
-            self.assertEqual(match.group(1).strip(), "", f"{key} 在模板里必须是空值")
-
-    def test_no_real_looking_secret(self):
-        for line in self.text.splitlines():
-            if line.lstrip().startswith("#") or "=" not in line:
-                continue
-            value = line.split("=", 1)[1].strip()
-            # 32 位以上、混合大小写与数字的串当真实凭据处理，直接判失败。
-            self.assertFalse(
-                re.fullmatch(r"[A-Za-z0-9+/=_-]{32,}", value),
-                f"模板里疑似真实凭据：{line.split('=', 1)[0]}",
-            )
-
-    def test_real_env_file_not_committed(self):
-        self.assertFalse((DEPLOY / ".env").exists(), "deploy/.env 是本地文件，不应出现在工作区提交里")
+    def test_git_actually_ignores_operator_outputs_but_keeps_example(self):
+        paths = ["deploy/.env", "nested/.env.production", "deploy/backups/a.dump",
+                 "deploy/.state/state.json", "deploy/certs/cert.pem", "deploy/nginx/https.conf"]
+        result = subprocess.run(["git", "check-ignore", "--no-index", "--stdin"], cwd=REPO_ROOT,
+                                input="\n".join(paths) + "\n", capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(set(result.stdout.splitlines()), set(paths))
+        result = subprocess.run(["git", "check-ignore", "--no-index", "deploy/.env.example"],
+                                cwd=REPO_ROOT, capture_output=True)
+        self.assertEqual(result.returncode, 1)
 
 
 class NginxAndIgnoreTests(unittest.TestCase):
-    def test_nginx_serves_static_and_proxies(self):
-        text = read(DEPLOY / "nginx" / "default.conf")
-        self.assertIn("proxy_pass http://app:8000", text)
-        self.assertIn("alias /usr/share/nginx/static/", text)
-        self.assertIn("X-Forwarded-Proto", text)
-        # 与 CUSTOMS_FILE_MAX_BYTES（100MB）留余量
-        self.assertRegex(text, r"client_max_body_size\s+1[0-9]{2}m")
+    def test_nginx_structures_preserve_host_port_and_static(self):
+        for filename in ("default.conf", "https.conf.example"):
+            tree = nginx_tree(read(DEPLOY / "nginx" / filename))
+            host_map = next(body for words, body in tree
+                            if words == ("map", "$http_host", "$customs_forwarded_host"))
+            self.assertIn((("default", "$http_host"), None), host_map)
+            self.assertIn((('""', "$host"), None), host_map)
+            servers = [(words, body) for words, body in tree if words == ("server",)]
+            proxies = [body for _, server in servers for directive, body in server
+                       if directive == ("location", "/") and body and
+                       (("proxy_pass", "http://app:8000"), None) in body]
+            self.assertEqual(len(proxies), 1)
+            self.assertIn((("proxy_set_header", "Host", "$customs_forwarded_host"), None), proxies[0])
+            self.assertIn((("proxy_set_header", "X-Forwarded-Proto", "$scheme"), None), proxies[0])
+            self.assertTrue(any((("alias", "/usr/share/nginx/static/"), None) in (body or [])
+                                for _, server in servers for _, body in server))
 
-    def test_https_example_does_not_shadow_default(self):
-        # 示例文件不能被 nginx 直接 include，否则会因缺证书起不来。
-        https_example = DEPLOY / "nginx" / "https.conf.example"
-        self.assertTrue(https_example.exists())
-        self.assertFalse((DEPLOY / "nginx" / "https.conf").exists())
+    def test_tls_http_health_not_intercepted_by_server_redirect(self):
+        servers = nginx_tree(read(DEPLOY / "nginx" / "https.conf.example"))
+        http = next(server for words, server in servers if words == ("server",)
+                    and (("listen", "80", "default_server"), None) in server)
+        self.assertFalse(any(words[0] == "return" for words, _ in http))
+        health = next(body for words, body in http if words == ("location", "=", "/nginx-health"))
+        self.assertTrue(any(words[:2] == ("return", "200") for words, _ in health))
+        redirect = next(body for words, body in http if words == ("location", "/"))
+        self.assertIn((("return", "301", "https://$host$request_uri"), None), redirect)
+        # 无端口的 https Location 与模板 Origin 及发布端口都采用标准 443。
+        text = read(DEPLOY / "nginx" / "https.conf.example")
+        self.assertIn('"443:443"', text)
+        self.assertNotIn("8443", text)
+        self.assertIn("CUSTOMS_CSRF_TRUSTED_ORIGINS=https://<你的域名>", text)
 
-    def test_dockerignore_excludes_secrets_and_data(self):
+    def test_https_active_config_not_automatically_mounted(self):
+        # 运维机器可自行创建 https.conf；只检查仓库默认挂载不会误加载它。
+        self.assertIn("./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro",
+                      read(DEPLOY / "docker-compose.yml"))
+
+    def test_dockerignore_secret_paths_at_any_depth_and_examples(self):
         text = read(REPO_ROOT / ".dockerignore")
-        self.assertIn("deploy/.env", text)
-        self.assertIn("data/", text)
-        self.assertIn(".git", text)
+        for prefix in ("", "deploy/", "nested/deeper/"):
+            for name in (".env", ".env.production", "tls.key", "tls.pem", "tls.p12", "id_ed25519"):
+                self.assertTrue(docker_ignored(prefix + name, text), prefix + name)
+            for name in (".env.example", "tls.key.example", "tls.pem.example"):
+                self.assertFalse(docker_ignored(prefix + name, text), prefix + name)
+        for path in ("deploy/backups/a.dump", "deploy/.state/state.json", "deploy/certs/a.pem", "data/private/a"):
+            self.assertTrue(docker_ignored(path, text), path)
 
 
 if __name__ == "__main__":

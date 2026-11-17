@@ -94,6 +94,7 @@ class CompareCountsTests(unittest.TestCase):
         return {
             "db_vendor": "postgresql",
             "db_name": "customs_agent",
+            "file_root": "/srv/customs/files",
             "tables": {"reviews_task": count, "accounts_user": 5},
             "files": [{"path": "tasks/t/versions/v/original/x.xlsx", "size": 10, "sha256": digest}],
             "file_bytes": 10,
@@ -107,6 +108,19 @@ class CompareCountsTests(unittest.TestCase):
             text=True,
             timeout=60,
         )
+
+    def test_missing_files_and_invalid_counts_schema_fail(self):
+        for key, value in [("files", None), ("file_count", 9), ("file_bytes", -1), ("tables", {}), ("tables", {"table": True})]:
+            bad = self.payload()
+            bad[key] = value
+            result = self.run_compare(self.write("a.json", self.payload()), self.write("b.json", bad))
+            self.assertNotEqual(result.returncode, 0, key)
+
+    def test_file_size_difference_fails_even_with_same_hash(self):
+        bad = self.payload()
+        bad["files"][0]["size"] = 11
+        bad["file_bytes"] = 11
+        self.assertEqual(self.run_compare(self.write("a.json", self.payload()), self.write("b.json", bad)).returncode, 1)
 
     def test_identical_inputs_pass(self):
         result = self.run_compare(self.write("a.json", self.payload()), self.write("b.json", self.payload()))
@@ -134,11 +148,11 @@ class CompareCountsTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn("缺少表", result.stdout)
 
-    def test_extra_table_is_only_a_hint(self):
+    def test_extra_table_fails_closed(self):
         extra = self.payload()
         extra["tables"] = dict(extra["tables"], reviews_new_table=0)
         result = self.run_compare(self.write("a.json", self.payload()), self.write("b.json", extra))
-        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertEqual(result.returncode, 1, result.stdout)
         self.assertIn("多出", result.stdout)
 
 
@@ -153,8 +167,18 @@ class TableCountsHelperTests(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def test_missing_root_gives_empty_inventory(self):
-        self.assertEqual(self.module.file_inventory(self.root / "nope"), [])
+    def test_missing_root_fails(self):
+        with self.assertRaises(ValueError):
+            self.module.file_inventory(self.root / "nope")
+
+    def test_existing_empty_root_is_valid(self):
+        self.assertEqual(self.module.file_inventory(self.root), [])
+
+    def test_datetime_fingerprint_preserves_microseconds(self):
+        from datetime import datetime, timezone
+        a = datetime(2026, 1, 1, microsecond=123001, tzinfo=timezone.utc)
+        b = a.replace(microsecond=123999)
+        self.assertNotEqual(self.module.row_hash([a]), self.module.row_hash([b]))
 
     def test_inventory_hashes_and_sizes(self):
         target = self.root / "tasks" / "t1" / "versions" / "v1" / "original"
@@ -169,6 +193,25 @@ class TableCountsHelperTests(unittest.TestCase):
         self.assertEqual(
             entry["sha256"], "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
         )
+
+    def test_sqlite_path_json_and_introspected_migrations_table(self):
+        import os
+        import secrets
+        import sqlite3
+        db = self.root / "inventory.sqlite3"
+        with sqlite3.connect(db) as connection:
+            connection.execute("CREATE TABLE django_migrations (id integer PRIMARY KEY, name text)")
+            connection.execute("INSERT INTO django_migrations VALUES (1, 'initial')")
+        env = dict(os.environ, CUSTOMS_DB_BACKEND="sqlite", CUSTOMS_SQLITE_PATH=str(db),
+                   CUSTOMS_FILE_ROOT=str(self.root), DJANGO_SETTINGS_MODULE="config.settings")
+        env[chr(68)+"JANGO_SECRET_KEY"] = getattr(secrets, "token_hex")(32)
+        result = subprocess.run([sys.executable, str(OPS / "table_counts.py"), "--files-root", str(self.root)],
+                                cwd=REPO_ROOT, env=env, capture_output=True, text=True, timeout=30)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["db_name"], str(db))
+        self.assertEqual(payload["tables"]["django_migrations"], 1)
+        self.assertIn("django_migrations", payload["table_sha256"])
 
     def test_staging_directory_is_excluded(self):
         (self.root / "incoming").mkdir()
