@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>关务审核 · 任务与进度</title>
+  <link rel="stylesheet" href="/demo/assets/styles.css"><link rel="stylesheet" href="/demo/assets/styles/tasks.css">
+  <style>
+    body {padding: 0 24px 36px;} .preview-bar {display:flex;align-items:center;gap:18px;padding:20px 0;border-bottom:1px solid var(--line);}
+    .preview-brand {font:600 21px var(--serif);color:var(--teal);} .preview-bar span:last-child {margin-left:auto;font-size:12px;color:var(--ink-3);}
+    .preview-intro {padding:30px 0 24px;} .preview-intro h1 {font:500 32px var(--serif);color:var(--teal);margin:4px 0 10px;}.preview-intro p{font-size:13px;color:var(--ink-3);}
+    .preview-grid{display:grid;grid-template-columns:minmax(280px,340px) minmax(0,1fr) minmax(210px,280px);gap:20px;max-width:1580px;margin:auto;align-items:start;}
+    .preview-detail{padding:20px;background:var(--surface);border:1px solid var(--line);border-radius:10px;} .preview-detail h2{font:600 18px var(--serif);color:var(--teal);margin:5px 0 15px;}
+    .preview-detail p{font-size:12px;color:var(--ink-3);margin:9px 0;}.preview-detail select{padding:8px;width:100%;background:var(--surface);border:1px solid var(--line-strong);border-radius:4px;font:inherit;}
+    .preview-steps{display:grid;gap:14px;margin:20px 0;padding:0;list-style:none;counter-reset:step;}.preview-steps li{font-size:12px;line-height:1.7;padding-left:28px;position:relative;counter-increment:step;}.preview-steps li::before{content:counter(step);position:absolute;left:0;color:var(--teal);font-family:var(--mono);}.preview-note{padding:12px;background:var(--gold-bg);border-radius:4px;}
+    #selection{overflow-wrap:anywhere;}.preview-footer{max-width:1580px;margin:24px auto 0;font-size:11px;color:var(--ink-3);}
+    @media(max-width:1150px){.preview-grid{grid-template-columns:300px minmax(0,1fr);}.preview-detail{grid-column:1/-1;}}
+    @media(max-width:700px){body{padding:0 12px 24px;}.preview-grid{grid-template-columns:1fr;}.preview-bar{gap:8px;flex-wrap:wrap;}.preview-intro h1{font-size:26px;}.preview-detail{grid-column:auto;}}
+  </style>
+</head>
+<body>
+  <header class="preview-bar"><div class="preview-brand">关务审核</div><span>任务中心</span><span>组件预览 · 合成样例</span></header>
+  <div class="preview-intro"><p>供应商上传 → 业务员预审 → 物流 / 专家审核</p><h1>每一批文件，进展清楚可查。</h1><p>从任务进入对应版本，区分业务待补与执行失败，保留每轮处理记录。</p></div>
+  <main class="preview-grid"><div id="tasks"></div><div id="progress"></div>
+    <aside class="preview-detail"><span class="p08-eyebrow">文件版本与状态演练</span><h2 id="task-title">请选择任务</h2>
+      <label>文件版本<select id="version" aria-label="文件版本" disabled></select></label>
+      <p>补料在同一任务新增版本；旧结果只作为历史查看。</p>
+      <ol class="preview-steps"><li>AI预审建议与供应商原码比较，原因交业务员参考。</li><li>业务员有改码时单独填写，空白不代表自动采纳AI建议。</li><li>提交后进入物流 / 专家审核，置信度与预审结论分别保留。</li></ol>
+      <label>演练场景<select id="scenario" aria-label="演练场景"><option value="normal">默认结果（预审含失败行）</option><option value="expert-no-issues">专家核查未返回问题（合成）</option><option value="running">正在执行（固定服务端快照）</option><option value="network">轮询连接失败</option><option value="conflict">重试冲突（409）</option><option value="unimplemented">重试未接通（501）</option></select></label>
+      <p class="preview-note">状态演练使用固定合成响应，不校验权限、不写库。进度不会按计时器自动增加，演练不能当作真实队列验收。</p>
+      <p id="selection" role="status">点击商品行可查看其原表位置。</p>
+    </aside></main>
+  <footer class="preview-footer">P08 组件自测。正式工作台接线、上传和后台重试由对应任务集成；专业归类结果以人工审核为准。</footer>
+  <script type="module" src="/p08/preview.js"></script>
+</body></html>
