@@ -37,7 +37,7 @@
 - 临时克隆：`/tmp/ca-review`，不依赖 OneDrive 工作区；不改其他 worktree 的未提交内容。
 - Python 3.14（锁文件允许 >=3.12,<3.15）；项目 `.venv`，Django runner。
 - Homebrew PostgreSQL 17；新建隔离实例，监听 **127.0.0.1:55529**。角色与数据库均 `p22_followup`，仅合成数据，无生产连接。
-- 本机无 Docker 运行时。假 Docker 桩可以证明命令/状态处理逻辑，不能证明真实镜像构建、容器卷权限和网络行为。
+- 本机无 Docker 运行时。假 Docker 桩可以证明命令/状态处理逻辑，不能证明真实镜像构建、容器卷权限和网络行为。隔离PG实例在测试结束后停机，目录保留以备复核，不修改日常开发PG。
 
 ## 执行记录
 
@@ -84,7 +84,16 @@
 - 随后独立复审抓出规范化器可能修改 SQL 字符串值、把不同 CHECK 判成相同的 P2。新增 SQL lexer 跳过单/双引号、E-string、dollarquote与注释，保持字面量原文；精确反例已加回归，待独立复验确认。
 - 此次审查总共发现并跟进7项P2（含新增规范化器问题）；不隐藏中间失败，不拿旧测试结果替代最终head。
 - 初版 head 5221a1e 两种后端全仓均跑过 928 项；SQLite 15 项 PG专项跳过，隔离 PostgreSQL **928 项全过无跳过**（24.984秒）。这只是第一轮 head 的证据，不作为第二轮最终结果。
-- 最终精确 head、专项/全仓计数与独立复审结论仍待补齐。
+### 最终复审与测试（代码 head df3560570ac5e557abb1f59b985afea1f5d608af）
+
+- 独立 Operations 最终审查：**代码复审通过**；实际重新备份后重放不同 CHECK 字符串碰撞攻击，verify 返回1/schema不同，不再错误通过。缺源根灾备、sequence/constraint篡改、不同TMPDIR竞争三项全部真实PG复测闭合。
+- 独立部署审查：**有条件通过**；D-01/D-02/D-03及collectstatic遗漏已关闭，条件为真实容器验收仍待执行。保留非阻断P3：部分合法尾点域名或包含changeme字样的Host会被过度拒绝。
+- 最终专项：**P22 73项通过**（48.992s）。
+- 最终全仓：**SQLite 937项通过，15个PG专项跳过**（34.516s）；**隔离PostgreSQL 937项全部通过，无跳过**（74.621s）。
+- 最终lexer版本真实Django库 `drill.sh`：passed、kept=false；表数据/序列/schema/附件一致后仅清理本次隔离目标。
+- `manage.py check`、`makemigrations --check --dry-run`、`git diff --check` 最终通过。
+- PR：[#26](https://github.com/BadCalna/customs-agent/pull/26)，仍Draft/Open，未合并、未上线。独立Agent审查报告是审查证据，**不是GitHub人类Review Approval，也不替代Jay批准**。
+- 本节随后以仅文档提交归档，不改变已审代码head。
 
 ## 仍未验证（不得当作通过）
 
