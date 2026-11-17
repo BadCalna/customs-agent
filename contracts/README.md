@@ -93,3 +93,11 @@ FIX-08 不代表重试去重已可用。
 - 新增 `schemas/history/`：`HistoryRecord`、`HistoryQuery`、`HistoryCandidate`、
   `HistorySearchResult`、`HistorySourceRef`、`HistoryDatasetInfo`，供 P16 依赖公共结构而不 import 适配器内部类。
 - 仅新增，不改既有字段与端点；`contract_version` 同步升为 `1.1.0`（FIX 样例与 DEMO-SET 已更新）。
+
+## 1.1.0 增补（2026-11-17，P15 历史模板导入）
+
+- `HistoryCandidate` 新增两个可选字段：`needs_review: bool = false`、
+  `blocking_issue_codes: list[str] = []`。导入层把 P04 行级 blocking/error
+  问题透传到检索候选与证据；`needs_review=true` 只表示“记录取到了但待核”，
+  不改变 `outcome` 原值，也不能被下游当成成功案例直接采用。
+- 纯新增可选字段，未改既有字段、端点或 `CONTRACT_VERSION`（仍为 `1.1.0`）。

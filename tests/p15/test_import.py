@@ -318,6 +318,36 @@ class SyntheticImportTest(SimpleTestCase):
             records = json.loads(replaced.records_path.read_text(encoding="utf-8"))["records"]
             self.assertIn("合成法兰盘改", {record["historical_name"] for record in records})
 
+    def test_copy_images_after_duplicate_updates_existing_image_path(self):
+        with tempfile.TemporaryDirectory() as raw_tmp:
+            tmp = Path(raw_tmp)
+            workbook = build_synthetic_workbook(tmp / "one.xlsx")
+            first = import_history_templates(self._request(tmp, [workbook]))
+            first_records = json.loads(first.records_path.read_text(encoding="utf-8"))["records"]
+            available = next(
+                record
+                for record in first_records
+                if record["attributes"]["image_status"] == "available"
+            )
+            self.assertEqual(available["attributes"]["image_output_path"], "")
+
+            second = import_history_templates(
+                self._request(tmp, [workbook], copy_images=True)
+            )
+            self.assertEqual(second.report["totals"]["records_provenance_updated"], 1)
+            records = json.loads(second.records_path.read_text(encoding="utf-8"))["records"]
+            updated = next(
+                record for record in records if record["record_id"] == available["record_id"]
+            )
+            self.assertTrue(updated["attributes"]["image_output_path"].startswith("images/"))
+            self.assertTrue((second.out_dir / updated["attributes"]["image_output_path"]).is_file())
+            provenance = next(
+                item
+                for item in second.report["duplicates"]
+                if item.get("action") == "provenance_updated"
+            )
+            self.assertEqual(provenance["kind"], "duplicate")
+
     def test_copy_images_writes_unique_files(self):
         with tempfile.TemporaryDirectory() as raw_tmp:
             tmp = Path(raw_tmp)

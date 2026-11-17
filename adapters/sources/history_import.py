@@ -963,6 +963,34 @@ def _business_dedup_key(payload: Mapping[str, Any]) -> str:
     return "|".join(parts)
 
 
+def _provenance_updates(
+    current: Mapping[str, Any], payload: Mapping[str, Any]
+) -> dict[str, str]:
+    """重复记录只更新“采集痕迹”字段，不覆盖业务字段。
+
+    典型场景：第一次导入没加 ``--copy-images``，记录里 ``image_output_path`` 为空；
+    第二次补拷后图片文件已生成，但业务指纹相同，不能把整条记录当 changed，
+    也不能继续保留旧空路径。
+    """
+
+    old_attributes = current.get("attributes") or {}
+    new_attributes = payload.get("attributes") or {}
+    updates: dict[str, str] = {}
+    for key in ("image_output_path",):
+        new_value = str(new_attributes.get(key, "") or "")
+        old_value = str(old_attributes.get(key, "") or "")
+        if new_value and new_value != old_value:
+            updates[key] = new_value
+    return updates
+
+
+def _with_provenance(current: Mapping[str, Any], updates: Mapping[str, str]) -> dict[str, Any]:
+    updated = json.loads(json.dumps(current, ensure_ascii=False))
+    updated.setdefault("attributes", {})
+    updated["attributes"].update(updates)
+    return updated
+
+
 def _merge_records(
     existing: Mapping[str, Any] | None,
     new_records: Sequence[dict[str, Any]],
@@ -1028,7 +1056,28 @@ def _merge_records(
             same = _business_fingerprint(current) == _business_fingerprint(payload)
             kind = "duplicate" if same else "changed"
             if same:
-                duplicates.append(duplicate | {"kind": kind, "action": "kept"})
+                updates = _provenance_updates(current, payload)
+                if updates:
+                    updated = _with_provenance(current, updates)
+                    final = [
+                        updated if str(item.get("record_id", "")) == record_id else item
+                        for item in final
+                    ]
+                    by_id[record_id] = updated
+                    if source_key:
+                        by_source[source_key] = updated
+                    if business_key and by_business.get(business_key) is current:
+                        by_business[business_key] = updated
+                    duplicates.append(
+                        duplicate
+                        | {
+                            "kind": kind,
+                            "action": "provenance_updated",
+                            "provenance_fields": sorted(updates),
+                        }
+                    )
+                else:
+                    duplicates.append(duplicate | {"kind": kind, "action": "kept"})
                 continue
             if not replace_changed:
                 duplicates.append(duplicate | {"kind": kind, "action": "kept_existing"})
@@ -1044,6 +1093,30 @@ def _merge_records(
             current = by_source[source_key]
             same = _business_fingerprint(current) == _business_fingerprint(payload)
             kind = "duplicate" if same else "changed"
+            if same:
+                updates = _provenance_updates(current, payload)
+                if updates:
+                    updated = _with_provenance(current, updates)
+                    old_id = str(current.get("record_id", ""))
+                    final = [
+                        updated if str(item.get("record_id", "")) == old_id else item
+                        for item in final
+                    ]
+                    by_id[old_id] = updated
+                    by_source[source_key] = updated
+                    if business_key and by_business.get(business_key) is current:
+                        by_business[business_key] = updated
+                    duplicates.append(
+                        duplicate
+                        | {
+                            "kind": kind,
+                            "action": "provenance_updated",
+                            "provenance_fields": sorted(updates),
+                        }
+                    )
+                else:
+                    duplicates.append(duplicate | {"kind": kind, "action": "kept"})
+                continue
             if not replace_changed:
                 duplicates.append(duplicate | {"kind": kind, "action": "kept_existing"})
                 continue
@@ -1346,6 +1419,8 @@ def import_history_templates(request: ImportRequest) -> ImportOutcome:
         row_report["duplicate"] = duplicate
         if action == "replaced":
             row_report["status"] = "replaced"
+        elif action == "provenance_updated":
+            row_report["status"] = "duplicate"
         elif action in {"kept", "kept_existing"}:
             row_report["status"] = "duplicate"
         elif duplicate.get("kind") == "duplicate_business_content":
@@ -1412,6 +1487,9 @@ def import_history_templates(request: ImportRequest) -> ImportOutcome:
             "records_duplicate_within_batch": len(duplicate_in_batch),
             "records_duplicate_business_content": sum(
                 1 for item in duplicates if item.get("kind") == "duplicate_business_content"
+            ),
+            "records_provenance_updated": sum(
+                1 for item in duplicates if item.get("action") == "provenance_updated"
             ),
             "records_total_in_output": len(final_records),
             "image_status": image_totals,
@@ -1876,6 +1954,7 @@ def _print_summary(outcome: ImportOutcome) -> None:
         "summary: files={files} parsed={parsed_files} source_records={source_records} "
         "written={records_imported_this_run} duplicate={records_duplicate} "
         "business_duplicate={records_duplicate_business_content} "
+        "provenance_updated={records_provenance_updated} "
         "changed={records_changed} skipped={records_skipped} total={records_total_in_output}".format(
             **totals
         )
