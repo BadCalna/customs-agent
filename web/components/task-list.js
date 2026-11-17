@@ -61,9 +61,13 @@ export function renderTaskList(host, state) {
  * @param {(items: object[], page: object) => void|Promise<void>} [options.onLoaded]
  *   每次列表读取成功后回调。页面「刷新」按钮走的是组件内部 load()，宿主只包一层
  *   load() 覆盖不到这条路径；需要核对已选任务是否过期时用这个回调。
+ * @param {(detail: object|null, info: object) => void|Promise<void>} [options.onSelectionSettled]
+ *   一次选中流程结束（成功或失败）后回调。宿主在选中期间可能把刷新到的变化记成待核对，
+ *   需要在这里补做，否则「选中还没落定就刷新到新版本」会被漏掉。
  * @param {number} [options.pageSize]
  */
-export function createTaskList(host, { client, onSelectTask = () => {}, onLoaded = null, pageSize = 10 } = {}) {
+export function createTaskList(host, { client, onSelectTask = () => {}, onLoaded = null,
+  onSelectionSettled = null, pageSize = 10 } = {}) {
   if (!host || !client?.listTasks || !client?.getTask) throw new TypeError("需要容器和统一任务client");
   let state = {items: [], stage: "", query: "", page: 0, nextCursor: null,
     loading: false, error: null, selectionError: null, selectedId: null, selecting: false};
@@ -116,6 +120,14 @@ export function createTaskList(host, { client, onSelectTask = () => {}, onLoaded
     }
     if (!alive || request !== selectionToken) return;
     state = {...state, selecting: false}; draw();
+    if (onSelectionSettled) {
+      try {
+        await onSelectionSettled(state.selectedId, {taskId});
+      } catch (error) {
+        if (!alive || request !== selectionToken) return;
+        state = {...state, selectionError: error}; draw();
+      }
+    }
   }
   function setStage(stage) {
     if (!alive) return;

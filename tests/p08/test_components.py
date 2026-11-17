@@ -7,9 +7,9 @@ from django.conf import settings
 from django.test import SimpleTestCase, override_settings
 
 NODE_TEST_FILES = ("tests/p08/components.test.mjs", "tests/p08/page.test.mjs")
-#: 两个 Node 文件的用例数（components 27 + page 22）；改测试时必须同步，
+#: 两个 Node 文件的用例数（components 27 + page 24）；改测试时必须同步，
 #: 否则「文件被清空 / 用例全被跳过」会以 0 退出被当成通过。
-EXPECTED_CASES = 49
+EXPECTED_CASES = 51
 
 
 class JavascriptBehaviorTests(SimpleTestCase):

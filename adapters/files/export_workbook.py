@@ -32,6 +32,19 @@ class ExportError(ValueError):
         super().__init__(message)
 
 
+def _xml(data: bytes, *, part: str = "部件") -> ET.Element:
+    """解析原件或导出结果的 XML 部件。
+
+    原件里的 XML 可能损坏（例如样式表被替换成畸形内容）。这类问题属于输入文件问题，
+    必须转成结构化校验错误（422），不能让 ``ET.ParseError`` 冒到入口变成 500。
+    """
+    try:
+        return ET.fromstring(data)
+    except ET.ParseError as exc:
+        raise ExportError("source_workbook_invalid",
+                          f"原件中的 {part} 不是合法 XML，无法安全导出（{exc}）") from exc
+
+
 @dataclass(frozen=True)
 class ExportLine:
     item_id: str
@@ -189,7 +202,7 @@ def _append(raw: str, tag: str, fragments: list[str], count: int) -> str:
 
 
 def _styles(raw: bytes, requested: set[tuple[int, str]]) -> tuple[bytes, dict]:
-    root = ET.fromstring(raw)
+    root = _xml(raw, part="xl/styles.xml")
     fonts, fills, xfs = (root.find("s:" + tag, NS) for tag in ("fonts", "fills", "cellXfs"))
     if any(node is None or not len(node) for node in (fonts, fills, xfs)):
         raise ExportError("unsupported_styles", "模板缺少基础样式，不能安全应用结果标色")
@@ -289,7 +302,7 @@ def audit_fill(before: bytes, after: bytes, sheet_name: str, writes: dict[str, s
     for part in left.part_names - {sheet.part, "xl/styles.xml"}:
         if left.media_bytes(part) != right.media_bytes(part):
             raise ExportError("fidelity_failed", "原页签、图片或其他部件发生非预期变化")
-    a, b = ET.fromstring(left.media_bytes(sheet.part)), ET.fromstring(right.media_bytes(sheet.part))
+    a, b = _xml(left.media_bytes(sheet.part), part=sheet.part), _xml(right.media_bytes(sheet.part), part=sheet.part)
     for root in (a, b):
         for row in root.findall("s:sheetData/s:row", NS):
             for cell in list(row):
@@ -302,11 +315,11 @@ def audit_fill(before: bytes, after: bytes, sheet_name: str, writes: dict[str, s
         prefix = _prefix(expected, "c")
         declaration = f' xmlns:{prefix[:-1]}="{S}"' if prefix else ""
         node = ET.fromstring('<root xmlns="' + S + '"' + declaration + '>' + expected + '</root>')[0]
-        found = ET.fromstring(right.media_bytes(sheet.part)).find(f'.//s:c[@r="{ref}"]', NS)
+        found = _xml(right.media_bytes(sheet.part), part=sheet.part).find(f'.//s:c[@r="{ref}"]', NS)
         if found is None or canonical(found) != canonical(node) or actual.cell(ref).formula is not None:
             raise ExportError("fidelity_failed", "结果文本或标色未完整写入")
-    old_styles = ET.fromstring(left.media_bytes("xl/styles.xml"))
-    new_styles = ET.fromstring(right.media_bytes("xl/styles.xml"))
+    old_styles = _xml(left.media_bytes("xl/styles.xml"), part="xl/styles.xml")
+    new_styles = _xml(right.media_bytes("xl/styles.xml"), part="xl/styles.xml")
     for tag in ("fonts", "fills", "cellXfs"):
         old, new = old_styles.find("s:" + tag, NS), new_styles.find("s:" + tag, NS)
         if new is None or len(new) < len(old) or any(canonical(x) != canonical(y) for x, y in zip(old, new)):
@@ -336,7 +349,7 @@ def normalize_export_views(source: bytes) -> tuple[bytes, dict]:
     changes, views = {}, []
     for sheet in book.sheets:
         raw = book.media_bytes(sheet.part)
-        expected = ET.fromstring(raw)
+        expected = _xml(raw, part=sheet.part)
         changed = []
         for node in expected.findall("s:sheetViews/s:sheetView", NS):
             previous = node.get("view")
@@ -356,7 +369,7 @@ def normalize_export_views(source: bytes) -> tuple[bytes, dict]:
         view_attribute = re.compile(r'''(\sview\s*=\s*)(["'])(pageBreakPreview|pageLayout)\2''')
         replacement = opening.sub(lambda tag: view_attribute.sub(lambda attr: attr[1] + attr[2] + "normal" + attr[2], tag[0]), match[0])
         updated = (value[:match.start()] + replacement + value[match.end():]).encode("utf-8")
-        if canonical(ET.fromstring(updated)) != canonical(expected):
+        if canonical(_xml(updated, part=sheet.part)) != canonical(expected):
             raise ExportError("fidelity_failed", "视图调整改变了非预期的页签内容")
         changes[sheet.part] = updated
         views.extend(changed)
@@ -406,7 +419,7 @@ def export_precheck(source: bytes, selection: ExportSelection, *, excel2016_imag
             prepared = destination.read_bytes()
     book = Workbook(prepared)
     sheet = book.sheet(extracted.layout.sheet)
-    root = ET.fromstring(book.media_bytes(sheet.part))
+    root = _xml(book.media_bytes(sheet.part), part=sheet.part)
     if root.find("s:sheetProtection", NS) is not None:
         raise ExportError("protected_sheet", "申报要素页受保护，不能写入")
     requested, cells = set(), {}

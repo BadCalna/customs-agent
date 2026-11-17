@@ -9,7 +9,7 @@ const source = fs.readFileSync(path.join(__dirname, "../../web/pages/p06.js"), "
   .replace('import {createClient} from "../api.js";', "")
   .replace('const api = createClient({mode:"live"});', "const api = globalThis.TEST_API;");
 
-async function harness(createExport) {
+async function harness(createExport, {importReport = null} = {}) {
   const elements = new Map();
   const calls = [];
   const downloads = [];
@@ -27,7 +27,7 @@ async function harness(createExport) {
   const api = {
     me: async () => null, listTasks: async () => ({ items: [], next_cursor: null }),
     listItems: async () => ({ items: [], next_cursor: null }),
-    getImport: async () => { throw { status: 404 }; },
+    getImport: async () => { if (importReport) return importReport; throw { status: 404 }; },
     getTask: async (id) => ({ task_id: id, title: id, versions: [] }),
     createExport: (...args) => { calls.push(args); return createExport(...args); },
   };
@@ -69,7 +69,12 @@ const ok = (overrides = {}) => ({
 });
 const report = (overrides = {}) => ({
   version_id: "ver-1", version_number: 2, precheck_run_id: "run-1", precheck_status: "succeeded",
-  result_mode: "mock", ...overrides,
+  result_mode: "mock",
+  // openVersion() 渲染摘要时要读这些字段（先备齐，避免用例为了 UI 细节失真）。
+  assignment_status: "claimed", parse_status: "succeeded", item_count: 14, member_count: 0,
+  image_counts: {available: 0, absent: 0, read_failed: 0},
+  original_download_url: "/api/v1/files/ver-1", error: {}, report: {},
+  ...overrides,
 });
 
 (async () => {
@@ -179,9 +184,24 @@ const report = (overrides = {}) => ({
   await i.context.hooks.exportResult("issues");
   assert.equal(i.downloads.length, 1);
 
+  // 10) A → B → A 重新选择回同一版本同一执行：旧响应也必须失效（严格「重新选择后作废旧响应」）。
+  let release10;
+  const inflight10 = new Promise((resolve) => { release10 = resolve; });
+  const j = await harness(() => inflight10, {importReport: report()});
+  await j.context.hooks.openTask("task-1");
+  await j.context.hooks.openVersion("ver-1");
+  const pending10 = j.context.hooks.exportResult("precheck");
+  await new Promise((resolve) => setImmediate(resolve));
+  await j.context.hooks.openVersion("ver-2");
+  await j.context.hooks.openVersion("ver-1"); // 回到同一版本、同一执行
+  release10(ok());
+  await pending10;
+  assert.equal(j.downloads.length, 0, "重新选择过之后，旧响应不能再下载");
+
   console.log("PASS: 缺引用/预审未完成不发请求并说明原因；成功按 version_id+run_id 下载服务端文件名；"
     + "服务端错误、执行不一致、非 xlsx 响应都不保存文件并如实提示；"
-    + "退出登录/切版本之后到达的旧响应不下载、不提示、不留进行中状态");
+    + "退出登录/切版本之后到达的旧响应不下载、不提示、不留进行中状态；"
+    + "A→B→A 重新选择后旧响应同样失效");
 })().catch((error) => {
   console.error(error);
   process.exitCode = 1;

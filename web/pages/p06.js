@@ -2,7 +2,7 @@ import {createClient} from "../api.js";
 const api = createClient({mode:"live"});
 const $ = (s) => document.querySelector(s);
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, x => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[x]));
-let me=null, task=null, version=null, epoch=0, requestSequence=0, attempt=null, busy=false;
+let me=null, task=null, version=null, epoch=0, requestSequence=0, detailSeq=0, attempt=null, busy=false;
 let taskCursor=null, claimCursor=null;
 let uploadContext=0, duplicateIntent=null;
 let latestReport=null, exporting=false;
@@ -56,10 +56,10 @@ async function exportResult(kind){
   // 导出是跨 await 的动作：记下发起时的登录身份代次与详情版本。
   // 响应回来时若身份/版本/引用已变（退出、切任务、切版本、重新选择），整份结果直接丢弃——
   // 不下载、不提示成功、也不把旧请求的错误落到新上下文里。
-  const token=epoch,requestVersion=version;
+  const token=epoch,seq=detailSeq,requestVersion=version;
   // 退出登录、切任务/版本都会调用 hideExports()（latestReport 置空）并推进 epoch，
   // 因此「上下文仍有效」= 身份代次不变 + 当前版本变量没被换掉 + 页面上仍是同一份报告。
-  const isCurrentExport=()=>token===epoch&&version===requestVersion
+  const isCurrentExport=()=>token===epoch&&seq===detailSeq&&version===requestVersion
     &&Boolean(latestReport)&&latestReport.version_id===versionId
     &&latestReport.precheck_run_id===runId;
   const pendingText=`正在生成${kind==="precheck"?"预审结论":"补料清单"}…`;
@@ -85,7 +85,9 @@ async function exportResult(kind){
     if(!isCurrentExport()&&$("#notice").textContent===pendingText)$("#notice").textContent="";
   }
 }
-function resetDetail(){task=null;version=null;latestReport=null;requestSequence++;invalidateUploadIntent();$("#task-title").textContent="选择一个任务";for(const s of ["#versions","#summary","#report","#items","#card"])$(s).innerHTML="";hideExports();}
+//: 详情上下文代次：每次清空详情或重新选择版本都递增。导出的旧响应按它判失效，
+//: 这样「A→B→A 回到同一版本同一执行」也不会再被当成同一次选择。
+function resetDetail(){task=null;version=null;latestReport=null;requestSequence++;detailSeq++;invalidateUploadIntent();$("#task-title").textContent="选择一个任务";for(const s of ["#versions","#summary","#report","#items","#card"])$(s).innerHTML="";hideExports();}
 function identity(){
   epoch++;resetDetail();attempt=null;$("#duplicate").hidden=true;$("#file").value="";
   $("#identity").textContent=me?`${me.display_name||me.username} · ${me.role_label}`:"未登录";
@@ -108,6 +110,7 @@ async function openTask(id,preferred){
   if(data.current_version_id)await openVersion(preferred||data.current_version_id);
 }
 async function openVersion(id){
+  detailSeq++;
   invalidateUploadIntent();
   // 切版本时先撤掉上一版本的导出区：读取期间不能留着旧版本的导出按钮让人误点。
   hideExports();

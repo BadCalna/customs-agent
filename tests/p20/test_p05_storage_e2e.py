@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import os
 from pathlib import Path
@@ -22,6 +23,7 @@ import tempfile
 import unittest
 import uuid
 from urllib.parse import unquote
+import zipfile
 
 from django.conf import settings
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -307,6 +309,76 @@ class RealStorageExportTests(TestCase):
             self.assertTrue(row[4], "问题列不能为空")
             self.assertIn(row[6], ("供应商", "业务员", "物流/专家", "待人工指定"))
             self.assertEqual(row[7], "", "反馈列由人工填写，导出不预置内容")
+
+
+def replace_zip_part(data: bytes, part: str, payload: bytes) -> bytes:
+    """把 xlsx 内某个部件替换成指定字节，其余部件与压缩方式保持不变。"""
+    source = zipfile.ZipFile(io.BytesIO(data))
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as target:
+        for info in source.infolist():
+            content = payload if info.filename == part else source.read(info.filename)
+            target.writestr(info, content)
+    return buffer.getvalue()
+
+
+class CorruptWorkbookPartExportTests(TestCase):
+    """上传能成功的原件，若某个样式部件损坏，预审导出必须结构化失败（422），不能 500。
+
+    样式部件在导入解析时不被读取，所以「上传成功」并不代表原件能被安全导出；
+    导出入口必须把 XML/ZIP 损坏转成输入问题（422 source_workbook_invalid）。
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls._tmp = tempfile.TemporaryDirectory(prefix="p20-corrupt-")
+        cls.addClassCleanup(cls._tmp.cleanup)
+        cls.root = Path(cls._tmp.name) / "files"
+        cls._settings = override_settings(CUSTOMS_FILE_ROOT=cls.root)
+        cls._settings.enable()
+        cls.addClassCleanup(cls._settings.disable)
+        super().setUpClass()
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.supplier = make_user("p20-corrupt-supplier", Role.SUPPLIER, "供应商乙")
+        cls.operator = make_user("p20-corrupt-operator", Role.OPERATOR, "业务员乙")
+        cls.source = TEMPLATE.read_bytes()
+        # 只破坏样式部件：这一部件在导入解析阶段不被读取，上传仍会成功。
+        cls.corrupt = replace_zip_part(cls.source, "xl/styles.xml", b"<styleSheet><broken")
+        client = Client()
+        client.force_login(cls.supplier)
+        response = client.post("/api/v1/tasks", {"file": SimpleUploadedFile(TEMPLATE.name, cls.corrupt)},
+                               HTTP_IDEMPOTENCY_KEY=str(uuid.uuid4()))
+        assert response.status_code == 200, response.content[:800]
+        cls.upload = response.json()
+        cls.version = FileVersion.objects.get(pk=cls.upload["version_id"])
+        claim_task(cls.operator, cls.upload["task_id"], "p20-corrupt-claim")
+        cls.operator_client = Client()
+        cls.operator_client.force_login(cls.operator)
+
+    def export(self, kind: str):
+        return self.operator_client.post(
+            f"/api/v1/versions/{self.version.pk}/exports",
+            data=json.dumps({"kind": kind, "run_id": self.upload["precheck_run_id"]}),
+            content_type="application/json")
+
+    def test_corrupt_style_part_still_uploads(self):
+        # 前置事实：损坏的是样式部件，导入不看它，所以上传与预审都成功。
+        self.assertEqual(self.upload["parse_status"], "succeeded")
+        self.assertGreater(self.upload["item_count"], 0)
+        self.assertEqual(self.upload["precheck_status"], Run.Status.SUCCEEDED)
+
+    def test_precheck_export_fails_structurally_not_with_500(self):
+        response = self.export("precheck")
+        self.assertEqual(response.status_code, 422, getattr(response, "content", b"")[:400])
+        error = response.json()["error"]
+        self.assertEqual(error["code"], "source_workbook_invalid")
+        self.assertIn("XML", error["message"])
+        # 原件没有被导出流程改写。
+        stored = self.root / self.version.storage_path
+        self.assertEqual(hashlib.sha256(stored.read_bytes()).hexdigest(),
+                         hashlib.sha256(self.corrupt).hexdigest())
 
 
 if __name__ == "__main__":  # pragma: no cover

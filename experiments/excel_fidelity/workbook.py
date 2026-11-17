@@ -20,10 +20,20 @@ class FidelityError(ValueError):
     """An unsupported or ambiguous input must not be silently rewritten."""
 
 
+class CorruptPartError(FidelityError):
+    """A workbook part is not well-formed XML (input problem, not an export bug)."""
+
+    code = "source_workbook_invalid"
+
+
 def xml(data: bytes) -> ET.Element:
     if b"<!DOCTYPE" in data.upper() or b"<!ENTITY" in data.upper():
         raise FidelityError("DTD/entity XML is unsupported")
-    return ET.fromstring(data)
+    try:
+        return ET.fromstring(data)
+    except ET.ParseError as exc:
+        # 损坏的部件属于输入文件问题：转成结构化校验错误，让入口返回 422 而不是 500。
+        raise CorruptPartError(f"workbook part is not well-formed XML: {exc}") from exc
 
 
 def sha256(data: bytes) -> str:

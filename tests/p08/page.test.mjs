@@ -321,6 +321,91 @@ test('列表刷新到新版本后，右侧重新读详情，不把旧版本当�
   page.destroy();
 });
 
+test('用户正在改选 B 时刷新到 A 的新版本：不得把选择抢回 A', async () => {
+  // 交错时序：A 已选中 → 用户点 B（B 详情在飞）→ 列表刷新拿到 A 的新版本。
+  // 自动核对必须服从用户最新选择，不能再用 A 发起重选把 B 的请求顶掉。
+  let releaseB;
+  const gateB = new Promise((resolve) => { releaseB = resolve; });
+  const versionOfA = 'version-a-v3';
+  const runA = runOf(mockTask.latest_run_id);
+  const runBV3 = {...copy(runOf(expertTask.latest_run_id))};
+  let listRows = [copy(mockTask), copy(expertTask)];
+  const calls = {getTask: [], getRun: []};
+  const client = {
+    async me() { return {display_name: '演示账号'}; },
+    async listTasks() { return {items: listRows.map(copy), next_cursor: null}; },
+    async getTask(id) {
+      calls.getTask.push(id);
+      if (id === expertTask.task_id) {
+        await gateB;
+        return copy(expertTask);
+      }
+      return copy({...mockTask, versions: [{version_id: mockTask.current_version_id, number: 2}]});
+    },
+    async getRun(id) { calls.getRun.push(id); return copy(id === runA.run_id ? runA : runBV3); },
+  };
+  const {page, summaryHost} = mount({client});
+  await page.ready;
+  await page.selectTask(mockTask.task_id);
+  assert.match(summaryHost.textContent, /当前版本 V2/);
+
+  const selectingB = page.tasks.selectTask(expertTask.task_id);
+  await new Promise((resolve) => setImmediate(resolve));
+  // A 在这期间被另一个标签页更新到 V3
+  listRows = [{...copy(mockTask), current_version_id: versionOfA, current_version_number: 3,
+    latest_run_id: 'run-a-v3'}, copy(expertTask)];
+  await page.tasks.load();
+  releaseB();
+  await selectingB;
+
+  assert.equal(page.tasks.getState().selectedId, expertTask.task_id, '用户选的 B 不能被自动核对抢回 A');
+  assert.equal(page.getState().selectedId, expertTask.task_id);
+  assert.equal(calls.getTask.filter((id) => id === mockTask.task_id).length, 1,
+    'A 不应因为自动核对被再次读取');
+  assert.match(summaryHost.textContent, /当前版本 V1/, '右侧应显示用户所选 B 的详情（B 当前 V1），而不是被抢回 A');
+  page.destroy();
+});
+
+test('A 的进度请求在飞时刷新到新版本：落定后补核对，不留旧版本', async () => {
+  // 交错时序：A 详情已返回、进度在飞 → 列表刷新到 A 的 V3 → 进度落定。
+  // 选中期间的刷新会被防重复逻辑吞掉，必须在选中落定后再核对一次。
+  let releaseRun;
+  const gateRun = new Promise((resolve) => { releaseRun = resolve; });
+  const oldRun = runOf(mockTask.latest_run_id);
+  const newVersion = 'version-a-v3';
+  const newRun = {...copy(oldRun), run_id: 'run-a-v3', version_id: newVersion};
+  let listRow = {...copy(mockTask)};
+  let detailRow = {...copy(mockTask), versions: [{version_id: mockTask.current_version_id, number: 2}]};
+  const calls = {getRun: [], getTask: 0};
+  const client = {
+    async me() { return {display_name: '演示账号'}; },
+    async listTasks() { return {items: [copy(listRow)], next_cursor: null}; },
+    async getTask() { calls.getTask += 1; return copy(detailRow); },
+    async getRun(id) {
+      calls.getRun.push(id);
+      if (id === oldRun.run_id) { await gateRun; return copy(oldRun); }
+      return copy(newRun);
+    },
+  };
+  const {page, runHost, summaryHost} = mount({client});
+  await page.ready;
+  const selecting = page.selectTask(mockTask.task_id);
+  await new Promise((resolve) => setImmediate(resolve));
+  // 进度请求已发出并被挂起，此时列表刷新到 V3
+  listRow = {...listRow, current_version_id: newVersion, current_version_number: 3, latest_run_id: newRun.run_id};
+  detailRow = {...copy(listRow), versions: [{version_id: newVersion, number: 3}]};
+  await page.tasks.load();
+  assert.match(summaryHost.textContent, /当前版本 V2/, '选中尚未落定时右侧仍是旧详情');
+  releaseRun();
+  await selecting;
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.match(summaryHost.textContent, /当前版本 V3/, '落定后必须补核对，不能停在旧版本');
+  assert.deepEqual(calls.getRun, [oldRun.run_id, newRun.run_id], '补核对后应改读新执行');
+  assert.match(runHost.innerHTML, new RegExp(newRun.run_id));
+  page.destroy();
+});
+
 test('列表刷新但任务未变时，不重复读详情（避免每次刷新都闪一下右侧）', async () => {
   let getTaskCount = 0;
   const client = {

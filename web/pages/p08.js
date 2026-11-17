@@ -133,6 +133,8 @@ export function mountP08Page({client, mode = MODE_LIVE, taskHost, runHost, ident
 
   const state = {mode, selectedId: null, detail: null, identityError: null, selectionNotice: ""};
   let alive = true;
+  //: 选中/列表读取期间发现的版本更新先记下，等选中落定后补核对（不能直接丢弃）。
+  let pendingReconcile = false;
 
   if (modeHost) {
     modeHost.textContent = modeLabel(mode);
@@ -141,7 +143,12 @@ export function mountP08Page({client, mode = MODE_LIVE, taskHost, runHost, ident
 
   // 只读挂载：不传 onRetry / retryAllowed，重试按钮保持组件默认的“未接通”禁用态。
   const progress = createRunProgress(runHost, {client});
-  const tasks = createTaskList(taskHost, {client, pageSize, onSelectTask: selectTask, onLoaded: reconcileSelection});
+  const tasks = createTaskList(taskHost, {
+    client, pageSize,
+    onSelectTask: selectTask,
+    onLoaded: reconcileSelection,
+    onSelectionSettled: selectionSettled,
+  });
 
   function paintNotice() {
     if (!noticeHost) return;
@@ -166,6 +173,13 @@ export function mountP08Page({client, mode = MODE_LIVE, taskHost, runHost, ident
    */
   async function reconcileSelection(items) {
     if (!alive || !state.selectedId || !state.detail) return;
+    const listState = tasks.getState();
+    // 用户正在点选别的任务、或列表已经切到别的任务时，不能用页面上旧的详情去覆盖
+    // 用户的最新选择；记下待核对，等选择落定后再按当时的列表数据补一次。
+    if (listState.selecting || (listState.selectedId && listState.selectedId !== state.selectedId)) {
+      pendingReconcile = true;
+      return;
+    }
     const entry = (Array.isArray(items) ? items : []).find((row) => row && row.task_id === state.selectedId);
     if (!entry) return; // 当前页没有该任务：不动右侧，避免把「不在本页」误当成「已删除」
     const detail = state.detail;
@@ -174,6 +188,18 @@ export function mountP08Page({client, mode = MODE_LIVE, taskHost, runHost, ident
     if (!versionChanged && !runChanged) return;
     // 重读详情后再更新右侧与进度上下文；不能拿旧详情继续自称「当前版本」。
     await tasks.selectTask(state.selectedId);
+  }
+
+  /**
+   * 一次选中流程落定后补做被推迟的核对。
+   *
+   * 选中期间的刷新会记 pendingReconcile（此时重选会被组件防重复逻辑吞掉，
+   * 或者会打断用户刚点的新任务）。这里在选中真正结束后再核对一次。
+   */
+  async function selectionSettled() {
+    if (!alive || !pendingReconcile) return;
+    pendingReconcile = false;
+    await reconcileSelection(tasks.getState().items);
   }
 
   async function selectTask(detail) {
