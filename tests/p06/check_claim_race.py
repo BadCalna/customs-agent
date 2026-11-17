@@ -17,7 +17,7 @@ if __name__=='__main__':
         from threading import Barrier, Lock
         from unittest.mock import patch
         from django.core.management import call_command
-        from django.db import close_old_connections
+        from django.db import close_old_connections, connections
         from django.test import Client
         from apps.accounts.models import Role, TaskAssignment
         from apps.reviews.models import TaskClaim, AuditEvent
@@ -55,7 +55,7 @@ if __name__=='__main__':
                     r=c.post(f'/api/v1/tasks/{task_id}/claim',{},HTTP_IDEMPOTENCY_KEY=key,
                              HTTP_X_CSRFTOKEN=c.cookies['csrftoken'].value)
                     return r.status_code,r.json()
-                finally:close_old_connections()
+                finally:connections.close_all()
             with patch.object(TaskClaim.objects,'create',synchronized):
                 with ThreadPoolExecutor(max_workers=2) as pool:
                     return list(pool.map(request,entries))
@@ -81,3 +81,4 @@ if __name__=='__main__':
         assert next(body['error']['code'] for status,body in results if status==409)=='idempotency_conflict',results
         assert TaskClaim.objects.filter(task_id__in=[first,second]).count()==1
         print('PASS: same key/different tasks HTTP 200/409 idempotency_conflict; one claim',flush=True)
+        connections.close_all()
