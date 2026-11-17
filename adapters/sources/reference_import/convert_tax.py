@@ -162,7 +162,8 @@ def rate_from_cell(
             )
         percent = round(float(digits) * 100, 6)
     else:
-        stripped = text[:-1].strip() if text.endswith("%") else text
+        percent_text = text.endswith("%") or text.endswith("％")
+        stripped = text[:-1].strip() if percent_text else text
         digits = _digits(stripped)
         if digits is None:
             return (
@@ -173,6 +174,20 @@ def rate_from_cell(
                     "TAX_RATE_CELL_NOT_NUMERIC",
                     f"退税率单元格是文本 {text!r}，既不是百分数也不是数值；"
                     "“不予退税/免税”等处理方式本批未提供",
+                    "出口退税率",
+                ),
+            )
+        if not percent_text:
+            # 文本 "0.13"/"13" 到底已经是百分数还是待乘 100，无法从单元格格式确认；
+            # 猜一个方向会造成 100 倍偏差，因此保持待核。
+            return (
+                "",
+                text,
+                None,
+                RecordIssue(
+                    "TAX_RATE_TEXT_AMBIGUOUS",
+                    f"退税率写成文本 {text!r} 但没有百分号：无法确认它是 0.13% 还是 13%，"
+                    "不按任一方向换算，请回来源确认列格式",
                     "出口退税率",
                 ),
             )

@@ -99,7 +99,10 @@ class ReuseTest(P23TestCase):
         self.assertEqual(first_manifest["input_fingerprint"], second_manifest["input_fingerprint"])
         self.assertEqual(first_manifest["converter_version"], CONVERTER_VERSION)
         self.assertNotEqual(first_manifest["generated_at"], second_manifest["generated_at"])
-        self.assertTrue(first.snapshot_dir.name.endswith(first.report["business_fingerprint"][:12]))
+        # 快照目录名 = 批次 + 身份指纹（业务指纹 + 报告口径指纹），
+        # 这样“payload 相同但坏行不同”的两份输入不会撞同一个快照。
+        self.assertTrue(first.snapshot_dir.name.startswith(first.report["batch_id"] + "-"))
+        self.assertEqual(first_manifest["reporting_fingerprint"], second_manifest["reporting_fingerprint"])
 
     def test_changed_content_creates_new_snapshot(self):
         first_batch = build_publish_batch(self.root / "a", label="A")

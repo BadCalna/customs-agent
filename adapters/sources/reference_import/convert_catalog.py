@@ -433,6 +433,7 @@ def build_catalog(
     )
     tariff_seen: dict[tuple[str, str], dict[str, Any]] = {}
     element_seen: dict[tuple[str, str], dict[str, Any]] = {}
+    rejected_element_codes: set[str] = set()
     ledger_seen: dict[tuple[str, str], dict[str, Any]] = {}
     index_rows: dict[str, _IndexRow] = {}
     element_codes: dict[str, str] = {}
@@ -440,7 +441,6 @@ def build_catalog(
     documents: dict[str, list[str]] = {}
     urls: dict[str, list[str]] = {}
     retrieved: dict[str, list[str]] = {}
-    parse_failures: list[RecordOutcome] = []
 
     # 先解析表头、缓存工作簿：目录（含统计列）必须先转换完，要素清单才能核对统计数。
     accesses: dict[str, WorkbookAccess] = {}
@@ -451,14 +451,16 @@ def build_catalog(
             continue
         access = open_workbook(source)
         accesses[source.source_id] = access
+        index_error: LayoutError | None = None
+        element_error: LayoutError | None = None
         try:
             layouts_index[source.source_id] = index_layout(access)
-        except LayoutError:
-            pass
+        except LayoutError as exc:
+            index_error = exc
         try:
             layouts_elements[source.source_id] = element_layout(access)
-        except LayoutError:
-            pass
+        except LayoutError as exc:
+            element_error = exc
         if (
             source.source_id not in layouts_index
             and source.source_id not in layouts_elements
@@ -467,6 +469,33 @@ def build_catalog(
                 "header_not_found",
                 f"{source.source_id}: 既找不到 HS 编码索引表头，也找不到申报要素明细表头；"
                 "未知结构不允许静默跳过",
+            )
+        # 清单声明了角色就必须满足：目录表头坏了不能“降级”用要素明细页充当目录，
+        # 否则目录独有的编码会静默消失，而报告还写 success。
+        roles = set(source.roles)
+        if "hs_catalog" in roles and index_error is not None:
+            raise LayoutError(
+                index_error.code,
+                f"{source.source_id}: 清单声明提供税则目录（hs_catalog），但识别不到目录表头："
+                f"{index_error}",
+            )
+        if "declaration_elements" in roles and element_error is not None:
+            raise LayoutError(
+                element_error.code,
+                f"{source.source_id}: 清单声明提供申报要素（declaration_elements），"
+                f"但识别不到要素明细表头：{element_error}",
+            )
+        index_layout_value = layouts_index.get(source.source_id)
+        element_layout_value = layouts_elements.get(source.source_id)
+        if (
+            index_layout_value is not None
+            and element_layout_value is not None
+            and index_layout_value.sheet == element_layout_value.sheet
+        ):
+            raise LayoutError(
+                "header_ambiguous",
+                f"{source.source_id}: 目录与要素明细被识别到同一个页签"
+                f"（{index_layout_value.sheet}），结构无法区分，拒绝导入",
             )
 
     for source in sources:
@@ -516,6 +545,7 @@ def build_catalog(
             elements=elements,
             element_seen=element_seen,
             element_codes=element_codes,
+            rejected_codes=rejected_element_codes,
             index_rows=index_rows,
             outcomes=build.outcomes,
             numeric_cells=numeric_cells,
@@ -525,7 +555,13 @@ def build_catalog(
     for code, info in index_rows.items():
         if code in element_codes:
             continue
-        if info.match_status and not info.match_status.startswith("已匹配"):
+        if code in rejected_element_codes:
+            reason = (
+                "该编码的要素清单因存在非法行被整份拒绝（见同编码的 rejected 记录）；"
+                "不产出缺项的清单"
+            )
+            code_name = "ELEMENT_SCHEMA_REJECTED"
+        elif info.match_status and not info.match_status.startswith("已匹配"):
             reason = (
                 f"来源声明“{info.match_status}”，未提供该编码的申报要素清单；"
                 "未匹配不代表无需申报要素"
@@ -556,6 +592,11 @@ def build_catalog(
     )
     if tariff_seen:
         build.tariff_outcome = tariff
+    elif tariff.input_total:
+        # 原件读到了、行也被逐条拒绝：这是“拒绝”而不是“没提供原件”。
+        tariff.status = DatasetStatus.PROVIDED
+        tariff.reason = "原件已解析，但所有税号行都被拒绝（原因见逐条记录）"
+        build.tariff_outcome = tariff
     else:
         tariff.status = DatasetStatus.INPUT_MISSING
         tariff.reason = "没有可解析的税则编码索引工作簿"
@@ -566,6 +607,10 @@ def build_catalog(
         urls.get("elements", []), retrieved.get("elements", []), manifest.kind,
     )
     if element_seen:
+        build.elements_outcome = elements
+    elif elements.input_total:
+        elements.status = DatasetStatus.PROVIDED
+        elements.reason = "原件已解析，但所有要素清单都被拒绝（原因见逐条记录）"
         build.elements_outcome = elements
     else:
         elements.status = DatasetStatus.INPUT_MISSING
@@ -617,8 +662,6 @@ def build_catalog(
         build.ledger_outcome = ledger
 
     build.assumptions.extend(_assumptions(versioning, numeric_cells))
-    if parse_failures:  # pragma: no cover - 防御：解析失败必须显式出现
-        build.outcomes.extend(parse_failures)
     return build
 
 
@@ -757,7 +800,7 @@ def _convert_index(
 ) -> None:
     sheet = access.sheet(layout.sheet)
     columns = layout.columns
-    system = system_name(source, "hs_system") or "海关总署「互联网+海关」税则查询（用户导出整理）"
+    system = system_name(source, "hs_system")
     source_url = system_name(source, "hs_url", "url")
     for row_number in data_rows(access, sheet, start_row=layout.header_row):
         code_cell = access.cell(sheet, row_number, columns["HS编码"])
@@ -990,6 +1033,7 @@ def _convert_elements(
     elements: DatasetOutcome,
     element_seen: dict[tuple[str, str], dict[str, Any]],
     element_codes: dict[str, str],
+    rejected_codes: set[str],
     index_rows: Mapping[str, _IndexRow],
     outcomes: list[RecordOutcome],
     numeric_cells: list[str],
@@ -1002,9 +1046,7 @@ def _convert_elements(
 
     sheet = access.sheet(layout.sheet)
     columns = layout.columns
-    system = system_name(source, "elements_system") or (
-        "海关总署规范申报要素查询（用户导出整理）"
-    )
+    system = system_name(source, "elements_system")
     source_url = system_name(source, "elements_url", "url")
     groups: dict[str, dict[str, Any]] = {}
     order: list[str] = []
@@ -1047,6 +1089,9 @@ def _convert_elements(
             order.append(code)
         group["rows"].append((row_number, label, flag))
         group["last_row"] = row_number
+        prefix = _text(access, sheet, row_number, columns, "适用前缀")
+        if prefix:
+            group.setdefault("prefixes", set()).add(prefix)
         problem: RecordIssue | None = None
         if not label:
             problem = RecordIssue("ELEMENT_LABEL_EMPTY", "申报要素名称为空", "申报要素")
@@ -1067,6 +1112,7 @@ def _convert_elements(
         row_issues: list[tuple[int, str, RecordIssue]] = group["issues"]
         if row_issues:
             # 整份清单拒绝：不产出“少几项”的清单。
+            rejected_codes.add(code)
             elements.count(RecordStatus.REJECTED, len(rows))
             for row_number, label, problem in row_issues:
                 outcomes.append(
@@ -1117,6 +1163,7 @@ def _convert_elements(
         labels = [label for _, label, _ in rows]
         duplicated = sorted({label for label in labels if labels.count(label) > 1})
         if duplicated:
+            rejected_codes.add(code)
             elements.count(RecordStatus.REJECTED, len(rows))
             outcomes.append(
                 RecordOutcome(
@@ -1202,6 +1249,14 @@ def _convert_elements(
             "locator": first_locator,
         }
         element_codes[code] = first_locator
+        prefixes = sorted(group.get("prefixes") or ())
+        if len(prefixes) > 1:
+            # P14 的 ElementSchema 没有“适用前缀”字段；同一编码出现多个前缀时
+            # 静默合并会丢掉来源区别，必须转人工。
+            count_problems = list(count_problems) + [
+                f"同一编码在来源里对应多个适用前缀（{'、'.join(prefixes)}），"
+                "P14 清单契约没有前缀字段，不能静默合并"
+            ]
         if count_problems:
             elements.count(RecordStatus.PENDING, len(rows))
             outcomes.append(

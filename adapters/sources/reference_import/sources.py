@@ -297,7 +297,8 @@ class WorkbookAccess:
                     if not header:
                         continue
                     if header in mapping:
-                        if header in required:
+                        if header in wanted:
+                            # 必需列与可选列同名重复都属于“结构有歧义”，不能静默取左列。
                             duplicates.add(header)
                         continue
                     if header in wanted:
@@ -353,6 +354,8 @@ class WorkbookAccess:
 #: 同一份原件在一次运行中可能同时喂给目录、要素、退税三个转换器。
 #: 缓存按「绝对路径 + 原件哈希」建键：原件被换掉不会命中旧缓存。
 _ACCESS_CACHE: dict[tuple[str, str], "WorkbookAccess"] = {}
+#: 缓存上限（个）；超过就整体清空，代价是重新解析，换来内存可控。
+_MAX_CACHED_WORKBOOKS = 8
 
 
 def open_workbook(source: SourceFile) -> "WorkbookAccess":
@@ -363,6 +366,9 @@ def open_workbook(source: SourceFile) -> "WorkbookAccess":
     if cached is not None:
         return cached
     access = WorkbookAccess(source)
+    if len(_ACCESS_CACHE) >= _MAX_CACHED_WORKBOOKS:
+        # 长驻进程反复导入不同批次时不能无限堆积解析后的工作簿。
+        _ACCESS_CACHE.clear()
     _ACCESS_CACHE[key] = access
     return access
 

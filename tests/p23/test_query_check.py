@@ -65,7 +65,9 @@ class QueryCheckTest(P23TestCase):
         )
         self.assertTrue(saved["all_passed"])
 
-    def test_missing_dataset_is_skip_not_pass(self):
+    def test_missing_declared_dataset_fails_verification(self):
+        """报告说“已提供”却缺了输出文件：既不能记 pass，也不能整体算通过。"""
+
         target = self.copy_snapshot("no-elements")
         (target / "elements.json").unlink()
         verification = run_query_checks(target)
@@ -76,13 +78,17 @@ class QueryCheckTest(P23TestCase):
             [],
             "缺文件时不应给出任何 p14.elements.* 的“通过”结论",
         )
-        self.assertEqual(verification["counts"]["skip"], 1)
-        self.assertEqual(verification["counts"]["fail"], 0)
-        self.assertTrue(verification["all_passed"])
-        self.assertEqual(
-            [item["status"] for item in verification["checks"] if item["id"] == "p14.elements"],
-            ["skip"],
+        self.assertEqual(statuses["p23.snapshot.provided_datasets_present"], "fail")
+        self.assertEqual(verification["counts"]["fail"], 1)
+        self.assertFalse(
+            verification["all_passed"], "声明已提供但缺文件时不能 all_passed"
         )
+        detail = next(
+            item["detail"]
+            for item in verification["checks"]
+            if item["id"] == "p23.snapshot.provided_datasets_present"
+        )
+        self.assertIn("p14_elements", detail)
 
     def test_corrupted_tariff_code_reports_fail(self):
         target = self.copy_snapshot("corrupted")

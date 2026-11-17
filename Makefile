@@ -106,9 +106,13 @@ reference-scan:
 reference-import:
 	$(PYTHON) scripts/import_reference_data.py import --sources $(REFERENCE_SOURCES) --out-root $(REFERENCE_OUT)
 
+# 换版（覆盖已发布内容）必须显式声明：make reference-publish ... ALLOW_CHANGE=1 REASON="为什么换版"
 reference-publish:
-	@test -n "$(SNAPSHOT)" || { echo "用法：make reference-publish SNAPSHOT=$(REFERENCE_OUT)/candidates/<snapshot_id> [REVIEW=<复核文件>]" >&2; exit 2; }
-	$(PYTHON) scripts/import_reference_data.py publish --snapshot "$(SNAPSHOT)" --out-root $(REFERENCE_OUT) $(if $(REVIEW),--review "$(REVIEW)")
+	@test -n "$(SNAPSHOT)" || { echo "用法：make reference-publish SNAPSHOT=$(REFERENCE_OUT)/candidates/<snapshot_id> [REVIEW=<复核文件>] [ALLOW_CHANGE=1 REASON=...]" >&2; exit 2; }
+	@test -z "$(ALLOW_CHANGE)" || test -n "$(REASON)" || { echo "ALLOW_CHANGE=1 必须同时给 REASON=..." >&2; exit 2; }
+	$(PYTHON) scripts/import_reference_data.py publish --snapshot "$(SNAPSHOT)" --out-root $(REFERENCE_OUT) \
+		$(if $(REVIEW),--review "$(REVIEW)") \
+		$(if $(ALLOW_CHANGE),--allow-content-change --reason "$(REASON)")
 
 reference-releases:
 	$(PYTHON) scripts/import_reference_data.py releases --out-root $(REFERENCE_OUT)

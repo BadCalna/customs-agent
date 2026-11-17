@@ -240,6 +240,9 @@ def diff_snapshots(left: Path, right: Path) -> dict[str, Any]:
         DatasetId.P14_ELEMENTS.filename: DatasetId.P14_ELEMENTS.value,
         DatasetId.P17_TAX_RATES.filename: DatasetId.P17_TAX_RATES.value,
         DatasetId.TARIFF_COMMENTARY.filename: DatasetId.TARIFF_COMMENTARY.value,
+        # 监管代码台账也是发布物；漏掉它就能无理由覆盖已发布的台账内容。
+        DatasetId.REGULATORY_CODE_LEDGER.filename: DatasetId.REGULATORY_CODE_LEDGER.value,
+        DatasetId.P17_REGULATORY.filename: DatasetId.P17_REGULATORY.value,
     }
     for filename, label in names.items():
         left_path = left / filename
@@ -424,7 +427,16 @@ def publish_release(request: PublishRequest) -> PublishResult:
             shutil.rmtree(temp_dir)
             release = read_json(release_dir / "release.json")
         else:
-            os.replace(temp_dir, release_dir)
+            try:
+                os.replace(temp_dir, release_dir)
+            except OSError:
+                # 并发发布同一 release：谁先到谁生效，另一方读现成的，不抛裸 OSError。
+                shutil.rmtree(temp_dir, ignore_errors=True)
+                if not release_dir.is_dir():
+                    raise PublishError(
+                        f"发布目录落盘失败，且目标不存在：{release_dir.name}"
+                    )
+                release = read_json(release_dir / "release.json")
     except Exception:
         shutil.rmtree(temp_dir, ignore_errors=True)
         raise

@@ -95,17 +95,26 @@ class TextRateTest(P23TestCase):
         self.assertAlmostEqual(percent, 13.0)
         self.assertEqual(raw, "13.00%")
 
-    def test_text_plain_number_is_percent(self):
+    def test_text_plain_number_is_ambiguous_not_guessed(self):
+        """文本 "13" 没写百分号：到底是 13% 还是 0.13%？不猜，保持待核。"""
+
         kind, raw, percent, issue = rate_from_cell(
             raw_text="13", cell_kind="inlineStr", percent_format=None, format_code=None
         )
-        self.assertIsNone(issue)
-        self.assertEqual(kind, "export_rebate")
-        self.assertAlmostEqual(percent, 13.0)
+        self.assertEqual((kind, percent), ("", None), "不得替来源选一个方向")
+        self.assertEqual(issue.code, "TAX_RATE_TEXT_AMBIGUOUS")
+        self.assertIn("百分号", issue.message)
 
-    def test_text_zero_is_zero_rate(self):
+    def test_text_zero_without_percent_is_ambiguous(self):
         kind, _raw, percent, issue = rate_from_cell(
             raw_text="0", cell_kind="inlineStr", percent_format=None, format_code=None
+        )
+        self.assertEqual((kind, percent), ("", None))
+        self.assertEqual(issue.code, "TAX_RATE_TEXT_AMBIGUOUS")
+
+    def test_text_zero_percent_is_zero_rate(self):
+        kind, _raw, percent, issue = rate_from_cell(
+            raw_text="0%", cell_kind="inlineStr", percent_format=None, format_code=None
         )
         self.assertIsNone(issue)
         self.assertEqual(kind, "zero_rate")

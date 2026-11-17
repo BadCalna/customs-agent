@@ -37,6 +37,8 @@ from pydantic import Field, ValidationError, model_validator
 
 from apps.api.schemas import EvidenceEntry, EvidenceStatus, IssueEntry
 
+from adapters.sources.commentary_text import render_commentary_text
+
 from adapters.sources.hs_lookup import (
     DatasetInfo,
     QueryStatus,
@@ -149,6 +151,11 @@ class CommentaryRecord(Schema):
         if self.source_char_count is not None and self.source_char_count != section_total:
             raise ValueError(
                 f"条目 {self.tariff_no} 的来源 char_count 与分段合计不一致"
+            )
+        # 分段正文与全文必须能互相拼回：不一致说明正文被改过或被截断。
+        if render_commentary_text(self.sections) != self.text_all:
+            raise ValueError(
+                f"条目 {self.tariff_no} 的分段正文与全文拼接结果不一致，正文可能被改写"
             )
         return self
 
@@ -677,5 +684,6 @@ __all__ = [
     "JsonCommentaryStore",
     "SCHEMA_VERSION",
     "TariffCommentarySource",
+    "render_commentary_text",
     "default_commentary_path",
 ]

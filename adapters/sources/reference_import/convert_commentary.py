@@ -24,6 +24,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
+from adapters.sources.commentary_text import render_commentary_text
+
 from adapters.sources.reference_import.convert_catalog import Versioning
 from adapters.sources.reference_import.model import (
     COMMENTARY_SCHEMA_VERSION,
@@ -58,10 +60,11 @@ class CommentaryBuild:
 
 
 def render_text_all(sections: Iterable[Mapping[str, str]]) -> str:
-    """按来源格式重新拼接 ``text_all``：``【label】\\ntext`` 以空行分隔。"""
+    """按来源格式重新拼接 ``text_all``；与读取适配共用同一实现。"""
 
-    blocks = [f"【{visible_text(item.get('label'))}】\n{item.get('text', '')}" for item in sections]
-    return "\n\n".join(blocks)
+    return render_commentary_text(
+        [{"label": visible_text(item.get("label")), "text": item.get("text", "")} for item in sections]
+    )
 
 
 def _read_json(path: Path) -> Any:
@@ -112,11 +115,20 @@ def build_commentary(
             return build
         unknown_top_keys.update(set(payload) - set(KNOWN_TOP_LEVEL_KEYS))
         source_meta = payload.get("source") or {}
+        page_url = ""
         if isinstance(source_meta, Mapping):
+            page_url = visible_text(source_meta.get("page"))
             for key in ("page", "api_home", "api_list", "api_detail"):
                 value = visible_text(source_meta.get(key))
                 if value and value not in urls:
                     urls.append(value)
+        # 记录级来源系统/发布方只取清单声明的值；没有就留空，不替来源编。
+        record_system = visible_text(
+            (source.recorded_source or {}).get("system")
+        )
+        record_publisher = visible_text(
+            (source.recorded_source or {}).get("publisher")
+        )
         fetched_at = visible_text(payload.get("fetched_at"))
         if fetched_at:
             fetched.append(fetched_at)
@@ -320,12 +332,12 @@ def build_commentary(
                 "source_char_count": source_char_count if isinstance(source_char_count, int) else None,
                 "source_status": visible_text(item.get("status")),
                 "source": {
-                    "system": "海关总署商品归类参数查询（品目注释）",
+                    "system": record_system,
                     "document": source.original_filename or source.path.name,
                     "locator": locator,
-                    # URL 直接用原件 source.page，不写死常量。
-                    "url": urls[0] if urls else None,
-                    "publisher": "海关总署",
+                    # URL 用该条目所属原件自己的 source.page（多来源时不能串）。
+                    "url": page_url or None,
+                    "publisher": record_publisher,
                     "retrieved_at": source.retrieved_at,
                 },
                 "note": "；".join(item.message for item in problems),
@@ -347,8 +359,12 @@ def build_commentary(
                 outcome.count(RecordStatus.IMPORTED)
 
     if not seen:
-        outcome.status = DatasetStatus.INPUT_MISSING
-        outcome.reason = "没有可解析的注释条目"
+        if outcome.input_total:
+            outcome.status = DatasetStatus.PROVIDED
+            outcome.reason = "原件已解析，但所有注释条目都被拒绝（原因见逐条记录）"
+        else:
+            outcome.status = DatasetStatus.INPUT_MISSING
+            outcome.reason = "没有可解析的注释条目"
         build.outcome = outcome
         return build
 

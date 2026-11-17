@@ -28,7 +28,7 @@ from typing import Any, Iterable, Mapping, Sequence
 
 #: 转换器版本。业务输出指纹包含它：只要转换语义变化就必须改这个值，
 #: 否则“输入相同 → 输出相同”的承诺不再成立。
-CONVERTER_VERSION = "p23-import-2026.11.3"
+CONVERTER_VERSION = "p23-import-2026.11.4"
 
 #: 来源清单与复核文件的结构版本。
 SOURCES_SCHEMA_VERSION = "p23.sources.1"
@@ -289,7 +289,10 @@ def write_json_atomic(path: str | Path, payload: Any) -> Path:
     target.parent.mkdir(parents=True, exist_ok=True)
     temp = target.with_name(f".{target.name}.tmp-{os.getpid()}-{id(payload)}")
     text = json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=False) + "\n"
-    temp.write_text(text, encoding="utf-8")
+    with temp.open("w", encoding="utf-8") as handle:
+        handle.write(text)
+        handle.flush()
+        os.fsync(handle.fileno())
     os.replace(temp, target)
     return target
 
@@ -298,7 +301,10 @@ def write_text_atomic(path: str | Path, text: str) -> Path:
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
     temp = target.with_name(f".{target.name}.tmp-{os.getpid()}-{id(text)}")
-    temp.write_text(text, encoding="utf-8")
+    with temp.open("w", encoding="utf-8") as handle:
+        handle.write(text)
+        handle.flush()
+        os.fsync(handle.fileno())
     os.replace(temp, target)
     return target
 

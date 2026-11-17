@@ -353,7 +353,8 @@ class RejectedRowTest(P23TestCase):
         ]
         self.assertEqual(len(pending), 1)
         self.assertEqual([issue["code"] for issue in pending[0]["issues"]],
-                         ["ELEMENT_SCHEMA_MISSING"])
+                         ["ELEMENT_SCHEMA_REJECTED"],
+                         "被整份拒绝的清单要报“被拒绝”，不能说“明细里没有这一行”")
         self.assertEqual(elements["pending"], 1)
         self.assertEqual(build.report["status"], "partial")
         self.assertEqual(int(build.exit_code), 1)

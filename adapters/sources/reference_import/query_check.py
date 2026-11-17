@@ -36,10 +36,50 @@ from adapters.sources.tariff_commentary import (
 )
 from adapters.sources.tax_lookup import JsonTaxRateStore, TaxRateQuery, TaxRateSource
 
-from adapters.sources.reference_import.model import utc_now
+from adapters.sources.reference_import.model import DatasetId, utc_now
 
 #: 验证脚本的结构版本；结果被发布门禁读取，结构变化时递增。
 VERIFICATION_SCHEMA_VERSION = "p23.query-check.1"
+
+
+def _check_declared_datasets(root: Path) -> list[dict[str, Any]]:
+    """核对“报告说已提供”的数据类别都真的产出了文件。"""
+
+    report_path = root / "report.json"
+    if not report_path.is_file():
+        return [
+            _check(
+                "p23.snapshot.report_present",
+                "fail",
+                "快照缺少 report.json，无法核对数据类别是否齐全",
+            )
+        ]
+    report = _load(report_path)
+    missing: list[str] = []
+    for item in report.get("datasets", []):
+        if item.get("status") != "provided":
+            continue
+        name = str(item.get("dataset"))
+        try:
+            filename = DatasetId(name).filename
+        except ValueError:
+            missing.append(f"{name}（未知数据类别）")
+            continue
+        if not (root / filename).is_file():
+            missing.append(name)
+    checks: list[dict[str, Any]] = [
+        _check(
+            "p23.snapshot.provided_datasets_present",
+            "fail" if missing else "pass",
+            (
+                "报告声明已提供但没有输出文件：" + "、".join(missing)
+                if missing
+                else "报告声明为 provided 的数据类别都有输出文件"
+            ),
+            observed={"missing": missing},
+        )
+    ]
+    return checks
 
 
 def _check(
@@ -151,6 +191,10 @@ def run_query_checks(snapshot_dir: str | Path) -> dict[str, Any]:
         checks.append(
             _skip("p23.commentary", "快照里没有 commentary.json（品目注释未导入）")
         )
+
+    # 清单/报告声明“已提供”的数据类别必须有输出文件，而且它的检查不能是 skip：
+    # 否则“少一份数据文件”也能 all_passed=true，发布门就形同虚设。
+    checks.extend(_check_declared_datasets(root))
 
     passed = [item for item in checks if item["status"] == "pass"]
     failed = [item for item in checks if item["status"] == "fail"]

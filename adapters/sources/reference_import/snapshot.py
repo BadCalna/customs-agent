@@ -140,7 +140,51 @@ def _dataset_fingerprint(payload: Any) -> str:
     return fingerprint(payload) if payload is not None else ""
 
 
-def input_fingerprint(manifest: SourceManifest, versioning: Any) -> str:
+def outcome_fingerprint(outcomes: Iterable[RecordOutcome], datasets: Iterable[DatasetOutcome]) -> str:
+    """报告口径指纹：各状态计数 + 逐条非成功记录的状态与原因。
+
+    业务指纹只看 payload，而**被拒绝/待核/冲突的行不在 payload 里**；
+    如果快照身份只由 payload 决定，两份“payload 相同但坏行不同”的输入会撞同一个快照，
+    第二份输入的拒绝记录就会被丢掉。所以快照 ID 同时包含这份指纹。
+    """
+
+    counts = sorted(
+        (
+            item.dataset.value,
+            item.status.value,
+            item.input_total,
+            item.imported,
+            item.duplicate,
+            item.conflict,
+            item.pending,
+            item.rejected,
+            item.not_imported,
+            item.output_records,
+        )
+        for item in datasets
+    )
+    records = sorted(
+        (
+            item.dataset.value,
+            item.status.value,
+            item.business_key,
+            item.locator,
+            item.reason,
+            tuple(sorted(issue.code for issue in item.issues)),
+        )
+        for item in outcomes
+    )
+    return fingerprint({"counts": counts, "records": records})
+
+
+def input_fingerprint(
+    manifest: SourceManifest, versioning: Any, acquisition: str
+) -> str:
+    """输入指纹：原件哈希 + 转换器版本 + 版本配置 + 批次身份 + 采集/核对日期。
+
+    “转换是确定性的”这句话只在这些输入都不变时成立：批次号变了、采集日期变了
+    （它会决定退税率记录是否记为过期），业务输出就可能不同，不能复用旧快照。
+    """
     """输入指纹：原件哈希 + 转换器版本 + 版本配置。
 
     转换是确定性的，所以输入指纹相同就意味着业务输出相同——重复运行可以在
@@ -151,6 +195,8 @@ def input_fingerprint(manifest: SourceManifest, versioning: Any) -> str:
         {
             "converter_version": CONVERTER_VERSION,
             "dataset_kind": DatasetKind(manifest.kind).value,
+            "batch_id": manifest.batch_id,
+            "acquisition_date": acquisition,
             "defaults": dict(sorted(manifest.defaults.items())),
             "declared": [item.as_dict() for item in manifest.declared],
             "sources": sorted(
@@ -164,7 +210,9 @@ def input_fingerprint(manifest: SourceManifest, versioning: Any) -> str:
     )
 
 
-def _find_reusable_snapshot(out_root: Path, wanted: str) -> Path | None:
+def _find_reusable_snapshot(out_root: Path, wanted_input: str) -> Path | None:
+    """按输入指纹找既有候选快照；命中后仍要在 ``_reuse_snapshot`` 里做输出自检。"""
+
     candidates_root = out_root / "candidates"
     if not candidates_root.is_dir():
         return None
@@ -178,7 +226,7 @@ def _find_reusable_snapshot(out_root: Path, wanted: str) -> Path | None:
             payload = read_json(manifest_path)
         except (OSError, ValueError):
             continue
-        if payload.get("input_fingerprint") == wanted:
+        if payload.get("input_fingerprint") == wanted_input:
             return entry
     return None
 
@@ -199,6 +247,38 @@ def _outcomes_from_report(report: Mapping[str, Any]) -> list[DatasetOutcome]:
     return outcomes
 
 
+def check_snapshot_integrity(snapshot_dir: str | Path) -> None:
+    """核对候选快照的输出文件与索引里的 SHA-256/字节数一致。
+
+    复用前必须做这件事：候选文件被手工改过或删掉时，直接复用会让 ``import``/``verify``
+    谎报成功（发布侧另有同样的自检，但证据链不该靠下游兜底）。
+    """
+
+    root = Path(snapshot_dir)
+    manifest_path = root / "manifest.json"
+    if not manifest_path.is_file():
+        raise SnapshotFailed(f"候选快照缺少 manifest.json：{root.name}")
+    manifest = read_json(manifest_path)
+    outputs = manifest.get("outputs") or {}
+    if not outputs:
+        raise SnapshotFailed(f"候选快照没有输出文件索引：{root.name}")
+    problems: list[str] = []
+    for name, info in outputs.items():
+        path = root / str(info.get("file") or "")
+        if not path.is_file():
+            problems.append(f"{name}：文件缺失（{info.get('file')}）")
+            continue
+        if path.stat().st_size != info.get("bytes"):
+            problems.append(f"{name}：字节数与索引不一致")
+            continue
+        if sha256_file(path) != info.get("sha256"):
+            problems.append(f"{name}：SHA-256 与索引不一致")
+    if problems:
+        raise SnapshotFailed(
+            "既有候选快照被改动或损坏，拒绝复用（先清理该快照再重跑）：" + "；".join(problems)
+        )
+
+
 def _reuse_snapshot(
     *,
     snapshot_dir: Path,
@@ -208,6 +288,7 @@ def _reuse_snapshot(
 ) -> "SnapshotBuild":
     """复用既有候选快照：不重算数据，只重跑查询验证并记一条运行报告。"""
 
+    check_snapshot_integrity(snapshot_dir)
     report = read_json(snapshot_dir / "report.json")
     report["reused"] = True
     report["last_seen_at"] = local_now()
@@ -408,9 +489,10 @@ def build_snapshot(
     versioning = Versioning.from_manifest(manifest)
     acquisition = request.acquisition_date or manifest.prepared_at or utc_now()
 
-    # 快速通道：输入指纹相同说明业务输出必然相同，直接复用既有快照（不再解析几万行）。
     out_root_path = Path(request.out_root)
-    wanted_input = input_fingerprint(manifest, versioning)
+    wanted_input = input_fingerprint(manifest, versioning, acquisition)
+    # 快速通道：输入指纹（原件哈希 + 批次号 + 采集日期 + 版本配置 + 转换器版本）完全一致时，
+    # 转换结果必然一致，直接复用既有快照，不必重解析几万行。
     reusable = _find_reusable_snapshot(out_root_path, wanted_input)
     if reusable is not None:
         return _reuse_snapshot(
@@ -553,40 +635,9 @@ def build_snapshot(
             dataset=DatasetId.TARIFF_COMMENTARY, status=status, reason=reason
         )
 
-    # ---- 业务指纹与快照 ID
+    # ---- 业务指纹（快照身份在算完报告口径后再定，见下）
     overall_fingerprint = _business_fingerprint(datasets, payloads)
-    snapshot_id = f"{manifest.batch_id}-{overall_fingerprint[:12]}"
-    snapshot_dir = Path(request.out_root) / "candidates" / snapshot_id
-    reused = (snapshot_dir / "manifest.json").is_file()
     business_inputs = [item for item in sources]
-
-    report: dict[str, Any] = {
-        "schema_version": REPORT_SCHEMA_VERSION,
-        "batch_id": manifest.batch_id,
-        "snapshot_id": snapshot_id,
-        "dataset_kind": DatasetKind(manifest.kind).value,
-        "converter_version": CONVERTER_VERSION,
-        "generated_at": local_now(),
-        "business_fingerprint": overall_fingerprint,
-        "inputs": [item.as_dict() for item in business_inputs],
-        "unresolved_inputs": [item.as_dict() for item in manifest.unresolved],
-        "datasets": [],
-        "totals": {},
-        "assumptions": assumptions,
-        "notes": notes,
-        "records": [],
-        "reused": reused,
-        "status": "",
-        "exit_code": 0,
-    }
-
-    if reused:
-        return _reuse_snapshot(
-            snapshot_dir=snapshot_dir,
-            out_root=out_root_path,
-            manifest=manifest,
-            verify_hook=verify_hook,
-        )
 
     # ---- 组装报告中的数据集统计（先算，便于逐条原因对账）
     ordered_datasets = sorted(datasets.values(), key=lambda item: list(DatasetId).index(item.dataset))
@@ -596,7 +647,44 @@ def build_snapshot(
             outcome.fingerprint = _dataset_fingerprint(payloads[outcome.dataset])
         elif outcome.fingerprint == "":
             outcome.fingerprint = ""
-    report["datasets"] = [item.as_dict() for item in ordered_datasets]
+    # 报告口径（计数 + 逐条拒绝/待核/冲突）也是快照身份的一部分：
+    # 输入相同 → 完全相同；坏行不同 → 必须是另一个快照，不能借用旧报告。
+    reporting_fingerprint = outcome_fingerprint(outcomes, ordered_datasets)
+    identity_fingerprint = fingerprint(
+        {
+            "business_fingerprint": overall_fingerprint,
+            "reporting_fingerprint": reporting_fingerprint,
+        }
+    )
+    snapshot_dir = Path(request.out_root) / "candidates" / f"{manifest.batch_id}-{identity_fingerprint[:12]}"
+    if (snapshot_dir / "manifest.json").is_file():
+        return _reuse_snapshot(
+            snapshot_dir=snapshot_dir,
+            out_root=out_root_path,
+            manifest=manifest,
+            verify_hook=verify_hook,
+        )
+    report: dict[str, Any] = {
+        "schema_version": REPORT_SCHEMA_VERSION,
+        "batch_id": manifest.batch_id,
+        "snapshot_id": snapshot_dir.name,
+        "dataset_kind": DatasetKind(manifest.kind).value,
+        "converter_version": CONVERTER_VERSION,
+        "generated_at": local_now(),
+        "business_fingerprint": overall_fingerprint,
+        "reporting_fingerprint": reporting_fingerprint,
+        "inputs": [item.as_dict() for item in business_inputs],
+        "unresolved_inputs": [item.as_dict() for item in manifest.unresolved],
+        "datasets": [item.as_dict() for item in ordered_datasets],
+        "totals": {},
+        "assumptions": assumptions,
+        "notes": notes,
+        "records": [],
+        "reused": False,
+        "status": "",
+        "exit_code": 0,
+    }
+    snapshot_id = snapshot_dir.name
     report["totals"] = summarize_counts(ordered_datasets)
     report["records"] = [item.as_dict() for item in outcomes]
     exit_code = exit_code_for(ordered_datasets)
@@ -643,6 +731,7 @@ def build_snapshot(
             "dataset_kind": DatasetKind(manifest.kind).value,
             "converter_version": CONVERTER_VERSION,
             "business_fingerprint": overall_fingerprint,
+            "reporting_fingerprint": reporting_fingerprint,
             "input_fingerprint": wanted_input,
             "generated_at": report["generated_at"],
             "datasets": report["datasets"],
