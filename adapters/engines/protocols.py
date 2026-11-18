@@ -156,4 +156,8 @@ def get_engine() -> Engine:
 
     if settings.ENGINE_MODE == "mock":
         return MockEngine()
+    if settings.ENGINE_MODE == "openai":
+        from .openai import OpenAICompatibleEngine
+
+        return OpenAICompatibleEngine()
     raise RuntimeError(f"未实现的引擎模式：{settings.ENGINE_MODE}")

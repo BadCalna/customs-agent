@@ -8,6 +8,8 @@ from apps.api.demo import (
     demo_asset,
     demo_fixture,
     demo_index,
+    production_asset,
+    production_index,
     tasks_index,
     upload_index,
     workbench_asset,
@@ -52,6 +54,8 @@ api_v1.add_router("", exports_router)
 api_v1.add_router("", pending_router)
 
 urlpatterns = [
+    path("", production_index, name="production-index"),
+    path("app/assets/<path:path>", production_asset, name="production-asset"),
     path("admin/", admin.site.urls),
     path("api/v1/", api_v1.urls),
     path("api/", api.urls),

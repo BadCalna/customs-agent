@@ -75,7 +75,19 @@ P02 第一批落地情况：
 4. worker 只接收执行 ID，从服务端读取固定输入。每个结果校验 task/version/item/submission、输入修订及执行代次。V1 晚到、同版本旧一轮晚到均不能覆盖当前有效结果。
 5. 单行失败允许单行重试，保留每次尝试、错误分类和时间；模型超时、限流、来源查询失败及业务缺事实分别记录。主流程不用一个失败字段表达全部问题。
 
-M0/M1 的 inline mock 只验证短时顺序流程；在 PostgreSQL + RQ 下完成 P12/P13 之前，不能声称后台可恢复或并发正确。
+M0/M1 的 inline mock 只验证短时顺序流程。P13 的 Windows 本机 PostgreSQL + Redis + 独立 SimpleWorker 中断/派发丢失恢复已自验，Linux 生产 Worker、真实模型及部署仍待验证，不能相互替代。
+
+### 4.1 P13 已实现约定（2026-11-17，契约 1.2.0）
+
+- 上传先在业务事务内登记版本、ImportJob、queued Run 和 RunWork；rq 请求只校验文件大小、后缀和哈希并暂存原件，返回 staged。worker 解析、导入成功后执行预审；导入失败不发布成功事件。
+- 业务员提交在快照事务内登记专家 Run/RunWork，提交后安全投递；Redis 故障不把已提交业务响应变成 500。扫描器重投 pending，恢复 running 的过期租约。
+- Redis 仅载 run_id；Task → Run → RunWork → 行/尝试为锁序。模型在锁外执行；写回复核 token、租约、输入哈希、当前版本/同版最新执行和提交状态。过期输出不能成为当前结果。
+- RunStatus 继续使用 queued/running/succeeded/failed/superseded；任一行技术失败时 Run 为 failed，并通过 progress.failed 展示数量。业务资料不足、无法确认、来源未知不触发技术重试。
+- 自动单行默认最多 3 次；RunAttempt 保留导入与商品行的 succeeded/failed/interrupted/superseded 及时间、错误类别、输入哈希。人工重试生成 parent_run 关联的新执行，只重新调用所选失败行，其他行带 origin_run_id；旧执行与旧结果保留。
+- 正式 POST prechecks/retries 要求 Idempotency-Key、登录/CSRF 与对象操作权限；服务端发布 precheck_allowed/retry_allowed/retry_item_ids，前端不能自行放宽。GET 进度只读。
+- 升级迁移为旧 queued/running Run 登记持久任务，保留成功行，只恢复未完成行；没有历史尝试时不编造调用记录。
+
+细节与验证边界见 [P13 交接](交接/P13.md)。
 
 ## 5. 评测与回交
 
@@ -409,7 +421,7 @@ P23 的假设清单随快照 `manifest.json` 落盘（`assumptions[]`），每�
 
 上传事务先预登记一个 `queued, is_current=false` Run，作为持久执行凭据；解析/图片成功后，系统用
 `execute_precheck(version, run=job.precheck)` 激活同一 Run，整表执行。未解析成功不激活，不产生有效预审结果。
-该编排是 P06 inline 模式，P13 后续接队列和后台恢复。失败/中断恢复复用 ImportJob、版本、Run，不追加第二轮。
+该编排是 P06 inline 模式；P13 rq 模式见 §4.1。导入失败/中断恢复复用 ImportJob、版本、Run，不追加第二个导入轮；商品执行的显式失败行重试另建关联 Run。
 原有 P02 显式预审入口仍可不传 run，保持兼容。预审全部行失败时导入可以成功，但 `precheck_status=failed`，
 页面分别展示解析状态与预审失败，不能写成“预审通过”。
 P06 不读取 P10 候选对照，不使用旧版本确认/审批，不调用真实 AI、官方来源或后台队列。

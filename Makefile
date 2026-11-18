@@ -5,7 +5,7 @@ MANAGE := $(PYTHON) manage.py
 BIND ?= 127.0.0.1:8000
 export TASK
 
-.PHONY: setup migrate seed-demo seed-contracts contracts demo-components workbench dev check test test-contracts \
+.PHONY: setup migrate seed-demo seed-contracts contracts demo-components workbench dev check test test-contracts worker dispatcher \
         pg-init pg-start pg-stop pg-status db-backup db-copy check-postgres \
         reference-scan reference-import reference-publish reference-releases
 setup:
@@ -41,6 +41,13 @@ test-contracts:
 
 dev:
 	$(MANAGE) runserver $(BIND)
+
+QUEUE ?= $(shell $(PYTHON) -c "from config.settings import CUSTOMS_QUEUE_NAME; print(CUSTOMS_QUEUE_NAME)")
+worker:
+	$(MANAGE) rqworker $(QUEUE)
+
+dispatcher:
+	$(MANAGE) dispatch_runs --watch
 
 workbench:
 	@echo "正式工作台：http://$(BIND)/workbench/（真实登录会话与 API）"

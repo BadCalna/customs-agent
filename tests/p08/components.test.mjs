@@ -19,7 +19,9 @@ function scheduler() {
   return {pending, setTimeout(fn) {pending.set(++id, fn); return id;}, clearTimeout(key) {pending.delete(key);},
     async tick() {const entries = [...pending.values()]; pending.clear(); for (const fn of entries) await fn(); await new Promise(resolve => setImmediate(resolve));}};
 }
-function run(overrides = {}) {return {...copy(fixture('FIX-05').run), ...overrides};}
+// Existing host-adapter tests model the pre-P13 response. Explicit server
+// capability (including denial) is exercised separately below.
+function run(overrides = {}) {const value=copy(fixture('FIX-05').run);delete value.retry_allowed;delete value.retry_item_ids;return {...value, ...overrides};}
 function context(value) {return {taskId: value.task_id, versionId: value.version_id, runId: value.run_id, isVersionCurrent: true, versionNumber: 2};}
 function activeRun(overrides = {}) {
   const value = run(); const first = value.items[0];
@@ -86,6 +88,23 @@ test('FIX-05 completed count includes failures, never turns business missing fac
   const value=run(),view=progressView(value);
   assert.equal(view.counts.failed,1);assert.equal(view.completed,value.progress.succeeded+1);
   assert.equal(view.failureIds.length,1);assert.ok(view.businessRows>0);assert.equal(view.percent,100);
+});
+
+test('AI thinking indicator appears only while either run kind is running', async()=>{
+  for (const kind of ['precheck', 'expert_check']) {
+    const value=activeRun({kind}),node=host();
+    const controller=createRunProgress(node,{client:{getRun:async()=>value}});
+    await controller.open(context(value));
+    assert.match(node.innerHTML,/AI 思考中\.\.\./);
+    controller.destroy();
+  }
+  for (const status of ['queued','succeeded','failed']) {
+    const value=run({status}),node=host();
+    const controller=createRunProgress(node,{client:{getRun:async()=>value}});
+    await controller.open(context(value));
+    assert.doesNotMatch(node.innerHTML,/AI 思考中\.\.\./);
+    controller.destroy();
+  }
 });
 
 test('FIX-10 expert run uses explicit issues without treating a null precheck comparison as an error',async()=>{
@@ -236,6 +255,20 @@ test('unwired or unauthorized retry cannot write; missing fact messages are esca
 });
 test('authentication, permission, missing, conflict and unimplemented errors remain distinct',()=>{
   assert.equal(new Set([401,403,404,409,501].map(status=>errorView({status}).title)).size,5);
+});
+
+test('P13 explicit server denial overrides a host retry flag',async()=>{
+  const value=run({retry_allowed:false,retry_item_ids:[]});let writes=0;
+  const controller=createRunProgress(host(),{client:{getRun:async()=>value},retryAllowed:true,onRetry:async()=>{writes++;}});
+  await controller.open(context(value));controller.selectFailed(progressView(value).failureIds);await controller.retry();
+  assert.equal(writes,0);controller.destroy();
+});
+
+test('P13 explicit server grant connects the real retry callback',async()=>{
+  const value=run({retry_allowed:true});value.retry_item_ids=progressView(value).failureIds;let writes=0;
+  const controller=createRunProgress(host(),{client:{getRun:async()=>value},onRetry:async()=>{writes++;throw {status:409,message:'changed'};}});
+  await controller.open(context(value));controller.selectFailed(value.retry_item_ids);await controller.retry();
+  assert.equal(writes,1);controller.destroy();
 });
 
 test('queued current-version execution is polled before activation; state callback follows server snapshot',async()=>{

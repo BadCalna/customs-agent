@@ -8,6 +8,9 @@ dependencies = [
     "pillow>=11.0",
     "psycopg[binary]>=3.2,<4",
     "python-dotenv>=1,<2",
+    "django-rq==3.2.2",
+    "rq==2.6.1",
+    "redis==6.4.0",
 ]
 
 [tool.uv]

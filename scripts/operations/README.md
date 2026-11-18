@@ -84,9 +84,9 @@ scripts/operations/drill.sh
 ## 约定
 
 - 备份目录默认 `deploy/backups/<UTC时间戳>-<标签>/`，已被 Git 忽略；**不要**提交进仓库。
-- `incoming/` 不进完整备份，但其中原件/发布回执可能属于**已经提交**的 failed/staged ImportJob，仍是原请求幂等重试的恢复材料。备份在 native 持锁 / Compose 停写边界内、dump 和归档之前拒绝所有 `ImportJob.status != succeeded`（包括未知状态）；失败留 FAILED，无 COMPLETE。空正式路径或空文件清单不能绕过检查。
-- 收到“未完成导入”时，按终端日志中的 import_id，在**原数据库、原文件根**用原幂等键重试，或执行 `python manage.py resume_import <import_id>`。全部成功后重新停写备份；不要清空 `incoming/`、删除任务或手工改 succeeded 以绕过检查。原件/回执已缺失时需先修复原部署的恢复材料。
-- 编排器调用 `table_counts.py --require-complete-imports`，恢复后的 `verify_restore` 也检查此条件。独立运行 table_counts 而不带该 flag 仅导出诊断清单，可观察失败任务，不能据此宣称完整备份可恢复；旧备份也须经过新版 verify_restore，不可只看历史 COMPLETE。
+- `incoming/` 不进完整备份；`staged`/`failed` 导入可能仍依赖其中的原件或回执，因此完整备份拒绝这些记录及未知状态。失败旧版本在成功新版本导入后转为 `superseded`，其原件发布到不可变路径，路径和 SHA256 核对通过后可随新版本备份。
+- 收到“未完成导入”时，按终端日志中的 import_id，在**原数据库、原文件根**用原幂等键重试，或执行 `python manage.py resume_import <import_id>`；也可上传修正版，在新版本成功导入后终结旧失败版本。不要删除暂存文件或手工修改导入状态。
+- 编排器调用 `table_counts.py --require-complete-imports`，迁移附件清单与恢复后的 `verify_restore` 使用相同导入原件规则。不带该 flag 的 table_counts 只导出诊断清单；旧备份也须经过新版 verify_restore。
 - 恢复**不覆盖**正在用的库或文件目录；要回到旧数据请用“换指向”的方式（见 deploy/README.md 第 8.2 节）。
 - 任何脚本都不做降级迁移；结构回退靠备份 + 换库，不靠 `migrate --fake`。
 - macOS 自带 bash 3.2：脚本里变量紧跟中文时必须写 `${VAR}`，否则变量名会被认成包含中文字节。

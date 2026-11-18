@@ -14,6 +14,50 @@
         "title": "Action",
         "type": "string"
       },
+      "AttemptEntry": {
+        "properties": {
+          "error_code": {
+            "default": "",
+            "title": "Error Code",
+            "type": "string"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "input_hash": {
+            "default": "",
+            "title": "Input Hash",
+            "type": "string"
+          },
+          "number": {
+            "title": "Number",
+            "type": "integer"
+          },
+          "started_at": {
+            "title": "Started At",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "number",
+          "status",
+          "started_at"
+        ],
+        "title": "AttemptEntry",
+        "type": "object"
+      },
       "ClaimOut": {
         "properties": {
           "assignment_status": {
@@ -1547,7 +1591,10 @@
             "type": "object"
           },
           "executor_mode": {
-            "const": "inline",
+            "enum": [
+              "inline",
+              "rq"
+            ],
             "title": "Executor Mode",
             "type": "string"
           },
@@ -1583,7 +1630,8 @@
             "enum": [
               "staged",
               "succeeded",
-              "failed"
+              "failed",
+              "superseded"
             ],
             "title": "Parse Status",
             "type": "string"
@@ -1602,7 +1650,10 @@
             "type": "object"
           },
           "result_mode": {
-            "const": "mock",
+            "enum": [
+              "mock",
+              "live"
+            ],
             "title": "Result Mode",
             "type": "string"
           },
@@ -1654,7 +1705,10 @@
             "type": "string"
           },
           "executor_mode": {
-            "const": "inline",
+            "enum": [
+              "inline",
+              "rq"
+            ],
             "title": "Executor Mode",
             "type": "string"
           },
@@ -1690,7 +1744,8 @@
             "enum": [
               "staged",
               "succeeded",
-              "failed"
+              "failed",
+              "superseded"
             ],
             "title": "Parse Status",
             "type": "string"
@@ -1704,7 +1759,10 @@
             "type": "string"
           },
           "result_mode": {
-            "const": "mock",
+            "enum": [
+              "mock",
+              "live"
+            ],
             "title": "Result Mode",
             "type": "string"
           },
@@ -2168,6 +2226,20 @@
         "title": "OkOut",
         "type": "object"
       },
+      "PrecheckIn": {
+        "properties": {
+          "revision": {
+            "minimum": 1,
+            "title": "Revision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "revision"
+        ],
+        "title": "PrecheckIn",
+        "type": "object"
+      },
       "ResultMode": {
         "description": "结果来源模式。mock 结果必须在页面上可识别，不冒充真实引擎结论。",
         "enum": [
@@ -2176,6 +2248,24 @@
         ],
         "title": "ResultMode",
         "type": "string"
+      },
+      "RetryIn": {
+        "properties": {
+          "item_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 10000,
+            "minItems": 1,
+            "title": "Item Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "item_ids"
+        ],
+        "title": "RetryIn",
+        "type": "object"
       },
       "ReturnIssueIn": {
         "properties": {
@@ -2193,6 +2283,49 @@
           "message"
         ],
         "title": "ReturnIssueIn",
+        "type": "object"
+      },
+      "RunCreated": {
+        "properties": {
+          "idempotent_replay": {
+            "default": false,
+            "title": "Idempotent Replay",
+            "type": "boolean"
+          },
+          "parent_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Run Id"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/RunStatus"
+          },
+          "task_id": {
+            "title": "Task Id",
+            "type": "string"
+          },
+          "version_id": {
+            "title": "Version Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "task_id",
+          "version_id",
+          "status"
+        ],
+        "title": "RunCreated",
         "type": "object"
       },
       "RunDetail": {
@@ -2239,6 +2372,17 @@
           "kind": {
             "$ref": "#/components/schemas/RunKind"
           },
+          "parent_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Run Id"
+          },
           "progress": {
             "$ref": "#/components/schemas/RunProgress"
           },
@@ -2249,6 +2393,18 @@
           },
           "result_mode": {
             "$ref": "#/components/schemas/ResultMode"
+          },
+          "retry_allowed": {
+            "default": false,
+            "title": "Retry Allowed",
+            "type": "boolean"
+          },
+          "retry_item_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Retry Item Ids",
+            "type": "array"
           },
           "rules_version": {
             "default": "",
@@ -2309,10 +2465,17 @@
       },
       "RunItemEntry": {
         "properties": {
+          "attempt_history": {
+            "items": {
+              "$ref": "#/components/schemas/AttemptEntry"
+            },
+            "title": "Attempt History",
+            "type": "array"
+          },
           "attempts": {
-            "default": 1,
-            "description": "已尝试次数，重试另计",
-            "minimum": 1,
+            "default": 0,
+            "description": "本执行行实际调用次数；排队未调用为 0",
+            "minimum": 0,
             "title": "Attempts",
             "type": "integer"
           },
@@ -2363,6 +2526,17 @@
           "item_id": {
             "title": "Item Id",
             "type": "string"
+          },
+          "origin_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Origin Run Id"
           },
           "source_location": {
             "$ref": "#/components/schemas/SourceLocation"
@@ -2789,6 +2963,11 @@
                 "type": "null"
               }
             ]
+          },
+          "precheck_allowed": {
+            "default": false,
+            "title": "Precheck Allowed",
+            "type": "boolean"
           },
           "result_mode": {
             "$ref": "#/components/schemas/ResultMode"
@@ -3374,7 +3553,7 @@
     },
     "/api/v1/runs/{run_id}/retries": {
       "post": {
-        "operationId": "apps_api_not_implemented_pending_POST__runs_run_id_retries",
+        "operationId": "apps_runs_api_create_retry",
         "parameters": [
           {
             "in": "path",
@@ -3386,14 +3565,31 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetryIn"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunCreated"
+                }
+              }
+            },
             "description": "OK"
           }
         },
-        "summary": "Pending Post  Runs Run Id Retries",
+        "summary": "Create Retry",
         "tags": [
-          "未实现端点"
+          "分析执行"
         ]
       }
     },
@@ -4147,7 +4343,7 @@
     },
     "/api/v1/versions/{version_id}/prechecks": {
       "post": {
-        "operationId": "apps_api_not_implemented_pending_POST__versions_version_id_prechecks",
+        "operationId": "apps_runs_api_create_precheck",
         "parameters": [
           {
             "in": "path",
@@ -4159,14 +4355,31 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PrecheckIn"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunCreated"
+                }
+              }
+            },
             "description": "OK"
           }
         },
-        "summary": "Pending Post  Versions Version Id Prechecks",
+        "summary": "Create Precheck",
         "tags": [
-          "未实现端点"
+          "分析执行"
         ]
       }
     }

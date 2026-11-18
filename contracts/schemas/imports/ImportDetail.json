@@ -14,7 +14,10 @@
       "type": "object"
     },
     "executor_mode": {
-      "const": "inline",
+      "enum": [
+        "inline",
+        "rq"
+      ],
       "title": "Executor Mode",
       "type": "string"
     },
@@ -50,7 +53,8 @@
       "enum": [
         "staged",
         "succeeded",
-        "failed"
+        "failed",
+        "superseded"
       ],
       "title": "Parse Status",
       "type": "string"
@@ -69,7 +73,10 @@
       "type": "object"
     },
     "result_mode": {
-      "const": "mock",
+      "enum": [
+        "mock",
+        "live"
+      ],
       "title": "Result Mode",
       "type": "string"
     },

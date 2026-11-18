@@ -1,0 +1,14 @@
+{
+  "properties": {
+    "revision": {
+      "minimum": 1,
+      "title": "Revision",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "revision"
+  ],
+  "title": "PrecheckIn",
+  "type": "object"
+}

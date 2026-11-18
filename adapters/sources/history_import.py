@@ -2011,7 +2011,7 @@ def _copy_row_image(row_image: Any, record_id: str, image_dir: Path) -> str:
     if not target.exists():
         image_dir.mkdir(parents=True, exist_ok=True)
         target.write_bytes(data)
-    return str(target.relative_to(image_dir.parent))
+    return target.relative_to(image_dir.parent).as_posix()
 
 
 def _publish_staging(

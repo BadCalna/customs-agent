@@ -3,7 +3,8 @@
     "allowed_actions": [
       "confirmation.write",
       "read",
-      "submission.create"
+      "submission.create",
+      "task.return"
     ],
     "business_confirmed_hs": {
       "source_id": null,
@@ -62,11 +63,11 @@
         "suggested_role": null
       }
     ],
-    "item_id": "9c7c5d4d-3d1f-4a96-9b4b-6e0153cf1b5a",
+    "item_id": "ad764084-9f8d-4640-bb3d-db0458b51163",
     "latest_expert_check": null,
-    "latest_run_id": "2aa163f3-c390-4a69-9c4a-e6162e1df3ac",
+    "latest_run_id": "252d68f5-c774-4ae6-887b-d6c50b561fe6",
     "precheck_suggested_hs": {
-      "source_id": "2aa163f3-c390-4a69-9c4a-e6162e1df3ac",
+      "source_id": "252d68f5-c774-4ae6-887b-d6c50b561fe6",
       "value": "8544422900"
     },
     "result_mode": "mock",
@@ -81,11 +82,11 @@
       "source_id": null,
       "value": null
     },
-    "task_id": "8c5aed88-fe80-4618-9997-82891376ad96",
+    "task_id": "403b3e26-e7bc-4b50-bd42-97a24a721ec9",
     "task_stage": "awaiting_confirmation",
-    "version_id": "d1051286-aecb-47e1-a614-1f53ed7aef65"
+    "version_id": "c48496bc-5e2a-4ab2-888a-b1342d95fb6e"
   },
-  "contract_version": "1.1.0",
+  "contract_version": "1.2.0",
   "notes": "evidence_status=query_failed，置信度为 null，不生成已核实结论。",
   "scenario": "FIX-06",
   "title": "查询失败"

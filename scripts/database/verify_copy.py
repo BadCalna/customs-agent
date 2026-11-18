@@ -136,8 +136,8 @@ def fk_orphans(model):
     return problems
 
 
-def attachment_paths():
-    require_completed_imports()
+def attachment_paths(file_root=None):
+    require_completed_imports(file_root)
     paths = []
     for label in ("reviews.FileVersion", "reviews.ItemImage"):
         model = apps.get_model(label)
@@ -146,7 +146,7 @@ def attachment_paths():
 
 
 def attachment_report(file_root):
-    paths, missing = attachment_paths(), []
+    paths, missing = attachment_paths(file_root), []
     for path in paths:
         try:
             candidate = resolve_path(file_root, path)
@@ -163,7 +163,7 @@ def attachment_manifest(file_root):
     if missing:
         raise ValueError(f"附件实体缺失或路径越界：{missing}")
     return [{"path": path, "size": resolve_path(file_root, path).stat().st_size,
-             "sha256": file_sha256(file_root, path)} for path in sorted(set(attachment_paths()))]
+             "sha256": file_sha256(file_root, path)} for path in sorted(set(attachment_paths(file_root)))]
 
 
 def main():
@@ -223,7 +223,7 @@ def main():
     count, missing = attachment_report(target_root)
     failures += len(missing) + len(metadata_errors)
     files = []
-    for path in sorted(set(attachment_paths()) - set(missing)):
+    for path in sorted(set(attachment_paths(target_root)) - set(missing)):
         candidate = resolve_path(target_root, path)
         files.append({"path": path, "size": candidate.stat().st_size,
                       "sha256": file_sha256(target_root, path)})

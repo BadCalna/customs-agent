@@ -1890,9 +1890,9 @@
             "suggested_role": "operator"
           }
         ],
-        "reason": "缺少决定性事实或证据，需补充资料后再比较"
+        "reason": "原码仅为 8 位税目/子目，需确认完整申报编码；不补零或判为错码"
       },
-      "output_sha256": "cae3b8f3afd43c7b5b51888e276bd3de66a91ce2ca039d42c0d78a5646fa70ea",
+      "output_sha256": "c80951c6adf28c47b3e10b27203cae0e0cb18562bc488512a7d596244ab4499c",
       "source_issues": {
         "authority": "none-synthetic-not-business-basis",
         "issue_codes": [
@@ -2478,7 +2478,7 @@
     "No network, database, real .env, business service or persistence is used by this runner."
   ],
   "model_not_called": true,
-  "output_sha256": "af8d7ed402e2ec3197a01b35b06885b00753f9ba05290ba80b28ccbc38a0c7dc",
+  "output_sha256": "8acd6951a510900a7b67206049c39c5e2611f417dd701086ab388e3afbab28c4",
   "quality_gate_pending": true,
   "report_schema_version": "p16.technical-report.1",
   "summary": {
@@ -2506,10 +2506,10 @@
   "synthetic": true,
   "technical_only": true,
   "versions": {
-    "contract": "1.1.0",
+    "contract": "1.2.0",
     "engine": "compare_original_checked",
     "model": "not_called",
-    "priority_rules": "d4-0.1",
+    "priority_rules": "d4-0.3",
     "prompt": "not_used",
     "rules": "p16-compare-1.0.0",
     "source_schema": "p14.tariff.1",

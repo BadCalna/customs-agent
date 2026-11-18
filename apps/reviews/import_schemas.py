@@ -9,15 +9,15 @@ class ImportOut(Schema):
     task_id: str
     version_id: str
     version_number: int
-    parse_status: Literal["staged", "succeeded", "failed"]
+    parse_status: Literal["staged", "succeeded", "failed", "superseded"]
     sha256: str
     item_count: int
     member_count: int
     image_counts: dict[str, int]
     precheck_run_id: str
     precheck_status: str
-    result_mode: Literal["mock"]
-    executor_mode: Literal["inline"]
+    result_mode: Literal["mock", "live"]
+    executor_mode: Literal["inline", "rq"]
     assignment_status: Literal["claimed", "unclaimed"]
     original_download_url: str
     idempotent_replay: bool = False

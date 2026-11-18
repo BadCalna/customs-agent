@@ -193,6 +193,11 @@
       ],
       "default": null
     },
+    "precheck_allowed": {
+      "default": false,
+      "title": "Precheck Allowed",
+      "type": "boolean"
+    },
     "result_mode": {
       "$ref": "#/$defs/ResultMode"
     },

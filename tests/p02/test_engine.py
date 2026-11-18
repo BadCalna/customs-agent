@@ -67,6 +67,20 @@ class ComparisonPriorityTest(SimpleTestCase):
             compare("ABC", supplier_hs_format_valid=False), ComparisonStatus.SUPPLIER_INVALID,
         )
 
+    def test_invalid_raw_is_detected_even_when_caller_omits_format_flag(self):
+        for raw in ("123456789", "12345678901", "123456789A", "１２３４５６７８９０", "12345 67890"):
+            for rec in (recommendation(), recommendation(evidence_status=EvidenceStatus.VERSION_UNVERIFIED),
+                        recommendation(suggested_hs=None, gaps=[IssueEntry(code="MISSING", message="缺资料")])):
+                with self.subTest(raw=raw, evidence=rec.evidence_status):
+                    self.assertEqual(compare(raw, rec=rec), ComparisonStatus.SUPPLIER_INVALID)
+                    self.assertEqual(compare(raw, rec=rec, association_ok=False), ComparisonStatus.ASSOCIATION_ERROR)
+
+    def test_format_valid_does_not_mean_evidence_verified(self):
+        rec = recommendation(suggested_hs="0123456789", evidence_status=EvidenceStatus.VERSION_UNVERIFIED)
+        self.assertEqual(compare("0123456789", rec=rec), ComparisonStatus.NEEDS_CONFIRMATION)
+        self.assertEqual(compare(f" {SAMPLE_HS} "), ComparisonStatus.CONSISTENT)
+        self.assertEqual(compare("0123456789"), ComparisonStatus.INCONSISTENT)
+
     def test_same_hs_without_evidence_is_needs_confirmation(self):
         rec = recommendation(evidence_status=EvidenceStatus.QUERY_FAILED)
         self.assertEqual(compare(SAMPLE_HS, rec=rec), ComparisonStatus.NEEDS_CONFIRMATION)

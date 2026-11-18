@@ -1,4 +1,5 @@
 import {createClient} from "../api.js";
+import {createRunProgress} from "../components/run-progress.js";
 const api = createClient({mode:"live"});
 const $ = (s) => document.querySelector(s);
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, x => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[x]));
@@ -6,6 +7,13 @@ let me=null, task=null, version=null, epoch=0, requestSequence=0, detailSeq=0, a
 let taskCursor=null, claimCursor=null;
 let uploadContext=0, duplicateIntent=null;
 let latestReport=null, exporting=false, exportTicket=0;
+let importTimer=null, rerunIntent=null;
+const refreshedRuns=new Set();
+const progress=createRunProgress($("#progress"),{
+  client:{getRun:async id=>{const run=await api.getRun(id);if(["succeeded","failed","superseded"].includes(run.status)&&!refreshedRuns.has(id)&&run.task_id===task?.task_id&&run.version_id===version){refreshedRuns.add(id);const token=epoch,seq=detailSeq;setTimeout(()=>{if(token===epoch&&seq===detailSeq&&run.task_id===task?.task_id&&run.version_id===version)guarded(()=>openTask(run.task_id,run.version_id));},0);}return run;}},
+  onRetry:intent=>api.retryRun(intent.run_id,intent.item_ids,intent.idempotency_key),
+  onSelectItem:entry=>guarded(()=>openItem(entry.item_id))
+});
 const claimKeys=new Map();
 //: 只有这两个导出种类在契约里存在；种类、执行与版本必须同时明确才发请求。
 const EXPORTS=[["precheck","导出预审结论（xlsx）"],["issues","导出补料清单（xlsx）"]];
@@ -90,7 +98,7 @@ async function exportResult(kind){
 }
 //: 详情上下文代次：每次清空详情或重新选择版本都递增。导出的旧响应按它判失效，
 //: 这样「A→B→A 回到同一版本同一执行」也不会再被当成同一次选择。
-function resetDetail(){task=null;version=null;latestReport=null;requestSequence++;detailSeq++;invalidateUploadIntent();$("#task-title").textContent="选择一个任务";for(const s of ["#versions","#summary","#report","#items","#card"])$(s).innerHTML="";hideExports();}
+function resetDetail(){clearTimeout(importTimer);importTimer=null;progress.open(null);rerunIntent=null;$("#rerun").hidden=true;task=null;version=null;latestReport=null;requestSequence++;detailSeq++;invalidateUploadIntent();$("#task-title").textContent="选择一个任务";for(const s of ["#versions","#summary","#report","#items","#card"])$(s).innerHTML="";hideExports();}
 function identity(){
   epoch++;resetDetail();attempt=null;$("#duplicate").hidden=true;$("#file").value="";
   $("#identity").textContent=me?`${me.display_name||me.username} · ${me.role_label}`:"未登录";
@@ -113,6 +121,7 @@ async function openTask(id,preferred){
   if(data.current_version_id)await openVersion(preferred||data.current_version_id);
 }
 async function openVersion(id){
+  clearTimeout(importTimer);importTimer=null;progress.open(null);rerunIntent=null;$("#rerun").hidden=true;
   detailSeq++;
   invalidateUploadIntent();
   // 切版本时先撤掉上一版本的导出区：读取期间不能留着旧版本的导出按钮让人误点。
@@ -126,6 +135,10 @@ async function openVersion(id){
   if(report){const issues=[...(report.report.issues||[]),...(report.report.links||[]).flatMap(l=>[...(l.issues||[]),...(l.record?.issues||[])])];$("#report").innerHTML=`${Object.keys(report.error).length?`<pre class="error">${esc(JSON.stringify(report.error,null,2))}</pre>`:""}<details><summary>解析问题与来源（${issues.length}）</summary><pre>${esc(JSON.stringify(issues,null,2))}</pre></details><details><summary>查看本版本完整解析及装箱关联报告</summary><pre>${esc(JSON.stringify(report.report,null,2))}</pre></details>`;}
   renderExports(report);
   $("#items").innerHTML=pages.length?`<table><thead><tr><th>来源</th><th>品名</th><th>供应商原 HS</th><th>图片</th><th>mock 建议</th></tr></thead><tbody>${pages.map(i=>`<tr data-item="${esc(i.item_id)}"><td>${esc(i.source_location.sheet_name)} ${esc(i.source_location.row_number)}</td><td>${esc(i.name)}</td><td>${esc(i.supplier_hs_raw)}</td><td>${esc(i.image_status)}</td><td>${esc(i.precheck_suggested_hs||"未给出")}</td></tr>`).join("")}</tbody></table>`:'<p class="muted">本版本暂无商品，检查导入状态和错误。</p>';
+  if(report?.parse_status==="staged"){importTimer=setTimeout(()=>{if(seq===requestSequence&&token===epoch&&version===id)guarded(()=>openVersion(id));},1000);return;}
+  $("#rerun").hidden=!(v?.is_current&&task.precheck_allowed===true);
+  const runId=v?.is_current&&task.latest_run_id?task.latest_run_id:report?.precheck_run_id;
+  if(runId)void progress.open({taskId:task.task_id,versionId:id,runId,isVersionCurrent:!!v?.is_current,versionNumber:v?.number});
 }
 async function openItem(id){const seq=++requestSequence,token=epoch,v=version;const c=await api.getItem(v,id);if(seq!==requestSequence||token!==epoch||v!==version)return;
   $("#card").innerHTML=`<h2>${esc(c.facts.name)} · ${esc(c.source_location.cells)}</h2><p><b>MOCK</b> · 比较 ${esc(c.comparison_status)} · 图片 ${esc(c.image_status)}</p>${c.images.map(i=>`<p>${esc(i.status)} · ${esc(i.source_cell)} · ${esc(i.error_message)} ${i.download_url?`<a href="${esc(i.download_url)}">下载图片</a><br><img src="${esc(i.download_url)}" alt="${esc(c.facts.name)} 的商品图片">`:""}</p>`).join("")}<details open><summary>原文、来源位置和本版本结果</summary><pre>${esc(JSON.stringify(c,null,2))}</pre></details>`;
@@ -149,12 +162,12 @@ async function upload(confirmDuplicate=false){
   }
   const isCurrent=()=>intent.context===uploadContext&&intent.epoch===epoch;
   busy=true;$("#upload-submit").disabled=true;$("#confirm-duplicate").disabled=true;
-  notice("正在上传、解析并执行 mock 预审，请稍候…");
+  notice("正在保存文件并登记处理任务，请稍候…");
   try{
     const result=await api.uploadFile(intent.file,{taskId:intent.taskId,currentVersionId:intent.currentVersionId,key:intent.key,confirmDuplicate:intent.confirmDuplicate});
     if(!isCurrent())return;
     attempt=null;duplicateIntent=null;$("#duplicate").hidden=true;$("#file").value="";
-    notice(`上传成功：V${result.version_number}，${result.item_count} 条商品，${result.member_count} 条装箱成员。预审为 mock，执行 ${result.precheck_status}。`);
+    notice(result.parse_status==="staged"?`上传已受理：V${result.version_number}。后台正在解析和预审，进度会自动更新。`:`上传成功：V${result.version_number}，${result.item_count} 条商品，${result.member_count} 条装箱成员。预审为 mock，执行 ${result.precheck_status}。`);
     await refresh();if(isCurrent())await openTask(result.task_id,result.version_id);
   }catch(error){
     if(!isCurrent())return;
@@ -167,9 +180,10 @@ async function upload(confirmDuplicate=false){
     busy=false;$("#upload-submit").disabled=false;$("#confirm-duplicate").disabled=false;
   }
 }
-$("#login").addEventListener("submit",e=>{e.preventDefault();guarded(async()=>{const f=new FormData(e.target);me=await api.login(f.get("username"),f.get("password"));identity();notice("已登录");await refresh();});});
+$("#login").addEventListener("submit",e=>{e.preventDefault();guarded(async()=>{const f=new FormData(e.target);me=await api.login(f.get("username"),f.get("password"));identity();notice("已登录");await refresh();const requested=new URL(location.href).searchParams.get("task");if(requested)await openTask(requested);});});
 $("#logout").onclick=()=>guarded(async()=>{await api.logout();me=null;identity();notice("已退出");});
-$("#refresh").onclick=()=>guarded(()=>refresh());
+$("#refresh").onclick=()=>guarded(async()=>{await refresh();if(task)await openTask(task.task_id,version);});
+$("#rerun").onclick=()=>guarded(async()=>{if(!task?.precheck_allowed||busy)return;const tid=task.task_id,vid=version;rerunIntent||={key:crypto.randomUUID(),revision:task.revision};$("#rerun").disabled=true;try{await api.startPrecheck(vid,{revision:rerunIntent.revision},rerunIntent.key);rerunIntent=null;notice("已登记新一轮预审，前次结果保留为历史。");await openTask(tid,vid);}finally{$("#rerun").disabled=false;}});
 $("#more-tasks").onclick=()=>guarded(()=>refresh(true));
 $("#more-claimable").onclick=()=>guarded(()=>refresh(false,true));
 $("#upload").addEventListener("submit",e=>{e.preventDefault();guarded(()=>upload());});
@@ -178,4 +192,4 @@ $("#cancel-duplicate").onclick=()=>{invalidateUploadIntent();notice("已取消�
 $("#file").onchange=invalidateUploadIntent;
 $("#upload-target").onchange=invalidateUploadIntent;
 document.addEventListener("click",e=>{const b=e.target.closest("[data-task],[data-version],[data-item],[data-claim],[data-export]");if(!b)return;guarded(async()=>{if(b.dataset.export){await exportResult(b.dataset.export);}else if(b.dataset.task)await openTask(b.dataset.task);else if(b.dataset.version)await openVersion(b.dataset.version);else if(b.dataset.item)await openItem(b.dataset.item);else {const id=b.dataset.claim;if(!claimKeys.has(id))claimKeys.set(id,crypto.randomUUID());await api.claimTask(id,claimKeys.get(id));notice("认领成功，已授予该任务访问权限");await refresh();await openTask(id);}});});
-guarded(async()=>{me=await api.me();identity();if(me)await refresh();});
+guarded(async()=>{me=await api.me();identity();if(me){await refresh();const requested=new URL(location.href).searchParams.get("task");if(requested)await openTask(requested);}});

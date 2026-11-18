@@ -229,14 +229,8 @@ def create_submission(user, task_id: str, payload, idempotency_key: str | None =
     response = submission_to_out(submission, run, task).model_dump(mode="json")
     idempotency.store(user, ACTION, idempotency_key, payload, response, target_id=str(task.pk))
 
-    def _dispatch():
-        from apps.runs.inline import execute_expert_check
-
-        execute_expert_check(submission, run=run)
-
-    # 已提交的快照与 queued Run 不能因派发异常向客户端伪装成 500：
-    # 异常由 Django 记录，Run 仍可由恢复流程按原 ID 处理。
-    transaction.on_commit(_dispatch, robust=True)
+    from apps.runs.services import schedule_run
+    schedule_run(run)
     return response
 
 

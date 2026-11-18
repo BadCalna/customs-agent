@@ -54,6 +54,15 @@ def _csv(name: str) -> list[str]:
 
 
 DEBUG = _flag("CUSTOMS_DEBUG", False)
+CUSTOMS_PRODUCTION = _flag("CUSTOMS_PRODUCTION", False)
+if CUSTOMS_PRODUCTION:
+    if DEBUG or ENGINE_MODE != "openai" or EXECUTOR_MODE != "rq" or PAGE_DATA_MODE != "live":
+        raise ImproperlyConfigured(
+            "CUSTOMS_PRODUCTION=1 需要 CUSTOMS_DEBUG=0、CUSTOMS_ENGINE_MODE=openai、"
+            "CUSTOMS_EXECUTOR_MODE=rq 和 CUSTOMS_PAGE_MODE=live"
+        )
+    if not _flag("CUSTOMS_HTTPS", False):
+        raise ImproperlyConfigured("CUSTOMS_PRODUCTION=1 需要 CUSTOMS_HTTPS=1 和已配置的 TLS 入口")
 
 ALLOWED_HOSTS = _csv("CUSTOMS_ALLOWED_HOSTS")
 if not ALLOWED_HOSTS:

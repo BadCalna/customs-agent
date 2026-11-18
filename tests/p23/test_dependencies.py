@@ -117,7 +117,7 @@ class DependencyBoundaryTest(SimpleTestCase):
                                   f"{path.name} 用 setdefault 改写 CUSTOMS_* 环境变量")
                 self.assertIsNone(ENV_PUTENV.search(text), f"{path.name} 调用了 os.putenv")
 
-    def test_pyproject_dependencies_are_unchanged(self):
+    def test_pyproject_dependencies_preserve_base_and_pinned_queue(self):
         payload = tomllib.loads((BASE_DIR / "pyproject.toml").read_text(encoding="utf-8"))
         dependencies = payload["project"]["dependencies"]
         names = {
@@ -129,7 +129,19 @@ class DependencyBoundaryTest(SimpleTestCase):
             self.assertNotIn(
                 forbidden, names, f"P23 不得给项目新增依赖：{forbidden}（读取走只读 OOXML 解析）"
             )
-        self.assertEqual(len(dependencies), 5, "依赖数量应与 main 一致（5 项）")
+        # Main's five original constraints stay exact. P13 adds only the
+        # explicitly version-pinned durable queue stack, not import adapters.
+        base = {
+            "Django>=5.2.8,<5.3",
+            "django-ninja>=1.4,<2",
+            "pillow>=11.0",
+            "psycopg[binary]>=3.2,<4",
+            "python-dotenv>=1,<2",
+        }
+        queue = {"django-rq==3.2.2", "rq==2.6.1", "redis==6.4.0"}
+        self.assertEqual(set(dependencies), base | queue,
+                         "仅允许 main 原有五项约束与明确锁定版本的三项队列依赖")
+        self.assertEqual(len(dependencies), len(base) + len(queue), "依赖不得重复或额外添加")
 
     def test_tests_do_not_touch_repository_output_directories(self):
         """测试自己也不许把输出写进仓库（例如 .local/reference-import）。"""

@@ -33,7 +33,7 @@ class SchemaDriftTest(SimpleTestCase):
                 path = CONTRACTS / "schemas" / group / f"{model.__name__}.json"
                 self.assertTrue(path.exists(), f"缺少契约文件 {path}，请执行 make contracts")
                 self.assertEqual(
-                    json.loads(path.read_text()), model.model_json_schema(),
+                    json.loads(path.read_text(encoding="utf-8")), model.model_json_schema(),
                     f"{model.__name__} 的契约文件与代码不一致，请执行 make contracts 并提交差异",
                 )
 
@@ -44,12 +44,12 @@ class SchemaDriftTest(SimpleTestCase):
         self.assertTrue(path.exists(), "缺少 contracts/openapi/v1.json")
         # get_openapi_schema 返回 pydantic 对象，先归一成 JSON 数据再比较。
         current = json.loads(json.dumps(api_v1.get_openapi_schema()))
-        published = json.loads(path.read_text())
+        published = json.loads(path.read_text(encoding="utf-8"))
         self.assertEqual(published, current)
         self.assertIn("/api/v1/versions/{version_id}/items/{item_id}/history-reference", published["paths"])
 
     def test_contract_version_constant(self):
-        self.assertEqual(CONTRACT_VERSION, "1.1.0")
+        self.assertEqual(CONTRACT_VERSION, "1.2.0")
 
 
 class EnumAlignmentTest(SimpleTestCase):
@@ -76,7 +76,7 @@ class EnumAlignmentTest(SimpleTestCase):
 
 class FixtureTest(SimpleTestCase):
     def _load(self, scenario):
-        return json.loads((CONTRACTS / "fixtures" / f"{scenario}.json").read_text())
+        return json.loads((CONTRACTS / "fixtures" / f"{scenario}.json").read_text(encoding="utf-8"))
 
     def test_all_ten_scenarios_present_and_valid(self):
         expected = {f"FIX-{index:02d}" for index in range(1, 11)}
@@ -104,6 +104,7 @@ class FixtureTest(SimpleTestCase):
 
     def test_fix05_partial_failure_counts(self):
         run = FixtureDoc.model_validate(self._load("FIX-05")).run
+        self.assertEqual(run.status, RunStatus.FAILED)
         self.assertEqual(run.progress.total, 8)
         self.assertEqual(run.progress.failed, 1)
         self.assertEqual(run.progress.succeeded, 7)

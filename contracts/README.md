@@ -49,7 +49,7 @@ make test TASK=P02     # 与上一条同入口，59 项
 | 比较结论 `comparison_status` | `association_error` / `supplier_missing` / `supplier_invalid` / `needs_confirmation` / `consistent` / `inconsistent` | D4 六类；`null` 表示尚未得出结论。判定顺序见 `adapters/engines/mock.py::compare_original` |
 | 证据 `evidence_status` | `obtained` / `not_found` / `query_failed` / `version_unverified` | 查询失败与确实未查得分开；`null` 表示未查询 |
 | 附图 `image_status` | `available` / `absent` / `read_failed` | 任一读取失败即整体 `read_failed`，读不出不得当无图 |
-| 执行状态 `status` | `queued` / `running` / `succeeded` / `failed` | 技术维度；部分行失败看 `progress.failed`，不改写执行状态 |
+| 执行状态 `status` | `queued` / `running` / `succeeded` / `failed` | 技术维度；任一行技术失败时为 `failed`，具体数量看 `progress.failed` |
 | 结果模式 `result_mode` | `mock` / `live` | mock 结果必须在页面可识别 |
 | 阶段值 `StageValue` | `{value, source_id}` | 值为 `null` 时仍保留产生它的 run/submission/decision 引用 |
 | 当前执行 `is_current` | 按**文件版本 + 执行类型**维护 | V1 的执行在 V1 版本内仍可回查，不被 V2 顶掉；同版本重跑才转为历史 |

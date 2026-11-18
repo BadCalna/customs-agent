@@ -8,8 +8,6 @@
 - 专家终值取最新 ``DecisionItem``；
 - 任一阶段没有值就是 ``None``，不用其他阶段补位。
 """
-from django.conf import settings
-
 from apps.accounts.permissions import ROLE_ACTIONS
 from apps.api.schemas import (
     Action,
@@ -25,6 +23,7 @@ from apps.api.schemas import (
     StageValue,
 )
 from apps.runs.models import Run, RunItem
+from apps.runs.engine_config import run_result_mode
 
 from .models import Confirmation, DecisionItem, SubmissionItem
 from .schemas import ItemCard, ItemFacts, ItemListEntry, TaskDetail, TaskListEntry, VersionEntry
@@ -34,8 +33,9 @@ def iso(value):
     return value.isoformat() if value else None
 
 
-def result_mode() -> ResultMode:
-    return ResultMode(settings.ENGINE_MODE)
+def result_mode(result=None) -> ResultMode:
+    # Unknown/empty history must not inherit the current deployment mode.
+    return ResultMode.LIVE if result and result.get("result_mode") == "live" else ResultMode.MOCK
 
 
 def source_location(item) -> SourceLocation:
@@ -196,7 +196,7 @@ def item_to_list_entry(item) -> ItemListEntry:
         comparison_status=ComparisonStatus(precheck.comparison_status) if precheck and precheck.comparison_status else None,
         image_status=summarize_image_status(list(item.images.all())),
         latest_run_id=str(precheck.run_id) if precheck else None,
-        result_mode=result_mode(),
+        result_mode=result_mode(precheck.result if precheck else None),
     )
 
 
@@ -237,7 +237,7 @@ def item_to_card(user, item) -> ItemCard:
         confidence=precheck.confidence if precheck else None,
         latest_run_id=str(precheck.run_id) if precheck else None,
         latest_expert_check=_expert_check_ref(stages["expert"]),
-        result_mode=result_mode(),
+        result_mode=result_mode(precheck.result if precheck else None),
         task_stage=task.stage,
         submission_status=submission_item.submission.status if submission_item else None,
         allowed_actions=allowed_actions(user),
@@ -257,6 +257,9 @@ def _version_entry(version, current_id) -> VersionEntry:
 def task_to_entry(user, task) -> TaskListEntry:
     current_version = task.versions.order_by("-number").first()
     run = Run.objects.filter(version=current_version).order_by("-created_at").first() if current_version else None
+    precheck = (Run.objects.filter(version=current_version, kind=Run.Kind.PRECHECK, is_current=True)
+                .order_by("-created_at").first()) if current_version else None
+    mode_run = precheck or run
     return TaskListEntry(
         task_id=str(task.pk),
         title=task.title,
@@ -269,18 +272,20 @@ def task_to_entry(user, task) -> TaskListEntry:
         latest_run_kind=run.kind if run else None,
         latest_run_status=run.status if run else None,
         allowed_actions=allowed_actions(user),
-        result_mode=result_mode(),
+        result_mode=run_result_mode(mode_run),
         created_at=iso(task.created_at),
         updated_at=iso(task.updated_at),
     )
 
 
 def task_to_detail(user, task) -> TaskDetail:
+    from apps.runs.services import precheck_capability
     entry = task_to_entry(user, task)
     current_version = task.versions.order_by("-number").first()
     submission = task.submissions.filter(version=current_version).order_by("-created_at").first()
     return TaskDetail(
         **entry.model_dump(),
+        precheck_allowed=precheck_capability(user, task),
         versions=[_version_entry(v, current_version.pk if current_version else None) for v in task.versions.all()],
         current_submission_id=str(submission.pk) if submission else None,
         current_submission_status=submission.status if submission else None,

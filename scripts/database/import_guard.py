@@ -1,24 +1,41 @@
-"""Refuse data movement that cannot preserve unfinished uploads' recovery state.
-
-ImportJob is committed before its original is published. An empty storage_path
-therefore does not imply that there is no file to preserve: failed/staged jobs
-can still need incoming/<token> and its receipt. Migration and complete backups
-exclude incoming, so they are allowed only after every import has succeeded.
-"""
+"""Shared import-original gate for migration, complete backup and restore."""
 
 
-def require_completed_imports():
+def require_completed_imports(file_root=None, *, file_hashes=None):
+    from pathlib import Path
+
+    from django.conf import settings
+
+    from adapters.files import storage
     from apps.reviews.models import ImportJob
 
-    pending = ImportJob.objects.exclude(status=ImportJob.Status.SUCCEEDED)
+    completed = (ImportJob.Status.SUCCEEDED, ImportJob.Status.SUPERSEDED)
+    pending = ImportJob.objects.exclude(status__in=completed)
     count = pending.count()
     if count:
-        # IDs/statuses are enough to locate jobs; never expose stage credentials.
         examples = list(pending.order_by("pk").values_list("pk", "status")[:10])
         details = ", ".join(f"{job_id} ({status})" for job_id, status in examples)
         raise ValueError(
-            f"存在 {count} 个未完成导入（ImportJob 非 succeeded）：{details}。"
+            f"存在 {count} 个未完成导入（ImportJob 非 succeeded/superseded）：{details}。"
             "拒绝迁移/完整备份：任务仍可能依赖 incoming/ 暂存原件及回执。"
-            "请在原数据库和原文件根用原幂等键重试，或运行 manage.py resume_import <import_id>；"
-            "全部成功后再停写重试。不要删除暂存文件或直接修改导入状态。"
+            "请在原数据库和原文件根重试，或上传修正版并等待成功导入。"
         )
+
+    root = Path(file_root if file_root is not None else settings.CUSTOMS_FILE_ROOT)
+    # Legacy succeeded records retain the existing attachment-manifest checks;
+    # superseded records need stronger proof because their incoming/ state is omitted.
+    for job in ImportJob.objects.filter(status=ImportJob.Status.SUPERSEDED).select_related("version").iterator():
+        path = job.version.storage_path
+        suffix = Path(path).suffix.lower()
+        expected = storage.version_original_relative_path(
+            str(job.version.task_id), str(job.version_id), job.sha256, suffix,
+        ) if path else ""
+        if not path or suffix not in storage.ORIGINAL_SUFFIXES or path != expected:
+            raise ValueError(f"导入原件未保全或路径不符: import_id={job.pk}, version_id={job.version_id}")
+        try:
+            actual_hash = (file_hashes.get(path) if file_hashes is not None
+                           else storage.file_sha256(root, path))
+        except (storage.StorageError, OSError) as exc:
+            raise ValueError(f"导入原件未保全: import_id={job.pk}, version_id={job.version_id}") from exc
+        if actual_hash != job.sha256:
+            raise ValueError(f"导入原件未保全或哈希不符: import_id={job.pk}, version_id={job.version_id}")

@@ -6,6 +6,7 @@
 import hashlib
 import logging
 from pathlib import Path
+from django.conf import settings
 
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
@@ -20,12 +21,17 @@ from apps.accounts.models import Role, User
 from apps.accounts.permissions import UPLOAD_VERSION, _require_authenticated, get_visible_task, require_action
 from apps.reviews.models import AuditEvent, FileVersion, ImportJob, Item, ItemImage, ItemMember, Submission, Task
 from apps.runs.inline import execute_precheck
-from apps.runs.models import Run
+from apps.runs.models import Run, RunAttempt, RunWork
+from apps.runs.engine_config import engine_matches
 from . import files, idempotency
 from .claims import validate_key
 
 logger = logging.getLogger(__name__)
 ACTION = "file.import"
+
+
+class ImportWorkerFenced(RuntimeError):
+    """The worker lost its lease before publishing an import result."""
 
 
 def authorize(user, task_id=None):
@@ -80,6 +86,70 @@ def parse(data, filename):
     return mapping
 
 
+def _supersede_failed_imports(task, replacement):
+    """Close failed predecessor imports while retaining their source files.
+
+    Failed imports are durable history. Once a newer version is accepted they
+    can no longer be resumed, but their uploaded originals must still be
+    published outside ``incoming/`` so a complete backup contains the same
+    evidence as the database history.
+    """
+    failed_jobs = (ImportJob.objects.select_for_update()
+                   .select_related("version", "precheck")
+                   .filter(version__task=task, status=ImportJob.Status.FAILED,
+                           version__number__lt=replacement.number)
+                   .order_by("version__number"))
+    for job in failed_jobs:
+        version = job.version
+        if not version.storage_path:
+            version = files.publish_staged_version_original(
+                version, job.stage_token, filename=version.original_filename,
+            )
+        try:
+            stored_sha = storage.file_sha256(files.storage_root(), version.storage_path)
+        except storage.StorageError as exc:
+            raise ApiError(
+                409, "storage_conflict",
+                "旧失败版本原件无法核对，拒绝在未保全原件前替代该版本",
+                {"version_id": str(version.pk)},
+            ) from exc
+        if stored_sha != job.sha256:
+            raise ApiError(
+                409, "storage_conflict",
+                "旧失败版本原件与上传登记不一致，拒绝在未保全原件前替代该版本",
+                {"version_id": str(version.pk)},
+            )
+
+        previous_error = job.error
+        job.status = ImportJob.Status.SUPERSEDED
+        job.error = {
+            "code": "superseded_version",
+            "message": "该失败版本已由更新版本替代，保留原件供历史回查",
+            "replaced_by_version_id": str(replacement.pk),
+            "replaced_by_version_number": replacement.number,
+            "previous_error": previous_error,
+        }
+        job.save(update_fields=["status", "error", "updated_at"])
+
+        run = Run.objects.select_for_update().get(pk=job.precheck_id)
+        run.status, run.is_current, run.finished_at = Run.Status.SUPERSEDED, False, timezone.now()
+        run.save(update_fields=["status", "is_current", "finished_at"])
+        work = RunWork.objects.select_for_update().filter(run=run).first()
+        if work is not None:
+            work.state = "done"
+            work.token, work.lease_until, work.dispatched_at = None, None, None
+            work.last_error = "import_superseded"
+            work.save(update_fields=["state", "token", "lease_until", "dispatched_at", "last_error", "updated_at"])
+        RunAttempt.objects.filter(run=run, status="running").update(
+            status="superseded", finished_at=timezone.now(), error_code="import_superseded",
+        )
+        AuditEvent.objects.create(
+            task=task, version=version, actor=version.uploaded_by,
+            action="import.superseded",
+            details={"import_id": str(job.pk), "replacement_version_id": str(replacement.pk)},
+        )
+
+
 def upload(user, *, filename, data, key, task_id=None, expected_current_version_id=None, confirm_duplicate=False):
     authorize(user, task_id)
     validate_key(key)
@@ -93,8 +163,10 @@ def upload(user, *, filename, data, key, task_id=None, expected_current_version_
     # 事务外只读检查已完成响应，不能在这里创建空响应预占；真正的预占只在事务内发生。
     replay = idempotency.get_replay(user, ACTION, key, payload, target_id=target_id)
     if replay is not None:
+        if settings.EXECUTOR_MODE == "rq":
+            return queue_import(replay["import_id"], replay=True)
         return finish_import(replay["import_id"], replay=True)
-    mapping = parse(data, filename)
+    mapping = parse(data, filename) if settings.EXECUTOR_MODE != "rq" else None
     staged = files.stage_version_original(data, filename=filename)
     reserved = False
     try:
@@ -112,7 +184,10 @@ def upload(user, *, filename, data, key, task_id=None, expected_current_version_
                         raise ApiError(409, "no_current_version", "该任务没有已上传版本，请使用首次上传入口")
                     if not expected_current_version_id or str(latest.pk) != expected_current_version_id:
                         raise ApiError(409, "stale_version", "当前版本已变化，请刷新后上传")
-                    if ImportJob.objects.filter(version__task=task).exclude(status=ImportJob.Status.SUCCEEDED).exists():
+                    # A failed import is a durable, replaceable version. Only an
+                    # active staged import blocks a new version; corrected files
+                    # can be uploaded with a new idempotency key.
+                    if ImportJob.objects.filter(version__task=task, status=ImportJob.Status.STAGED).exists():
                         raise ApiError(409, "import_incomplete", "已有未完成导入，请先重试原请求或恢复该导入")
                     duplicate = ImportJob.objects.filter(version__task=task, sha256=digest).order_by("-version__number").first()
                     if duplicate and not confirm_duplicate:
@@ -128,32 +203,91 @@ def upload(user, *, filename, data, key, task_id=None, expected_current_version_
                     number = 1
                 version = FileVersion.objects.create(task=task, number=number, uploaded_by=user, original_filename=filename)
                 run = Run.objects.create(task=task, version=version, kind=Run.Kind.PRECHECK, status=Run.Status.QUEUED)
-                job = ImportJob.objects.create(version=version, precheck=run, sha256=digest, stage_token=staged.token)
+                result_mode = "mock" if settings.ENGINE_MODE == "mock" else "live"
+                job = ImportJob.objects.create(version=version, precheck=run, sha256=digest,
+                                               stage_token=staged.token, report={"result_mode": result_mode})
                 job_id = str(job.pk)
+                if settings.EXECUTOR_MODE == "rq":
+                    from apps.runs.services import schedule_run
+                    schedule_run(run)
                 AuditEvent.objects.create(task=task, version=version, actor=user, action="version.created",
-                                          details={"number": number, "sha256": digest, "import_id": job_id, "result_mode": "mock"})
+                                          details={"number": number, "sha256": digest, "import_id": job_id, "result_mode": result_mode})
                 idempotency.store(user, ACTION, key, payload, {"import_id": job_id}, target_id=target_id)
                 reserved = True
     finally:
         if not reserved:
             storage.discard_staged(files.storage_root(), staged.token)
+    if settings.EXECUTOR_MODE == "rq":
+        return import_response(ImportJob.objects.select_related("version__task").get(pk=job_id), replay=replay is not None)
     return finish_import(job_id, replay=replay is not None, mapping=mapping)
 
 
-def finish_import(job_id, *, replay=False, mapping=None):
-    """系统入口。调用方负责授权；CLI 仅供本机恢复。锁序 Task -> ImportJob -> Run。"""
+@transaction.atomic
+def queue_import(job_id, *, replay=False):
+    """Explicit retry of an exhausted import reuses its version and run."""
+    from apps.runs.models import RunWork
+    from apps.runs.services import register_run
+    from apps.runs.dispatch import safe_dispatch
+    initial = ImportJob.objects.select_related("version").get(pk=job_id)
+    Task.objects.select_for_update().get(pk=initial.version.task_id)
+    job = ImportJob.objects.select_for_update().select_related("version__task", "precheck").get(pk=job_id)
+    if job.status == ImportJob.Status.SUPERSEDED:
+        return import_response(job, replay=True)
+    if job.status != ImportJob.Status.SUCCEEDED and not engine_matches(job.precheck):
+        raise ApiError(409, "engine_mode_changed", "登记时的引擎配置已变化，请重新上传以发起完整新轮")
+    work = register_run(job.precheck)
+    work = RunWork.objects.select_for_update().get(pk=work.pk)
+    if job.status != "succeeded" and job.version.task.versions.filter(number__gt=job.version.number).exists():
+        raise ApiError(409, "stale_version", "旧版本导入不可覆盖当前版本")
+    if job.status == "failed" and work.state == "done":
+        AuditEvent.objects.create(task=job.version.task, version=job.version, actor=job.version.uploaded_by,
+            action="import.retried", details={"import_id": str(job.pk), "previous_error": job.error,
+                                             "previous_attempts": work.import_attempts})
+        work.state, work.import_attempts, work.last_error = "pending", 0, ""
+        work.available_at, work.dispatched_at, work.token, work.lease_until = timezone.now(), None, None, None
+        work.save()
+        job.status, job.error = "staged", {}
+        job.save(update_fields=["status", "error", "updated_at"])
+        Run.objects.filter(pk=job.precheck_id).update(status="queued", finished_at=None)
+    transaction.on_commit(lambda: safe_dispatch(str(job.precheck_id)))
+    return import_response(job, replay=replay)
+
+
+def finish_import(job_id, *, replay=False, mapping=None, defer_precheck=False, worker_token=None):
+    """系统入口。调用方负责授权；CLI 仅供本机恢复。锁序 Task -> ImportJob -> RunWork。"""
     job = ImportJob.objects.select_related("version__task", "precheck").get(pk=job_id)
     try:
         with transaction.atomic():
             task = Task.objects.select_for_update().get(pk=job.version.task_id)
             job = ImportJob.objects.select_for_update().select_related("version", "precheck").get(pk=job.pk)
+            if worker_token is not None:
+                from apps.runs.models import RunWork
+                work = RunWork.objects.select_for_update().get(run_id=job.precheck_id)
+                if (work.state != "running" or str(work.token) != str(worker_token)
+                        or not work.lease_until or work.lease_until <= timezone.now()):
+                    raise ImportWorkerFenced("import worker lease is no longer current")
+            if job.status == ImportJob.Status.SUPERSEDED:
+                return import_response(job, replay=True)
             if job.status != ImportJob.Status.SUCCEEDED:
+                if not engine_matches(job.precheck):
+                    raise ApiError(409, "engine_mode_changed", "登记时的引擎配置已变化，请重新上传以发起完整新轮")
                 if task.versions.filter(number__gt=job.version.number).exists():
                     raise ApiError(409, "stale_version", "旧版本导入不能覆盖当前版本")
-                version = files.publish_staged_version_original(job.version, job.stage_token, filename=job.version.original_filename)
                 if mapping is None:
-                    data = storage.read_bytes(files.storage_root(), version.storage_path, max_bytes=files.max_read_bytes())
-                    mapping = parse(data, version.original_filename)
+                    if job.version.storage_path:
+                        data = storage.read_bytes(files.storage_root(), job.version.storage_path,
+                                                  max_bytes=files.max_read_bytes())
+                    else:
+                        data = files.read_staged_version_original(job.stage_token)
+                    if hashlib.sha256(data).hexdigest() != job.sha256:
+                        raise ApiError(409, "storage_conflict", "暂存原件与上传登记的哈希不一致")
+                    mapping = parse(data, job.version.original_filename)
+                version = job.version
+                if not version.storage_path:
+                    version = files.publish_staged_version_original(
+                        version, job.stage_token, filename=version.original_filename)
+                if storage.file_sha256(files.storage_root(), version.storage_path) != job.sha256:
+                    raise ApiError(409, "storage_conflict", "正式原件与上传登记的哈希不一致")
                 # B 完整事务成功前不会有商品或行结果；失败回滚后复用同一版本/run。
                 for link in mapping.links:
                     values = link.item_values()
@@ -182,25 +316,43 @@ def finish_import(job_id, *, replay=False, mapping=None):
                 Submission.objects.filter(task=task, status=Submission.Status.PENDING).exclude(version=version).update(status=Submission.Status.SUPERSEDED)
                 job.precheck.status = Run.Status.QUEUED
                 job.precheck.save(update_fields=["status"])
-                run = execute_precheck(version, triggered_by=version.uploaded_by, run=job.precheck)
-                job.report = mapping.as_dict()
+                if defer_precheck:
+                    run = job.precheck
+                    run.is_current = True
+                    run.save(update_fields=["is_current"])
+                else:
+                    run = execute_precheck(version, triggered_by=version.uploaded_by, run=job.precheck)
+                if run.status == Run.Status.SUPERSEDED or not engine_matches(run):
+                    raise ApiError(409, "engine_mode_changed", "执行引擎配置已变化，请重新上传以发起完整新轮")
+                job.report = {**mapping.as_dict(), "result_mode": (job.report or {}).get("result_mode", "mock")}
                 job.error = {}
                 job.status = ImportJob.Status.SUCCEEDED
                 job.save(update_fields=["report", "error", "status", "updated_at"])
-                task.stage = Task.Stage.AWAITING_CONFIRMATION
+                _supersede_failed_imports(task, version)
+                task.stage = Task.Stage.PRECHECKING if defer_precheck else Task.Stage.AWAITING_CONFIRMATION
                 task.save(update_fields=["stage", "updated_at"])
                 AuditEvent.objects.create(task=task, version=version, actor=version.uploaded_by, action="import.succeeded",
-                                          details={"import_id": str(job.pk), "precheck_id": str(run.pk), "result_mode": "mock"})
+                                          details={"import_id": str(job.pk), "precheck_id": str(run.pk),
+                                                   "result_mode": job.report["result_mode"]})
+    except ImportWorkerFenced:
+        raise
     except Exception as exc:
         logger.exception("P06 import failed: %s", job_id)
+        configuration_changed = isinstance(exc, ApiError) and exc.code == "engine_mode_changed"
         error = {"code": exc.code if isinstance(exc, ApiError) else "import_processing_failed",
-                 "message": "导入处理失败，请重试原请求或联系维护人员",
+                 "message": "引擎配置已变化，请重新上传以发起完整新轮" if configuration_changed else "导入处理失败，请重试原请求或联系维护人员",
                  "details": exc.details if isinstance(exc, ApiError) and exc.code == "parse_blocked" else {"exception_type": type(exc).__name__}}
         # 不把别的请求刚完成的成功状态回写为失败。
         with transaction.atomic():
             Task.objects.select_for_update().get(pk=job.version.task_id)
             current = ImportJob.objects.select_for_update().get(pk=job_id)
-            if current.status == ImportJob.Status.SUCCEEDED:
+            if worker_token is not None:
+                from apps.runs.models import RunWork
+                work = RunWork.objects.select_for_update().get(run_id=current.precheck_id)
+                if (work.state != "running" or str(work.token) != str(worker_token)
+                        or not work.lease_until or work.lease_until <= timezone.now()):
+                    raise ImportWorkerFenced("import worker lease is no longer current") from exc
+            if current.status in (ImportJob.Status.SUCCEEDED, ImportJob.Status.SUPERSEDED):
                 return import_response(current, replay=True)
             current.status, current.error = ImportJob.Status.FAILED, error
             current.save(update_fields=["status", "error", "updated_at"])
@@ -208,7 +360,8 @@ def finish_import(job_id, *, replay=False, mapping=None):
             AuditEvent.objects.create(task_id=job.version.task_id, version_id=job.version_id,
                                       actor_id=job.version.uploaded_by_id, action="import.failed",
                                       details={"import_id": str(job_id), "code": error["code"]})
-        raise ApiError(500, "import_failed", "导入未完成，未标记解析成功；请用原幂等键重试", {
+        message = "引擎配置已变化，导入未完成；请重新上传以发起完整新轮" if configuration_changed else "导入未完成，未标记解析成功；请用原幂等键重试"
+        raise ApiError(500, "import_failed", message, {
             "import_id": str(job_id), "task_id": str(job.version.task_id), "version_id": str(job.version_id),
             "status": "failed", "cause": error}) from exc
     # 成功提交后再清理回执；崩溃时重试/恢复也会到这里。
@@ -229,6 +382,6 @@ def import_response(job, *, replay=False):
             "item_count": version.items.count(), "member_count": ItemMember.objects.filter(item__version=version).count(),
             "image_counts": {s: images.filter(status=s).count() for s in ItemImage.Status.values},
             "precheck_run_id": str(job.precheck_id), "precheck_status": Run.objects.get(pk=job.precheck_id).status,
-            "result_mode": "mock", "executor_mode": "inline",
+            "result_mode": (job.report or {}).get("result_mode", "mock"), "executor_mode": settings.EXECUTOR_MODE,
             "assignment_status": "claimed" if task.assignments.filter(role=Role.OPERATOR).exists() else "unclaimed",
             "original_download_url": f"/api/v1/files/{version.pk}", "idempotent_replay": replay}

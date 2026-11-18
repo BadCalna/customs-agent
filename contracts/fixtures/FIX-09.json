@@ -3,7 +3,8 @@
     "allowed_actions": [
       "confirmation.write",
       "read",
-      "submission.create"
+      "submission.create",
+      "task.return"
     ],
     "business_confirmed_hs": {
       "source_id": null,
@@ -57,18 +58,18 @@
         "dispimg_id": "DISPIMG_5",
         "download_url": null,
         "error_message": "",
-        "image_id": "77b386c4-f247-45cd-8b85-870833b4c182",
+        "image_id": "09806dee-dbcb-45aa-983c-c2e84841c7c5",
         "source_cell": "H5",
         "source_sheet": "申报要素",
         "status": "available"
       }
     ],
     "issues": [],
-    "item_id": "5a8855a1-76c9-43a4-8f18-216e84df2d5c",
+    "item_id": "1b3306b7-c9cd-4148-875a-226e47c309cd",
     "latest_expert_check": null,
-    "latest_run_id": "2aa163f3-c390-4a69-9c4a-e6162e1df3ac",
+    "latest_run_id": "252d68f5-c774-4ae6-887b-d6c50b561fe6",
     "precheck_suggested_hs": {
-      "source_id": "2aa163f3-c390-4a69-9c4a-e6162e1df3ac",
+      "source_id": "252d68f5-c774-4ae6-887b-d6c50b561fe6",
       "value": "8544422900"
     },
     "result_mode": "mock",
@@ -83,14 +84,14 @@
       "source_id": null,
       "value": null
     },
-    "task_id": "8c5aed88-fe80-4618-9997-82891376ad96",
+    "task_id": "403b3e26-e7bc-4b50-bd42-97a24a721ec9",
     "task_stage": "awaiting_confirmation",
-    "version_id": "d1051286-aecb-47e1-a614-1f53ed7aef65"
+    "version_id": "c48496bc-5e2a-4ab2-888a-b1342d95fb6e"
   },
-  "contract_version": "1.1.0",
+  "contract_version": "1.2.0",
   "notes": "V1 执行在其版本内仍可回查；前端按 version_id 丢弃晚到的旧响应，不覆盖 V2 卡片。",
   "run": {
-    "created_at": "2026-11-14T14:19:49.856151+00:00",
+    "created_at": "2026-11-17T09:28:03.209009+00:00",
     "engine_version": "mock-1.0.0",
     "evidence": [
       {
@@ -113,26 +114,11 @@
         "url": null
       }
     ],
-    "finished_at": "2026-11-14T14:19:49.859342+00:00",
+    "finished_at": "2026-11-17T09:28:03.221039+00:00",
     "is_current": true,
     "items": [
       {
-        "attempts": 1,
-        "comparison_status": "consistent",
-        "confidence": 0.62,
-        "error_message": "",
-        "evidence_status": "obtained",
-        "issues": [],
-        "item_id": "cacf692d-f8f1-4e08-bcc9-81c5becd3a83",
-        "source_location": {
-          "cells": "A5:H5",
-          "row_number": 5,
-          "sheet_name": "申报要素"
-        },
-        "status": "succeeded",
-        "suggested_hs": "8544422900"
-      },
-      {
+        "attempt_history": [],
         "attempts": 1,
         "comparison_status": "inconsistent",
         "confidence": 0.62,
@@ -147,7 +133,8 @@
             "suggested_role": null
           }
         ],
-        "item_id": "dc8d2647-9ac5-4829-aafe-f9cd354ad112",
+        "item_id": "80094e34-ea8a-4250-9ffc-2e21829c3882",
+        "origin_run_id": null,
         "source_location": {
           "cells": "A6:H6",
           "row_number": 6,
@@ -155,9 +142,28 @@
         },
         "status": "succeeded",
         "suggested_hs": "8544422900"
+      },
+      {
+        "attempt_history": [],
+        "attempts": 1,
+        "comparison_status": "consistent",
+        "confidence": 0.62,
+        "error_message": "",
+        "evidence_status": "obtained",
+        "issues": [],
+        "item_id": "d66e3317-0bc5-4578-9fdc-2764f893c411",
+        "origin_run_id": null,
+        "source_location": {
+          "cells": "A5:H5",
+          "row_number": 5,
+          "sheet_name": "申报要素"
+        },
+        "status": "succeeded",
+        "suggested_hs": "8544422900"
       }
     ],
     "kind": "precheck",
+    "parent_run_id": null,
     "progress": {
       "failed": 0,
       "queued": 0,
@@ -167,13 +173,15 @@
     },
     "prompt_version": "mock-none",
     "result_mode": "mock",
+    "retry_allowed": false,
+    "retry_item_ids": [],
     "rules_version": "d4-0.1",
-    "run_id": "f8681831-7480-424d-8cc3-e91faad5d10b",
-    "started_at": "2026-11-14T14:19:49.856078+00:00",
+    "run_id": "22f6d771-3f6a-4cb7-9d97-4b4d0b83070c",
+    "started_at": "2026-11-17T09:28:03.207626+00:00",
     "status": "succeeded",
     "submission_id": null,
-    "task_id": "8c5aed88-fe80-4618-9997-82891376ad96",
-    "version_id": "7839299e-a828-4468-bd66-30e9f76333db"
+    "task_id": "403b3e26-e7bc-4b50-bd42-97a24a721ec9",
+    "version_id": "4e599c20-fad1-40a8-983a-3860e80645f7"
   },
   "scenario": "FIX-09",
   "title": "V1 延迟返回"

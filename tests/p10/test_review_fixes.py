@@ -79,6 +79,46 @@ class DecisionReviewFixTests(SubmissionFixture):
         other.refresh_from_db()
         self.assertEqual(other.status, Submission.Status.PENDING)
 
+    def test_identical_return_after_same_version_resubmission_uses_new_key(self):
+        body = {"action": "return", "return_to": "operator", "reason": "缺材料",
+                "issues": [{"message": "补签章"}]}
+        first_key = f"decision:{self.submission.pk}"
+        first = self.post(body, key=first_key)
+        self.assertEqual(first.status_code, 200, first.content)
+        replay = self.post(body, key=first_key)
+        self.assertEqual(replay.status_code, 200, replay.content)
+        self.assertTrue(replay.json()["idempotent_replay"])
+        self.assertEqual(replay.json()["decision_id"], first.json()["decision_id"])
+
+        self.task.refresh_from_db()
+        self.client.force_login(self.operator)
+        submitted = self.client.post(
+            f"/api/v1/tasks/{self.task.pk}/submissions",
+            data=json.dumps({
+                "version_id": str(self.version.pk), "revision": self.task.revision,
+                "items": [
+                    {"item_id": str(line.item_id), "confirmation_id": str(line.confirmation_id)}
+                    for line in (self.line_a, self.line_b)
+                ],
+            }), content_type="application/json", HTTP_IDEMPOTENCY_KEY="same-version-resubmit",
+        )
+        self.assertEqual(submitted.status_code, 200, submitted.content)
+        second_id = submitted.json()["submission_id"]
+        self.assertNotEqual(second_id, str(self.submission.pk))
+        self.assertEqual(submitted.json()["version_id"], str(self.version.pk))
+
+        self.client.force_login(self.expert)
+        url = f"/api/v1/submissions/{second_id}/decisions"
+        second_key = f"decision:{second_id}"
+        second = self.post(body, key=second_key, url=url)
+        self.assertEqual(second.status_code, 200, second.content)
+        replay = self.post(body, key=second_key, url=url)
+        self.assertEqual(replay.status_code, 200, replay.content)
+        self.assertTrue(replay.json()["idempotent_replay"])
+        self.assertEqual(replay.json()["decision_id"], second.json()["decision_id"])
+        self.assertEqual(Decision.objects.count(), 2)
+        self.assertEqual(Submission.objects.filter(status=Submission.Status.RETURNED).count(), 2)
+
     def test_legacy_decision_formats_replay_same_target_and_reject_another(self):
         body = {"action": "return", "return_to": "supplier", "reason": "补料",
                 "issues": [{"message": "缺签章"}]}

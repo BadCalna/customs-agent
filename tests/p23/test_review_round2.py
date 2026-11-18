@@ -715,4 +715,3 @@ class Pr34ReviewFixesTest(P23TestCase):
         saved_md = built.report_markdown_path.read_text(encoding="utf-8")
         self.assertIn("结果：**partial**（退出码 1）", saved_md)
         self.assertIn("结论：**未通过**", saved_md)
-

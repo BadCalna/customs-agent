@@ -1,5 +1,5 @@
 {
-  "contract_version": "1.1.0",
+  "contract_version": "1.2.0",
   "error": {
     "error": {
       "code": "conflict",
@@ -8,7 +8,7 @@
     },
     "request_id": "fixture-fix-08"
   },
-  "notes": "expected_revision 与 Idempotency-Key 由 P09/P10 实现，本样例固定 409 响应形状；当前写端点返回 501。",
+  "notes": "expected_revision 与 Idempotency-Key 由正式写端点校验；本样例固定 409 响应形状。",
   "scenario": "FIX-08",
   "title": "修订冲突"
 }

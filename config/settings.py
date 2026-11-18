@@ -30,8 +30,29 @@ def mode(name, default, choices):
 
 
 PAGE_DATA_MODE = mode("CUSTOMS_PAGE_MODE", "live", ("live", "fixture"))
-ENGINE_MODE = mode("CUSTOMS_ENGINE_MODE", "mock", ("mock",))
-EXECUTOR_MODE = mode("CUSTOMS_EXECUTOR_MODE", "inline", ("inline",))
+ENGINE_MODE = mode("CUSTOMS_ENGINE_MODE", "mock", ("mock", "openai"))
+EXECUTOR_MODE = mode("CUSTOMS_EXECUTOR_MODE", "inline", ("inline", "rq"))
+CUSTOMS_AI_API_BASE = os.environ.get("CUSTOMS_AI_API_BASE", "").strip().rstrip("/")
+CUSTOMS_AI_API_KEY = os.environ.get("CUSTOMS_AI_API_KEY", "").strip()
+CUSTOMS_AI_MODEL = os.environ.get("CUSTOMS_AI_MODEL", "").strip()
+CUSTOMS_AI_TIMEOUT_SECONDS = 60
+if ENGINE_MODE == "openai":
+    from urllib.parse import urlsplit
+
+    endpoint = urlsplit(CUSTOMS_AI_API_BASE)
+    if (not endpoint.hostname or endpoint.scheme not in ("https", "http")
+            or endpoint.username or endpoint.password or endpoint.query or endpoint.fragment
+            or (endpoint.scheme == "http" and os.environ.get("CUSTOMS_AI_ALLOW_HTTP") != "1")):
+        raise ImproperlyConfigured("CUSTOMS_AI_API_BASE 必须是 HTTPS 服务地址；内网 HTTP 须显式设置 CUSTOMS_AI_ALLOW_HTTP=1")
+    if not CUSTOMS_AI_API_KEY or not CUSTOMS_AI_MODEL:
+        raise ImproperlyConfigured("openai 引擎需要 CUSTOMS_AI_API_KEY 和 CUSTOMS_AI_MODEL")
+    try:
+        CUSTOMS_AI_TIMEOUT_SECONDS = int(os.environ.get("CUSTOMS_AI_TIMEOUT_SECONDS", "60"))
+    except ValueError as exc:
+        raise ImproperlyConfigured("CUSTOMS_AI_TIMEOUT_SECONDS 必须是 1 到 240 的整数") from exc
+    if not 1 <= CUSTOMS_AI_TIMEOUT_SECONDS <= 240:
+        raise ImproperlyConfigured("CUSTOMS_AI_TIMEOUT_SECONDS 必须是 1 到 240 的整数")
+
 # 历史案例只作为参考证据；默认保持 JSON 兼容，实际部署显式选择 database。
 HISTORY_BACKEND = mode("CUSTOMS_HISTORY_BACKEND", "json", ("json", "database"))
 HISTORY_DATASET_KEY = os.environ.get("CUSTOMS_HISTORY_DATASET_KEY", "historical-success").strip()
@@ -87,6 +108,7 @@ INSTALLED_APPS = [
     "apps.history_reference",
     "ninja",
     "apps.api",
+    "django_rq",
 ]
 AUTH_USER_MODEL = "accounts.User"
 MIDDLEWARE = [
@@ -142,6 +164,24 @@ else:
         "ENGINE": "django.db.backends.sqlite3",
         "NAME": BASE_DIR / os.environ.get("CUSTOMS_SQLITE_PATH", ".local/db.sqlite3"),
     }}
+
+if EXECUTOR_MODE == "rq" and DB_BACKEND != "postgres":
+    raise ImproperlyConfigured("RQ 执行器需要 PostgreSQL；SQLite 只用于 inline 顺序验证。")
+
+CUSTOMS_QUEUE_NAME = os.environ.get("CUSTOMS_QUEUE_NAME", "customs")
+CUSTOMS_QUEUE_TIMEOUT = byte_setting("CUSTOMS_QUEUE_TIMEOUT", 300)
+CUSTOMS_QUEUE_LEASE_SECONDS = byte_setting("CUSTOMS_QUEUE_LEASE_SECONDS", 360)
+CUSTOMS_QUEUE_REDELIVERY_SECONDS = byte_setting("CUSTOMS_QUEUE_REDELIVERY_SECONDS", 30)
+CUSTOMS_ROW_MAX_ATTEMPTS = byte_setting("CUSTOMS_ROW_MAX_ATTEMPTS", 3)
+CUSTOMS_RETRY_BACKOFF_SECONDS = byte_setting("CUSTOMS_RETRY_BACKOFF_SECONDS", 2)
+if CUSTOMS_QUEUE_LEASE_SECONDS <= CUSTOMS_QUEUE_TIMEOUT:
+    raise ImproperlyConfigured("队列租约必须长于 worker 超时。")
+RQ_QUEUES = {CUSTOMS_QUEUE_NAME: {
+    "URL": os.environ.get("CUSTOMS_REDIS_URL", "redis://127.0.0.1:6379/0"),
+    "DEFAULT_TIMEOUT": CUSTOMS_QUEUE_TIMEOUT,
+}}
+RQ = {"WORKER_CLASS": "rq.worker.SimpleWorker" if os.name == "nt" else "rq.worker.Worker"}
+SESSION_COOKIE_NAME = os.environ.get("CUSTOMS_SESSION_COOKIE_NAME", "sessionid")
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": f"django.contrib.auth.password_validation.{name}"}
     for name in ("UserAttributeSimilarityValidator", "MinimumLengthValidator",

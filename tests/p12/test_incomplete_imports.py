@@ -22,7 +22,7 @@ from tests.p01.factories import make_user
 from tests.p06.samples import sample
 
 
-@override_settings(PASSWORD_HASHERS=["django.contrib.auth.hashers.MD5PasswordHasher"])
+@override_settings(EXECUTOR_MODE="inline", PASSWORD_HASHERS=["django.contrib.auth.hashers.MD5PasswordHasher"])
 class IncompleteImportTests(TransactionTestCase):
     # Real commits distinguish the durable reservation in transaction A from
     # publication/row writes rolled back by transaction B.
@@ -176,17 +176,89 @@ class IncompleteImportTests(TransactionTestCase):
         self.assert_manifest_rejected_without_changes(job)
         self.assert_original_key_recovers(job)
 
-    def test_every_non_success_status_rejects_even_without_any_files(self):
+    def test_every_unfinished_status_rejects_even_without_any_files(self):
         job = self.reserved_job()
         # Unknown/blank values model historical or future database states, so
         # deliberately bypass the model's choices with a direct stored update.
-        statuses = [status for status in ImportJob.Status.values if status != ImportJob.Status.SUCCEEDED]
+        statuses = [status for status in ImportJob.Status.values
+                    if status not in (ImportJob.Status.SUCCEEDED, ImportJob.Status.SUPERSEDED)]
         for status in [*statuses, "unknown", "", "SUCCEEDED"]:
             with self.subTest(status=status):
                 ImportJob.objects.filter(pk=job.pk).update(status=status)
                 self.assertFalse(self.root.exists())
                 self.assert_manifest_rejected_without_changes(job)
                 self.assertFalse(self.root.exists())
+
+    def test_superseded_without_original_remains_blocked(self):
+        job = self.reserved_job(status=ImportJob.Status.SUPERSEDED)
+        with self.assertRaisesRegex(ValueError, "导入原件未保全"):
+            require_completed_imports(self.root)
+        with self.assertRaisesRegex(ValueError, "导入原件未保全"):
+            verify_copy.attachment_manifest(self.root)
+        with self.assertRaisesRegex(ValueError, "导入原件未保全"):
+            table_counts.main(["--require-complete-imports", "--files-root", str(self.root)])
+
+    def test_legacy_succeeded_without_original_retains_empty_manifest(self):
+        self.reserved_job(status=ImportJob.Status.SUCCEEDED)
+        self.root.mkdir()
+        self.assertIsNone(require_completed_imports(self.root))
+        self.assertEqual(verify_copy.attachment_manifest(self.root), [])
+        with redirect_stdout(io.StringIO()):
+            self.assertEqual(table_counts.main([
+                "--require-complete-imports", "--files-root", str(self.root),
+            ]), 0)
+
+    def test_corrected_v3_preserves_failed_v2_across_all_complete_gates(self):
+        first = self.upload()
+        bad_data = sample(order=(2, 1, 3))
+        with patch.object(files, "publish_staged_version_original",
+                          side_effect=ApiError(500, "storage_unavailable", "simulated failure")):
+            with self.assertLogs(imports.logger, level="ERROR"):
+                with self.assertRaises(ApiError):
+                    imports.upload(
+                        self.supplier, filename="bad-v2.xlsx", data=bad_data, key="bad-v2",
+                        task_id=first["task_id"], expected_current_version_id=first["version_id"],
+                    )
+        failed = ImportJob.objects.get(version__number=2)
+        with self.assertRaisesRegex(ValueError, "未完成导入"):
+            verify_copy.attachment_manifest(self.root)
+
+        corrected = imports.upload(
+            self.supplier, filename="corrected-v3.xlsx", data=sample(order=(3, 2, 1)), key="corrected-v3",
+            task_id=first["task_id"], expected_current_version_id=str(failed.version_id),
+        )
+        self.assertEqual(corrected["version_number"], 3)
+        failed.refresh_from_db()
+        failed.version.refresh_from_db()
+        self.assertEqual(failed.status, ImportJob.Status.SUPERSEDED)
+        self.assertEqual((self.root / failed.version.storage_path).read_bytes(), bad_data)
+        self.assertIsNone(require_completed_imports(self.root))
+        manifest = verify_copy.attachment_manifest(self.root)
+        self.assertIn(failed.version.storage_path, {entry["path"] for entry in manifest})
+        with redirect_stdout(io.StringIO()):
+            self.assertEqual(table_counts.main([
+                "--require-complete-imports", "--files-root", str(self.root),
+            ]), 0)
+
+        with patch("adapters.files.storage.file_sha256", return_value="0" * 64):
+            for check in (lambda: require_completed_imports(self.root),
+                          lambda: verify_copy.attachment_manifest(self.root),
+                          lambda: table_counts.main([
+                              "--require-complete-imports", "--files-root", str(self.root),
+                          ])):
+                with self.assertRaisesRegex(ValueError, "哈希不符"):
+                    check()
+
+        relocated = self.root / "relocated.xlsx"
+        relocated.write_bytes(bad_data)
+        FileVersion.objects.filter(pk=failed.version_id).update(storage_path=relocated.name)
+        for check in (lambda: require_completed_imports(self.root),
+                      lambda: verify_copy.attachment_manifest(self.root),
+                      lambda: table_counts.main([
+                          "--require-complete-imports", "--files-root", str(self.root),
+                      ])):
+            with self.assertRaisesRegex(ValueError, "路径不符"):
+                check()
 
     def test_incomplete_job_blocks_manifest_even_when_another_import_succeeded(self):
         self.upload()

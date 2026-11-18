@@ -273,6 +273,37 @@ function createLiveAdapter(baseUrl) {
     getRun(runId) {
       return raw("GET", `/runs/${encodeURIComponent(runId)}`);
     },
+    async startPrecheck(versionId, payload, key) {
+      csrf = readCookie("csrftoken") || await ensureCsrf();
+      return raw("POST", `/versions/${encodeURIComponent(versionId)}/prechecks`, {body: payload,
+        headers: {"X-CSRFToken": csrf, "Idempotency-Key": key}});
+    },
+    async retryRun(runId, itemIds, key) {
+      csrf = readCookie("csrftoken") || await ensureCsrf();
+      return raw("POST", `/runs/${encodeURIComponent(runId)}/retries`, {body: {item_ids: itemIds},
+        headers: {"X-CSRFToken": csrf, "Idempotency-Key": key}});
+    },
+    async confirmItem(versionId, itemId, payload) {
+      csrf = readCookie("csrftoken") || await ensureCsrf();
+      return raw("PATCH", `/versions/${encodeURIComponent(versionId)}/items/${encodeURIComponent(itemId)}/confirmation`,
+        {body: payload, headers: {"X-CSRFToken": csrf}});
+    },
+    async submitTask(taskId, payload, key) {
+      csrf = readCookie("csrftoken") || await ensureCsrf();
+      return raw("POST", `/tasks/${encodeURIComponent(taskId)}/submissions`,
+        {body: payload, headers: {"X-CSRFToken": csrf, "Idempotency-Key": key}});
+    },
+    async decideSubmission(submissionId, payload, key) {
+      csrf = readCookie("csrftoken") || await ensureCsrf();
+      return raw("POST", `/submissions/${encodeURIComponent(submissionId)}/decisions`,
+        {body: payload, headers: {"X-CSRFToken": csrf, "Idempotency-Key": key}});
+    },
+    async returnTask(taskId, payload, key) {
+      csrf = readCookie("csrftoken") || await ensureCsrf();
+      return raw("POST", `/tasks/${encodeURIComponent(taskId)}/returns`,
+        {body: payload, headers: {"X-CSRFToken": csrf, "Idempotency-Key": key}});
+    },
+    taskHistory(taskId) { return raw("GET", `/tasks/${encodeURIComponent(taskId)}/history`); },
   };
 }
 
@@ -309,6 +340,8 @@ function createFixtureAdapter(url) {
     async listClaimable() { throw new ApiError(501, "live_required", "认领仅支持 live API"); },
     async claimTask() { throw new ApiError(501, "live_required", "认领仅支持 live API"); },
     async getImport() { throw new ApiError(501, "live_required", "解析报告仅支持 live API"); },
+    async startPrecheck() { throw new ApiError(501, "live_required", "后台重新预审仅支持 live API"); },
+    async retryRun() { throw new ApiError(501, "live_required", "真实失败行重试仅支持 live API"); },
     // 样例数据没有真实存储与执行引用；绝不在浏览器里拼一个假 xlsx 冒充导出结果。
     async createExport() { throw new ApiError(501, "live_required", "真实导出仅支持 live API，样例模式不生成文件"); },
 

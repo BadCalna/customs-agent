@@ -6,7 +6,7 @@ const path = require("node:path");
 const vm = require("node:vm");
 
 const source = fs.readFileSync(path.join(__dirname, "../../web/pages/p06.js"), "utf8")
-  .replace('import {createClient} from "../api.js";', "")
+  .replace(/^import .*;\r?\n/gm, "")
   .replace('const api = createClient({mode:"live"});', "const api = globalThis.TEST_API;");
 
 async function harness(createExport, {importReport = null} = {}) {
@@ -45,7 +45,13 @@ async function harness(createExport, {importReport = null} = {}) {
       body: { appendChild() {} },
       addEventListener() {},
     },
-    URL: { createObjectURL(blob) { blobs.push(blob); return "blob:p20"; }, revokeObjectURL() {} },
+    URL: class extends URL {
+      static createObjectURL(blob) { blobs.push(blob); return "blob:p20"; }
+      static revokeObjectURL() {}
+    },
+    location: {href: "http://localhost/uploads/"},
+    createRunProgress: () => ({open: async () => {}}),
+    clearTimeout() {},
     setTimeout: () => 0,
     console,
   };

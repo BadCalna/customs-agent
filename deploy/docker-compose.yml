@@ -8,7 +8,7 @@
 # - 数据库不发布端口，只在 Compose 内部网络上可达；外部只能经 nginx（web）访问。
 # - 原件/图片/数据库都落命名卷，容器重建不丢数据；卷的位置可用 docker volume inspect 找到。
 # - 迁移与 collectstatic 由一次性服务 migrate 执行，app 等它成功后再启动，避免多副本抢迁移。
-# - redis/worker 属于 P13，尚未实现，放在 profile=queue 里默认不启动（见文末说明）。
+# - Redis、worker 和 dispatcher 随应用启动，处理持久化的后台执行任务。
 
 name: ${CUSTOMS_COMPOSE_PROJECT:-customs-agent}
 
@@ -32,6 +32,10 @@ x-app: &app
     CUSTOMS_DB_BACKEND: postgres
     CUSTOMS_PG_HOST: db
     CUSTOMS_PG_PORT: "5432"
+    CUSTOMS_EXECUTOR_MODE: rq
+    CUSTOMS_PRODUCTION: "1"
+    CUSTOMS_REDIS_URL: redis://redis:6379/0
+    CUSTOMS_QUEUE_NAME: ${CUSTOMS_QUEUE_NAME:-customs}
     # 卷挂在 /srv/customs，存储根是其下的 files/；回退时可指向同卷内的其他目录。
     CUSTOMS_FILE_ROOT: ${CUSTOMS_FILE_ROOT:-/srv/customs/files}
     CUSTOMS_STATIC_ROOT: /app/staticfiles
@@ -86,6 +90,8 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+      redis:
+        condition: service_healthy
     volumes:
       - files:/srv/customs
       - static:/app/staticfiles
@@ -105,7 +111,7 @@ services:
         condition: service_healthy
     ports:
       # 默认 8080，避免和服务器上可能已存在的 80 端口冲突；确认空闲后可改成 80。
-      - "${CUSTOMS_HTTP_PORT:-8080}:80"
+      - "${CUSTOMS_HTTP_BIND:-127.0.0.1}:${CUSTOMS_HTTP_PORT:-8080}:80"
     volumes:
       - static:/usr/share/nginx/static:ro
       - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
@@ -118,21 +124,8 @@ services:
     logging: *logging
     stop_grace_period: 135s
 
-  # ==========================================================================
-  # 以下两项是 P13（Redis + django-rq worker）的预留位，默认不启动：profile=queue。
-  #
-  # 现状（必须如实告知测试人员）：
-  #   - config/settings.py 的 CUSTOMS_EXECUTOR_MODE 目前只接受 inline；
-  #   - manage.py 还没有 rqworker 命令，apps/runs/ 的派发/重试用例也未落地。
-  # 因此 `--profile queue up` 现在只会得到一个启动失败或空转的 worker，
-  # 不会有任何后台任务被处理。等 P13 交付后，需要补：
-  #   1) settings 的 EXECUTOR_MODE 接受 rq、加 REDIS 连接配置；
-  #   2) 实现 apps/runs/dispatch.py 的事务后派发与待派发重扫；
-  #   3) 把 worker 的 command 改成 P13 确认过的入口（不是下面这条占位）。
-  # ==========================================================================
   redis:
     image: redis:7-alpine
-    profiles: ["queue"]
     command: ["redis-server", "--appendonly", "yes", "--save", "60", "1"]
     volumes:
       - redisdata:/data
@@ -147,12 +140,26 @@ services:
 
   worker:
     <<: *app
-    profiles: ["queue"]
-    # 占位命令：P13 未实现前启动会直接失败，这是有意的——不要让它假装在工作。
-    command: ["python", "manage.py", "rqworker", "default"]
+    command: ["python", "manage.py", "rqworker", "${CUSTOMS_QUEUE_NAME:-customs}"]
     depends_on:
       db:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    volumes:
+      - files:/srv/customs
+    restart: unless-stopped
+
+  dispatcher:
+    <<: *app
+    command: ["python", "manage.py", "dispatch_runs", "--watch"]
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
     volumes:

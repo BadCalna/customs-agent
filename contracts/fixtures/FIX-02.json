@@ -3,7 +3,8 @@
     "allowed_actions": [
       "confirmation.write",
       "read",
-      "submission.create"
+      "submission.create",
+      "task.return"
     ],
     "business_confirmed_hs": {
       "source_id": null,
@@ -62,11 +63,11 @@
         "suggested_role": "supplier"
       }
     ],
-    "item_id": "0b85d8fd-d804-4d9b-8751-4d7ad0f00253",
+    "item_id": "68f75c02-7c38-4dc4-85dd-e9e2e306c667",
     "latest_expert_check": null,
-    "latest_run_id": "2aa163f3-c390-4a69-9c4a-e6162e1df3ac",
+    "latest_run_id": "252d68f5-c774-4ae6-887b-d6c50b561fe6",
     "precheck_suggested_hs": {
-      "source_id": "2aa163f3-c390-4a69-9c4a-e6162e1df3ac",
+      "source_id": "252d68f5-c774-4ae6-887b-d6c50b561fe6",
       "value": null
     },
     "result_mode": "mock",
@@ -81,11 +82,11 @@
       "source_id": null,
       "value": null
     },
-    "task_id": "8c5aed88-fe80-4618-9997-82891376ad96",
+    "task_id": "403b3e26-e7bc-4b50-bd42-97a24a721ec9",
     "task_stage": "awaiting_confirmation",
-    "version_id": "d1051286-aecb-47e1-a614-1f53ed7aef65"
+    "version_id": "c48496bc-5e2a-4ab2-888a-b1342d95fb6e"
   },
-  "contract_version": "1.1.0",
+  "contract_version": "1.2.0",
   "notes": "执行成功但业务待确认；suggested_hs 为 null，issues 指出缺什么、由谁补充。",
   "scenario": "FIX-02",
   "title": "缺关键事实"

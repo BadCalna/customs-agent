@@ -26,6 +26,7 @@ from apps.reviews.models import Item, Submission, Task
 from apps.reviews.services.history_reference import precheck_history_reference, precheck_history_source
 
 from .models import Run, RunItem
+from .engine_config import engine_matches, result_metadata, rows_match
 
 
 def _input_hash(payload) -> str:
@@ -51,18 +52,18 @@ def _merge_issues(*groups) -> list[dict]:
 
 
 def _context(run, item, scenario) -> ExecutionContext:
-    engine = get_engine()
+    snapshot = run.engine_snapshot
     return ExecutionContext(
         task_id=str(run.task_id),
         version_id=str(run.version_id),
         item_id=str(item.pk),
         run_id=str(run.pk),
         input_revision=item.revision,
-        engine_version=getattr(engine, "engine_version", ""),
-        prompt_version=getattr(engine, "prompt_version", ""),
-        rules_version=getattr(engine, "rules_version", ""),
-        result_mode=ResultMode.MOCK,
-        mock_scenario=scenario,
+        engine_version=snapshot.get("engine_version", ""),
+        prompt_version=snapshot.get("prompt_version", ""),
+        rules_version=snapshot.get("rules_version", ""),
+        result_mode=ResultMode(snapshot.get("result_mode", "mock")),
+        mock_scenario=scenario if snapshot.get("engine_mode") == "mock" else None,
     )
 
 
@@ -94,6 +95,10 @@ def _recommend_attributes(attributes) -> dict[str, str]:
 
 def _build_recommend_input(run, item, scenario) -> RecommendInput:
     context = _context(run, item, scenario)
+    # Item.revision tracks appended human confirmations. Workbook facts are
+    # immutable within a FileVersion, so precheck input survives confirmation
+    # made while a worker is processing the run.
+    context.input_revision = run.version.number
     payload = RecommendInput(
         context=context,
         name=item.name,
@@ -130,9 +135,19 @@ def _start_run(task, version, kind, submission=None, triggered_by=None) -> Run:
     return run
 
 
+def _inline_consistent(run):
+    if engine_matches(run) and rows_match(run):
+        return True
+    run.status, run.is_current, run.finished_at = Run.Status.SUPERSEDED, False, timezone.now()
+    run.save(update_fields=["status", "is_current", "finished_at"])
+    return False
+
+
 def _finish_run(run):
+    if not _inline_consistent(run):
+        return run
     rows = list(run.items.all())
-    run.status = Run.Status.FAILED if rows and all(r.status == RunItem.Status.FAILED for r in rows) else Run.Status.SUCCEEDED
+    run.status = Run.Status.FAILED if any(r.status == RunItem.Status.FAILED for r in rows) else Run.Status.SUCCEEDED
     run.finished_at = timezone.now()
     run.save(update_fields=["status", "finished_at"])
     return run
@@ -151,7 +166,7 @@ def execute_precheck(version, scenarios: dict[str, str] | None = None, triggered
         run = Run.objects.select_for_update().get(pk=run.pk)
         if run.version_id != version.pk or run.kind != Run.Kind.PRECHECK or run.submission_id:
             raise ValueError("预登记执行与预审版本不一致")
-        if run.status != Run.Status.QUEUED:
+        if run.status != Run.Status.QUEUED or not _inline_consistent(run):
             return run
         Run.objects.filter(version=version, kind=run.kind, is_current=True).exclude(pk=run.pk).update(is_current=False)
         run.status, run.is_current, run.started_at = Run.Status.RUNNING, True, timezone.now()
@@ -159,8 +174,10 @@ def execute_precheck(version, scenarios: dict[str, str] | None = None, triggered
         run.save(update_fields=["status", "is_current", "started_at", "finished_at"])
     history_source = precheck_history_source()
     for item in Item.objects.filter(version=version).order_by("source_sheet", "source_row"):
+        if not _inline_consistent(run):
+            return run
         scenario = _scenario_for(scenarios, item)
-        row = RunItem(run=run, item=item, status=RunItem.Status.RUNNING)
+        row = RunItem(run=run, item=item, status=RunItem.Status.RUNNING, result=result_metadata(run))
         row.save()
         recommend_input = _build_recommend_input(run, item, scenario)
         try:
@@ -175,11 +192,16 @@ def execute_precheck(version, scenarios: dict[str, str] | None = None, triggered
                 supplier_hs_validity_note="mock：原 HS 格式异常" if scenario == "supplier_invalid" else "",
             ))
         except EngineTechnicalError as exc:
+            if not _inline_consistent(run):
+                return run
             row.status = RunItem.Status.FAILED
             row.error_message = str(exc)
-            row.result = {"issues": [], "evidence": [], "attempts": 1}
+            row.result = {"issues": [], "evidence": [], "attempts": 1,
+                          **result_metadata(run)}
             row.save()
             continue
+        if not _inline_consistent(run):
+            return run
         row.status = RunItem.Status.SUCCEEDED
         row.suggested_hs = recommendation.suggested_hs
         row.comparison_status = comparison.comparison_status.value
@@ -196,8 +218,10 @@ def execute_precheck(version, scenarios: dict[str, str] | None = None, triggered
             "prompt_version": recommend_input.context.prompt_version,
             "rules_version": recommend_input.context.rules_version,
             "input_hash": recommend_input.context.input_hash,
-            "mock_scenario": scenario,
+            "result_mode": recommend_input.context.result_mode.value,
         }
+        if recommend_input.context.mock_scenario:
+            row.result["mock_scenario"] = scenario
         # 历史源仅追加参考证据；不进独立推荐输入，也不回写建议HS或比较结论。
         history_reference = precheck_history_reference(item, source=history_source)
         if history_reference is not None:
@@ -219,7 +243,7 @@ def _claim_preregistered_run(run) -> Run | None:
     Task.objects.select_for_update().get(pk=run.task_id)
     submission = Submission.objects.select_for_update().get(pk=run.submission_id)
     run = Run.objects.select_for_update().get(pk=run.pk)
-    if run.status != Run.Status.QUEUED:
+    if run.status != Run.Status.QUEUED or not _inline_consistent(run):
         return None
     newer_exists = Run.objects.filter(
         version_id=run.version_id, kind=run.kind, created_at__gt=run.created_at,
@@ -262,8 +286,10 @@ def execute_expert_check(submission, scenarios: dict[str, str] | None = None, tr
         run = claimed
     for line in submission.items.select_related("item"):
         item = line.item
+        if not _inline_consistent(run):
+            return run
         scenario = _scenario_for(scenarios, item)
-        row = RunItem(run=run, item=item, status=RunItem.Status.RUNNING)
+        row = RunItem(run=run, item=item, status=RunItem.Status.RUNNING, result=result_metadata(run))
         row.save()
         context = _context(run, item, scenario)
         payload = ExpertCheckInput(
@@ -280,11 +306,16 @@ def execute_expert_check(submission, scenarios: dict[str, str] | None = None, tr
         try:
             output = engine.expert_check(payload)
         except EngineTechnicalError as exc:
+            if not _inline_consistent(run):
+                return run
             row.status = RunItem.Status.FAILED
             row.error_message = str(exc)
-            row.result = {"issues": [], "evidence": [], "attempts": 1}
+            row.result = {"issues": [], "evidence": [], "attempts": 1,
+                          **result_metadata(run)}
             row.save()
             continue
+        if not _inline_consistent(run):
+            return run
         row.status = RunItem.Status.SUCCEEDED
         row.suggested_hs = output.suggested_hs
         row.result = {
@@ -298,7 +329,9 @@ def execute_expert_check(submission, scenarios: dict[str, str] | None = None, tr
             "prompt_version": context.prompt_version,
             "rules_version": context.rules_version,
             "input_hash": context.input_hash,
-            "mock_scenario": scenario,
+            "result_mode": context.result_mode.value,
         }
+        if context.mock_scenario:
+            row.result["mock_scenario"] = scenario
         row.save()
     return _finish_run(run)

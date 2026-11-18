@@ -280,3 +280,19 @@ test('expert 409 onConflict reloads even while panel is transiently hidden durin
   assert.deepEqual(refreshes,['T']);
   view.destroy();
 });
+
+test('retained operator panel blocks confirm while hidden during reload',async()=>{
+  const s=expertState();s.task.allowed_actions=['read','confirmation.write'];
+  const card={item_id:'first',revision:1,facts:{name:'合成甲'},business_confirmed_hs:{value:null,source_id:null},source_location:{row_number:8}};
+  const h=harness({...s,card,itemId:'first'},'operator'),root=h.node.child;
+  field(root,'confirm-hs','8501109900','first');
+  h.render({...s,card:null,itemId:'first',loading:true});
+  assert.equal(h.node.child,root);assert.equal(h.node.hidden,true);
+  click(root,'confirm','first');await flush();
+  assert.equal(h.calls.length,0);
+  h.render({...s,card,itemId:'first',loading:false});
+  assert.equal(h.node.hidden,false);
+  click(root,'confirm','first');await flush();
+  assert.equal(h.calls.length,1);assert.equal(h.calls[0][0],'confirm');
+  h.view.destroy();
+});

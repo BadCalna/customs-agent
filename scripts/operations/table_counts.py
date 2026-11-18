@@ -241,8 +241,16 @@ def file_inventory(root: Path):
         with path.open("rb") as handle:
             for chunk in iter(lambda: handle.read(1024 * 1024), b""):
                 digest.update(chunk)
-        entries.append({"path": str(relative), "size": path.stat().st_size, "sha256": digest.hexdigest()})
+        entries.append({"path": relative.as_posix(), "size": path.stat().st_size, "sha256": digest.hexdigest()})
     return entries
+
+
+def validate_import_originals(files):
+    """Check the archive inventory against the shared migration/backup gate."""
+    from scripts.database.import_guard import require_completed_imports
+
+    hashes = {entry["path"].replace("\\", "/"): entry["sha256"] for entry in files}
+    require_completed_imports(file_hashes=hashes)
 
 
 def main(argv=None):
@@ -270,6 +278,8 @@ def main(argv=None):
         if root != Path(settings.CUSTOMS_FILE_ROOT).resolve():
             raise ValueError("实际 Django 文件根与请求目标不一致")
         files = file_inventory(root)
+        if args.require_complete_imports:
+            validate_import_originals(files)
         stat = root.stat()
         payload.update(file_root=str(root), file_identity={"path": str(root), "device": stat.st_dev, "inode": stat.st_ino},
                        files=files, file_count=len(files), file_bytes=sum(f["size"] for f in files))
