@@ -241,29 +241,30 @@ def file_inventory(root: Path):
         with path.open("rb") as handle:
             for chunk in iter(lambda: handle.read(1024 * 1024), b""):
                 digest.update(chunk)
-        entries.append({"path": str(relative), "size": path.stat().st_size, "sha256": digest.hexdigest()})
+        entries.append({"path": relative.as_posix(), "size": path.stat().st_size, "sha256": digest.hexdigest()})
     return entries
 
 
 def validate_import_originals(files):
-    """A COMPLETE backup must contain every registered import original."""
-    from apps.reviews.models import ImportJob
+    """Check the archive inventory against the shared migration/backup gate."""
+    from scripts.database.import_guard import require_completed_imports
 
-    archived = {entry["path"].replace("\\", "/"): entry["sha256"] for entry in files}
-    for job in ImportJob.objects.select_related("version").iterator():
-        path = job.version.storage_path
-        if not path or archived.get(path) != job.sha256:
-            raise ValueError(
-                f"导入原件未保全或哈希不符，拒绝标记完整备份: "
-                f"import_id={job.pk}, version_id={job.version_id}, status={job.status}"
-            )
+    hashes = {entry["path"].replace("\\", "/"): entry["sha256"] for entry in files}
+    require_completed_imports(file_hashes=hashes)
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--files-root")
     parser.add_argument("--out")
+    parser.add_argument("--require-complete-imports", action="store_true",
+                        help="完整备份/恢复核对：拒绝仍依赖 incoming 暂存恢复状态的未完成导入")
     args = parser.parse_args(argv)
+    if args.require_complete_imports:
+        import django
+        django.setup()
+        from scripts.database.import_guard import require_completed_imports
+        require_completed_imports()
     counts, fingerprints, db_name, oid = database_inventory()
     from django.conf import settings
     from django.db import connection
@@ -277,7 +278,8 @@ def main(argv=None):
         if root != Path(settings.CUSTOMS_FILE_ROOT).resolve():
             raise ValueError("实际 Django 文件根与请求目标不一致")
         files = file_inventory(root)
-        validate_import_originals(files)
+        if args.require_complete_imports:
+            validate_import_originals(files)
         stat = root.stat()
         payload.update(file_root=str(root), file_identity={"path": str(root), "device": stat.st_dev, "inode": stat.st_ino},
                        files=files, file_count=len(files), file_bytes=sum(f["size"] for f in files))

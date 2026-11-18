@@ -35,6 +35,8 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Callable
 
+from .backup_guard import guarded_writer
+
 if os.name == "nt":
     import msvcrt
 else:
@@ -419,6 +421,7 @@ def read_staged_original(
     return read_bytes(root, relative_path, max_bytes=max_bytes)
 
 
+@guarded_writer
 def publish_staged_original(
     root: str | Path,
     token: str,
@@ -647,6 +650,7 @@ def _require_binding_target(binding: dict, *, task_id: str, version_id: str) -> 
             "该暂存 token 已绑定到其它任务/版本，不能跨版本发布；未写入任何正式文件",
         )
 
+@guarded_writer
 def discard_staged(root: str | Path, token: str) -> None:
     """丢弃暂存文件（只允许 ``incoming/`` 内的合法 UUID），不触碰任何正式文件。"""
     canonical = _canonical_stage_token(token)
@@ -820,6 +824,7 @@ def _store(
                       suffix=suffix, display_name=display_name, created=created)
 
 
+@guarded_writer
 def _write_exclusive(
     root: str | Path, relative_path: str, payload: bytes, suffix: str,
 ) -> bool:

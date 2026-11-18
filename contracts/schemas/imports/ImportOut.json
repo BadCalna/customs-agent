@@ -48,7 +48,8 @@
       "enum": [
         "staged",
         "succeeded",
-        "failed"
+        "failed",
+        "superseded"
       ],
       "title": "Parse Status",
       "type": "string"

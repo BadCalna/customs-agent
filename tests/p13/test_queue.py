@@ -173,7 +173,7 @@ class QueueTests(TestCase):
             self.assertEqual(failed_job.status, ImportJob.Status.FAILED)
             self.assertFalse(failed_version.storage_path)
             from scripts.operations.table_counts import file_inventory, validate_import_originals
-            with self.assertRaisesRegex(ValueError, "导入原件未保全"):
+            with self.assertRaisesRegex(ValueError, "未完成导入"):
                 validate_import_originals(file_inventory(Path(root)))
 
             corrected = imports.upload(

@@ -15,6 +15,7 @@ import os
 from pathlib import Path
 import re
 import secrets
+import selectors
 import signal
 import subprocess
 import sys
@@ -188,7 +189,10 @@ class Runner:
             os.close(fd)
 
     def counts(self, db, files):
-        payload = validate(json.loads(self.app("table_counts.py", ["--files-root", str(files)], target_db=db, target_files=files)))
+        # incoming/ is excluded from complete archives. Refuse unfinished uploads
+        # while writers are stopped/frozen, before dumping or archiving anything.
+        payload = validate(json.loads(self.app("table_counts.py", ["--require-complete-imports", "--files-root", str(files)],
+                                               target_db=db, target_files=files)))
         if any(key not in payload for key in ("table_sha256", "database_schema", "sequences")):
             raise ValueError("清单缺少逐行数据库内容指纹/schema/sequence 状态")
         oid = self.oid(db)
@@ -198,7 +202,52 @@ class Runner:
             raise ValueError("实际文件根身份不是请求目标")
         return payload
 
+    @contextmanager
+    def freeze_native(self, quiesce):
+        if not quiesce:
+            raise ValueError("--no-quiesce 无法保证数据库与附件一致，不生成 COMPLETE 备份")
+        if self.mode != "native":
+            yield {"method": "compose-stopped-writers", "snapshot": None}
+            return
+        process = subprocess.Popen([self.python, str(OPS / "native_freeze.py")],
+                                   cwd=REPO, env=self.env, text=True,
+                                   stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+        try:
+            with selectors.DefaultSelector() as selector:
+                selector.register(process.stdout, selectors.EVENT_READ)
+                if not selector.select(15):
+                    raise ValueError("native 备份停写锁获取超时")
+                line = process.stdout.readline()
+            if not line:
+                raise ValueError("native 备份未取得数据库/附件停写锁")
+            evidence = json.loads(line)
+            if (evidence.get("database") != self.source_db or evidence.get("file_root") != str(self.root)
+                    or not evidence.get("snapshot") or not evidence.get("locked_tables")
+                    or evidence.get("method") != "postgres-table-sequence-locks+local-file-lock"):
+                raise ValueError("停写锁证据与备份源身份不符")
+            yield evidence
+            if process.poll() is not None:
+                raise ValueError("停写锁进程提前退出，拒绝完整备份")
+            process.stdin.write("RELEASE\n")
+            process.stdin.flush()
+            process.stdin.close()
+            if process.wait(timeout=10) != 0:
+                raise ValueError("停写事务未能正常回滚释放")
+        finally:
+            if process.poll() is None:
+                process.terminate()
+                try:
+                    process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait()
+            if not process.stdin.closed:
+                process.stdin.close()
+            process.stdout.close()
+
     def backup(self, label, quiesce):
+        if not quiesce:
+            raise ValueError("--no-quiesce 不生成 COMPLETE；完整备份必须取得一致性边界")
         if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,47}", label):
             raise ValueError("label 必须为 1..48 位 ASCII 字母数字、下划线或短横线")
         self.storage("probe")  # missing is an error; a genuinely empty directory is valid
@@ -216,20 +265,26 @@ class Runner:
                 atomic_json(directory / "services-before.json", {"running": running, "quiesced": stopped})
                 if stopped:
                     self.command(self.dc + ["stop"] + stopped)
-            elif self.mode == "native" and quiesce:
-                log("警告：native 无法自动停写，请确保所有 web/worker 写入者已停止")
-            elif not quiesce:
-                log("警告：不停写备份不承诺数据库与文件同一时点")
-            with (directory / "db.dump").open("xb") as handle:
-                self.pg("pg_dump", ["-Fc", "-d", self.source_db], output=handle)
-            with (directory / "files.tar.gz").open("xb") as handle:
-                self.storage("archive", output=handle)
-            payload = self.counts(self.source_db, self.root)
-            atomic_json(directory / "counts.json", payload)
-            atomic_json(directory / "meta.json", {"created_at": stamp(), "mode": self.mode, "quiesced": quiesce,
-                                                  "db": self.source_db, "files": str(self.root), "label": label})
+            with self.freeze_native(quiesce) as consistency:
+                before = self.counts(self.source_db, self.root)
+                dump_args = ["-Fc", "-d", self.source_db]
+                if consistency["snapshot"]:
+                    dump_args += ["--snapshot", consistency["snapshot"]]
+                with (directory / "db.dump").open("xb") as handle:
+                    self.pg("pg_dump", dump_args, output=handle)
+                with (directory / "files.tar.gz").open("xb") as handle:
+                    self.storage("archive", output=handle)
+                payload = self.counts(self.source_db, self.root)
+                # Inventory timestamps differ by design; identities and all content must match.
+                keys = (before.keys() | payload.keys()) - {"generated_at"}
+                if any(before.get(key) != payload.get(key) for key in keys):
+                    raise ValueError("备份窗口中数据库/schema/sequence/附件发生变化，拒绝 COMPLETE")
+                atomic_json(directory / "counts.json", payload)
+                atomic_json(directory / "meta.json", {"created_at": stamp(), "mode": self.mode, "quiesced": True,
+                                                       "consistent": True, "consistency": consistency,
+                                                       "db": self.source_db, "files": str(self.root), "label": label})
             manifest = {name: sha256_file(directory / name)
-                        for name in ("db.dump", "files.tar.gz", "counts.json")}
+                        for name in ("db.dump", "files.tar.gz", "counts.json", "meta.json")}
             atomic_json(directory / "manifest.json", manifest)
             # Keep traditional checksum manifest for human/offline tools.
             (directory / "manifest.sha256").write_text("".join(f"{v}  {k}\n" for k, v in manifest.items()))
@@ -260,12 +315,18 @@ class Runner:
         if not (directory / "COMPLETE").is_file() or any((directory / x).exists() for x in ("FAILED", "INCOMPLETE")):
             raise ValueError("备份未完成或曾失败，拒绝恢复")
         manifest = json.loads((directory / "manifest.json").read_text())
-        if not isinstance(manifest, dict) or set(manifest) != {"db.dump", "files.tar.gz", "counts.json"}:
+        if not isinstance(manifest, dict) or set(manifest) != {"db.dump", "files.tar.gz", "counts.json", "meta.json"}:
             raise ValueError("无效 manifest schema")
         for name, digest in manifest.items():
             path = directory / name
             if path.is_symlink() or not path.is_file() or sha256_file(path) != digest:
                 raise ValueError("备份清单不一致: " + name)
+        meta = json.loads((directory / "meta.json").read_text())
+        method = meta.get("consistency", {}).get("method")
+        required_method = {"native": "postgres-table-sequence-locks+local-file-lock", "compose": "compose-stopped-writers"}
+        if (meta.get("consistent") is not True or meta.get("quiesced") is not True
+                or method != required_method.get(meta.get("mode")) or method is None):
+            raise ValueError("备份缺少可执行的一致性保护证据，禁止用作完整恢复")
         expected = load(directory / "counts.json")
         if any(key not in expected for key in ("table_sha256", "database_schema", "sequences")) or not expected.get("file_identity"):
             raise ValueError("新版备份必须包含逐行内容指纹/schema/sequence 与文件根身份，禁止静默降为行数校验")
