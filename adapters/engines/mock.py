@@ -5,6 +5,8 @@
 - 所有证据都是明确标注的合成样例，不构成真实归类依据；
 - 本模块不产生任何数据库写入。
 """
+import re
+
 from apps.api.schemas import (
     ComparisonStatus,
     EvidenceEntry,
@@ -26,7 +28,7 @@ from .protocols import (
 
 ENGINE_VERSION = "mock-1.0.0"
 PROMPT_VERSION = "mock-none"
-RULES_VERSION = "d4-0.1"
+RULES_VERSION = "d4-0.2"
 
 # 明确标注为合成样例的编码，不能当作真实归类结论。
 SAMPLE_HS = "8544422900"
@@ -82,7 +84,10 @@ def compare_original(payload: CompareInput) -> CompareOutput:
             reason="供应商未填原 HS；原值保持空白，不用建议值回填",
             issues=[IssueEntry(code="SUPPLIER_HS_MISSING", message="供应商原 HS 为空", field="supplier_hs_raw")],
         )
-    if not payload.supplier_hs_format_valid:
+    # Validate the raw value here, not just an optimistic caller-supplied flag.
+    # Both queue and inline engines share this priority boundary. Trimming is
+    # comparison-only: never normalize or overwrite Item.supplier_hs_raw.
+    if not payload.supplier_hs_format_valid or re.fullmatch(r"[0-9]{10}", raw) is None:
         return CompareOutput(
             comparison_status=ComparisonStatus.SUPPLIER_INVALID,
             reason=payload.supplier_hs_validity_note or "原 HS 格式异常，原文保留",

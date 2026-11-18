@@ -7,7 +7,7 @@ from django.conf import settings
 
 from apps.api.schemas import EvidenceStatus, ExpertFinding, ExpertVerdict, IssueEntry
 
-from .mock import EngineTechnicalError, compare_original
+from .mock import EngineTechnicalError, RULES_VERSION, compare_original
 from .protocols import Candidate, ExpertCheckOutput, RecommendOutput
 
 SYSTEM_PROMPT = (
@@ -42,7 +42,7 @@ def _required_hs(value):
 class OpenAICompatibleEngine:
     engine_version = "openai-compatible-1"
     prompt_version = "customs-review-1"
-    rules_version = "d4-0.1"
+    rules_version = RULES_VERSION
 
     def _complete(self, kind, facts):
         body = json.dumps({
