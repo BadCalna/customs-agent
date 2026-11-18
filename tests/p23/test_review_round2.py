@@ -15,13 +15,19 @@
 from __future__ import annotations
 
 import json
+import os
+import threading
 import zipfile
 from pathlib import Path
 from typing import Callable
+from unittest.mock import patch
 
+import adapters.sources.reference_import.publish as publish_module
 from adapters.sources.reference_import.publish import (
     PublishError,
     PublishRequest,
+    activate_release,
+    list_releases,
     publish_release,
 )
 from adapters.sources.reference_import.snapshot import (
@@ -433,3 +439,257 @@ class TextRateEndToEndTest(P23TestCase):
             {issue["code"] for item in pending for issue in item["issues"]},
             {"TAX_RATE_TEXT_AMBIGUOUS"},
         )
+
+
+class Pr34ReviewFixesTest(P23TestCase):
+    """PR #34 审查意见专项回归：有效期门禁、换版理由、并发发布、原子激活、落盘报告。"""
+
+    def _real_batch(self, label: str, *, name: str = "合成甲", effective_from: str = "2026-11-16"):
+        batch = build_batch(
+            self.root / label,
+            index_rows=[
+                IndexRow("0999999991", name, reg_codes="A", element_count=1, required_count=1)
+            ],
+            element_rows=[ElementRow("0999999991", name, "要素甲", "1")],
+            kind="real",
+            batch_id=f"pr34-{label}",
+            dataset_prefix=f"pr34-{label}",
+            workbook_names=(f"批次_{label}_M01.xlsx", f"批次_{label}_M02.xlsx"),
+        )
+        if effective_from != "2026-11-16":
+            def update_effective(payload: dict) -> None:
+                payload["defaults"]["tariff_effective_from"] = effective_from
+                payload["defaults"]["elements_effective_from"] = effective_from
+
+            manifest = mutate_manifest(batch, update_effective, name="sources-effective.json")
+            return batch, manifest
+        return batch, batch.manifest
+
+    def test_effective_from_change_requires_allow_content_change(self):
+        """#34-1：将版本起点从 2026-11-16 改成 2025-01-01，必须触发换版门禁并报告内容变更。"""
+
+        out_root = self.root / "out"
+        _, m1 = self._real_batch("v1", effective_from="2026-11-16")
+        _, m2 = self._real_batch("v2", effective_from="2025-01-01")
+        # 让两个批次拥有完全相同的原件文件名，仅版本有效期起点不同。
+        p1 = json.loads(m1.read_text(encoding="utf-8"))
+        p2 = json.loads(m2.read_text(encoding="utf-8"))
+        for entry1, entry2 in zip(p1["inputs"], p2["inputs"]):
+            entry2["original_filename"] = entry1["original_filename"]
+        m2.write_text(json.dumps(p2, ensure_ascii=False, indent=2), encoding="utf-8")
+
+        first = build_snapshot(SnapshotRequest(manifest_path=m1, out_root=out_root))
+        write_verification(out_root, first.snapshot_id)
+        first_pub = publish_release(
+            PublishRequest(snapshot_dir=first.snapshot_dir, out_root=out_root)
+        )
+
+        second = build_snapshot(SnapshotRequest(manifest_path=m2, out_root=out_root))
+        write_verification(out_root, second.snapshot_id)
+
+        with self.assertRaises(PublishError) as caught:
+            publish_release(
+                PublishRequest(snapshot_dir=second.snapshot_dir, out_root=out_root)
+            )
+        self.assertIn("--allow-content-change", str(caught.exception))
+        self.assertIn("p14_tariff", str(caught.exception))
+        self.assertIn("versions:2026", str(caught.exception))
+
+        allowed = publish_release(
+            PublishRequest(
+                snapshot_dir=second.snapshot_dir,
+                out_root=out_root,
+                allow_content_change=True,
+                reason="将税则与要素版本起点调整为 2025-01-01",
+            )
+        )
+        self.assertTrue(allowed.changed)
+        self.assertTrue(allowed.release["content_changed"])
+        self.assertEqual(allowed.release["previous_release"], first_pub.release_id)
+        self.assertIn(
+            "versions:2026",
+            allowed.diff["datasets"]["p14_tariff"]["samples"]["changed"],
+        )
+
+    def test_allow_content_change_rejects_empty_or_whitespace_reason(self):
+        """#34-2：允许换版后，空理由或纯空白理由必须拒绝发布与激活。"""
+
+        out_root = self.root / "out"
+        _, m1 = self._real_batch("r1", name="合成甲")
+        _, m2 = self._real_batch("r2", name="合成乙")
+        first = build_snapshot(SnapshotRequest(manifest_path=m1, out_root=out_root))
+        write_verification(out_root, first.snapshot_id)
+        first_pub = publish_release(
+            PublishRequest(snapshot_dir=first.snapshot_dir, out_root=out_root)
+        )
+        second = build_snapshot(SnapshotRequest(manifest_path=m2, out_root=out_root))
+        write_verification(out_root, second.snapshot_id)
+
+        for blank_reason in ("", "   ", "\t\n "):
+            with self.subTest(reason=blank_reason):
+                with self.assertRaises(PublishError) as caught:
+                    publish_release(
+                        PublishRequest(
+                            snapshot_dir=second.snapshot_dir,
+                            out_root=out_root,
+                            allow_content_change=True,
+                            reason=blank_reason,
+                        )
+                    )
+                self.assertIn("--reason", str(caught.exception))
+
+        current = json.loads((out_root / "published" / "current.json").read_text(encoding="utf-8"))
+        self.assertEqual(current["release_id"], first_pub.release_id)
+        self.assertEqual(len(list_releases(out_root)), 1)
+
+    def test_concurrent_interleaved_publish_enforces_change_gate_and_previous_release(self):
+        """#34-3：两份不同内容交错发布时，后提交者不得绕过换版门禁或漏记 previous_release。"""
+
+        out_root = self.root / "out"
+        _, m1 = self._real_batch("c1", name="并发内容甲")
+        _, m2 = self._real_batch("c2", name="并发内容乙")
+        snap1 = build_snapshot(SnapshotRequest(manifest_path=m1, out_root=out_root))
+        snap2 = build_snapshot(SnapshotRequest(manifest_path=m2, out_root=out_root))
+        write_verification(out_root, snap1.snapshot_id)
+        write_verification(out_root, snap2.snapshot_id)
+
+        barrier = threading.Barrier(2)
+        orig_check = publish_module._check_content_change
+
+        def synced_check(previous, candidate_dir, **kwargs):
+            result = orig_check(previous, candidate_dir, **kwargs)
+            try:
+                barrier.wait(timeout=1.5)
+            except threading.BrokenBarrierError:
+                pass
+            return result
+
+        outcomes: list[tuple[str, object]] = []
+        lock = threading.Lock()
+
+        def worker(label: str, snap_dir: Path, allow: bool = False, reason: str = "") -> None:
+            try:
+                res = publish_release(
+                    PublishRequest(
+                        snapshot_dir=snap_dir,
+                        out_root=out_root,
+                        allow_content_change=allow,
+                        reason=reason,
+                    )
+                )
+                with lock:
+                    outcomes.append((label, res))
+            except PublishError as exc:
+                with lock:
+                    outcomes.append((label, exc))
+
+        with patch.object(publish_module, "_check_content_change", side_effect=synced_check):
+            t1 = threading.Thread(target=worker, args=("A", snap1.snapshot_dir))
+            t2 = threading.Thread(target=worker, args=("B", snap2.snapshot_dir))
+            t1.start()
+            t2.start()
+            t1.join(timeout=5)
+            t2.join(timeout=5)
+
+        successes = [item for _, item in outcomes if not isinstance(item, Exception)]
+        errors = [item for _, item in outcomes if isinstance(item, PublishError)]
+        self.assertEqual(len(successes), 1, "未授权换版时交错发布只能有一方成功")
+        self.assertEqual(len(errors), 1, "后提交者必须因内容不同且未授权换版而被拒绝")
+        winner = successes[0]
+        current = json.loads((out_root / "published" / "current.json").read_text(encoding="utf-8"))
+        self.assertEqual(current["release_id"], winner.release_id)
+        self.assertEqual(len(list_releases(out_root)), 1)
+
+        # 若后提交者显式授权换版并填写理由，则必须记录前一版本为 winner.release_id
+        loser_snap = snap2 if winner.release["snapshot_id"] == snap1.snapshot_id else snap1
+        second_pub = publish_release(
+            PublishRequest(
+                snapshot_dir=loser_snap.snapshot_dir,
+                out_root=out_root,
+                allow_content_change=True,
+                reason="并发后显式授权换版",
+            )
+        )
+        self.assertEqual(second_pub.release["previous_release"], winner.release_id)
+        self.assertTrue(second_pub.release["content_changed"])
+
+    def test_interrupted_activation_keeps_current_json_and_symlink_consistent(self):
+        """#34-4：激活过程中断（软链替换失败或写指针失败）都必须回滚，不得产生两个当前版本。"""
+
+        out_root = self.root / "out"
+        _, m1 = self._real_batch("a1", name="旧版本")
+        _, m2 = self._real_batch("a2", name="新版本")
+        snap1 = build_snapshot(SnapshotRequest(manifest_path=m1, out_root=out_root))
+        snap2 = build_snapshot(SnapshotRequest(manifest_path=m2, out_root=out_root))
+        write_verification(out_root, snap1.snapshot_id)
+        write_verification(out_root, snap2.snapshot_id)
+
+        first = publish_release(
+            PublishRequest(snapshot_dir=snap1.snapshot_dir, out_root=out_root)
+        )
+        second = publish_release(
+            PublishRequest(
+                snapshot_dir=snap2.snapshot_dir,
+                out_root=out_root,
+                allow_content_change=True,
+                reason="先生成不激活的新版本用于测试激活中断",
+                activate=False,
+            )
+        )
+        pointer = out_root / "published" / "current.json"
+        link = out_root / "published" / "current"
+
+        # 场景 1：创建/替换软链失败 → current.json 与 current 软链都必须保持指向旧版
+        with patch.object(publish_module.os, "symlink", side_effect=OSError("模拟软链中断")):
+            with self.assertRaises(OSError):
+                activate_release(out_root, second.release_id)
+        self.assertEqual(json.loads(pointer.read_text(encoding="utf-8"))["release_id"], first.release_id)
+        self.assertEqual(Path(os.readlink(link)).name, first.release_id)
+
+        # 场景 2：软链已切到新版后，写 current.json 失败 → 软链必须回滚回旧版
+        orig_write = publish_module.write_json_atomic
+
+        def fail_on_pointer(path: Path, payload):
+            if Path(path).name == "current.json":
+                raise OSError("模拟写 current.json 中断")
+            return orig_write(path, payload)
+
+        with patch.object(publish_module, "write_json_atomic", side_effect=fail_on_pointer):
+            with self.assertRaises(OSError):
+                activate_release(out_root, second.release_id)
+        self.assertEqual(json.loads(pointer.read_text(encoding="utf-8"))["release_id"], first.release_id)
+        self.assertEqual(Path(os.readlink(link)).name, first.release_id)
+
+    def test_failed_verification_updates_on_disk_report_json_and_markdown(self):
+        """#34-5：首次构建验证失败时，落盘的 report.json 与 report.md 也必须是 partial / 退出码 1。"""
+
+        out_root = self.root / "out"
+        _, m1 = self._real_batch("vfail", name="验证失败样本")
+
+        def failing_hook(_snapshot_dir: Path) -> dict:
+            return {
+                "schema_version": "p23.query-check.1",
+                "all_passed": False,
+                "checks": [
+                    {"id": "p14.tariff.sample", "status": "fail", "detail": "模拟验证未通过"}
+                ],
+                "counts": {"pass": 0, "fail": 1, "skip": 0},
+            }
+
+        built = build_snapshot(
+            SnapshotRequest(manifest_path=m1, out_root=out_root),
+            verify_hook=failing_hook,
+        )
+        self.assertFalse(built.reused)
+        self.assertEqual(int(built.exit_code), 1)
+        self.assertEqual(built.report["status"], "partial")
+
+        saved_report = json.loads(built.report_path.read_text(encoding="utf-8"))
+        self.assertEqual(saved_report["status"], "partial")
+        self.assertEqual(saved_report["exit_code"], 1)
+        self.assertFalse(saved_report["verification"]["all_passed"])
+
+        saved_md = built.report_markdown_path.read_text(encoding="utf-8")
+        self.assertIn("结果：**partial**（退出码 1）", saved_md)
+        self.assertIn("结论：**未通过**", saved_md)
+

@@ -22,12 +22,16 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+import fcntl
 import json
 import os
 import shutil
+import threading
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import Any, Iterator, Iterable, Mapping
 
 from adapters.sources.reference_import.model import (
     RELEASE_SCHEMA_VERSION,
@@ -212,6 +216,20 @@ def _business_keys(payload: Mapping[str, Any]) -> dict[str, str]:
     """把一份数据集压成 ``业务键 → 内容指纹``，用于差异报告。"""
 
     keys: dict[str, str] = {}
+    versions = payload.get("versions")
+    if isinstance(versions, list):
+        for index, item in enumerate(versions):
+            if not isinstance(item, Mapping):
+                continue
+            key = visible_text(item.get("version")) or f"versions[{index}]"
+            slot = f"versions:{key}"
+            if slot in keys:
+                slot = f"versions:{key}[{index}]"
+            keys[slot] = fingerprint(item)
+    version_meta = payload.get("version")
+    if isinstance(version_meta, Mapping):
+        key = visible_text(version_meta.get("version")) or "default"
+        keys[f"version:{key}"] = fingerprint(version_meta)
     for field_name, key_field in (
         ("codes", "code"),
         ("schemas", "hs_code"),
@@ -312,13 +330,104 @@ def _verification_for(out_root: Path, snapshot_id: str) -> dict[str, Any] | None
     return read_json(path)
 
 
+_GLOBAL_LOCK = threading.Lock()
+_THREAD_LOCKS: dict[Path, threading.RLock] = {}
+_LOCK_DEPTH: dict[tuple[int, Path], int] = {}
+
+
+@contextmanager
+def _publish_lock(out_root: Path) -> Iterator[None]:
+    """跨线程 + 跨进程发布排他锁；同线程重入不自锁。"""
+
+    key = out_root.resolve()
+    ident = threading.get_ident()
+    with _GLOBAL_LOCK:
+        rlock = _THREAD_LOCKS.setdefault(key, threading.RLock())
+    rlock.acquire()
+    try:
+        with _GLOBAL_LOCK:
+            depth = _LOCK_DEPTH.get((ident, key), 0)
+            _LOCK_DEPTH[(ident, key)] = depth + 1
+        lock_handle = None
+        if depth == 0:
+            published_dir = out_root / "published"
+            published_dir.mkdir(parents=True, exist_ok=True)
+            lock_path = published_dir / ".publish.lock"
+            lock_handle = lock_path.open("a+", encoding="utf-8")
+            fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            if lock_handle is not None:
+                try:
+                    fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
+                finally:
+                    lock_handle.close()
+            with _GLOBAL_LOCK:
+                remaining = _LOCK_DEPTH.get((ident, key), 1) - 1
+                if remaining <= 0:
+                    _LOCK_DEPTH.pop((ident, key), None)
+                else:
+                    _LOCK_DEPTH[(ident, key)] = remaining
+    finally:
+        rlock.release()
+
+
+def _active_release_id(out_root: Path) -> str | None:
+    """读取当前激活的 release_id；若 current.json 与 current 软链都存在但指向不同版本，报指针不一致。"""
+
+    published_dir = out_root / "published"
+    pointer = published_dir / "current.json"
+    link = published_dir / "current"
+    pointer_id: str | None = None
+    if pointer.is_file():
+        payload = read_json(pointer)
+        if isinstance(payload, Mapping):
+            pointer_id = visible_text(payload.get("release_id")) or None
+    link_id: str | None = None
+    if link.is_symlink():
+        link_id = Path(os.readlink(link)).name or None
+    if pointer_id and link_id and pointer_id != link_id:
+        raise PublishError(
+            f"当前版本指针不一致：current.json 指向 {pointer_id}，"
+            f"current 软链指向 {link_id}；请先用 activate 显式指定版本"
+        )
+    return pointer_id or link_id
+
+
 def _current_release_dir(out_root: Path) -> Path | None:
-    pointer = out_root / "published" / "current.json"
-    if not pointer.is_file():
+    release_id = _active_release_id(out_root)
+    if not release_id:
         return None
-    payload = read_json(pointer)
-    release_dir = out_root / "published" / "releases" / str(payload.get("release_id"))
+    release_dir = out_root / "published" / "releases" / release_id
     return release_dir if release_dir.is_dir() else None
+
+
+def _check_content_change(
+    previous: Path | None,
+    candidate_dir: Path,
+    *,
+    allow_content_change: bool,
+    reason: str,
+) -> tuple[dict[str, Any], bool]:
+    diff: dict[str, Any] = {}
+    changed = False
+    if previous is not None:
+        diff = diff_snapshots(previous, candidate_dir)
+        changed = bool(diff.get("changed"))
+        if changed:
+            if not allow_content_change:
+                raise PublishError(
+                    "待发布内容与当前已发布版本不同；默认不覆盖已发布数据。"
+                    "确认要换版请加 --allow-content-change 并写明 --reason。"
+                    "差异：" + json.dumps(diff, ensure_ascii=False)
+                )
+            if not reason:
+                raise PublishError(
+                    "待发布内容与当前已发布版本不同；已开启 --allow-content-change，"
+                    "但未填写换版理由（--reason 不能为空）。"
+                )
+    return diff, changed
 
 
 def publish_release(request: PublishRequest) -> PublishResult:
@@ -326,6 +435,11 @@ def publish_release(request: PublishRequest) -> PublishResult:
 
     snapshot_dir = Path(request.snapshot_dir)
     out_root = Path(request.out_root)
+    reason = visible_text(request.reason)
+    if request.allow_content_change and not reason:
+        raise PublishError(
+            "允许换版（--allow-content-change）时必须同时填写非空换版理由（--reason）"
+        )
     manifest, report = _load_snapshot(snapshot_dir)
     snapshot_id = visible_text(manifest.get("snapshot_id")) or snapshot_dir.name
     if manifest.get("dataset_kind") != DatasetKind.REAL.value:
@@ -376,10 +490,12 @@ def publish_release(request: PublishRequest) -> PublishResult:
     release_id = f"rel-{snapshot_id.split('-')[-1]}-{suffix}"
     releases_dir = out_root / "published" / "releases"
     release_dir = releases_dir / release_id
-    temp_dir = releases_dir / f".tmp-{release_id}-{os.getpid()}"
+    temp_dir = releases_dir / f".tmp-{release_id}-{os.getpid()}-{uuid.uuid4().hex[:8]}"
     if temp_dir.exists():
         shutil.rmtree(temp_dir)
     temp_dir.mkdir(parents=True, exist_ok=True)
+    created_release_dir = False
+    activated = False
     try:
         files: dict[str, Any] = {}
         for name, payload in sorted(payloads.items()):
@@ -391,60 +507,111 @@ def publish_release(request: PublishRequest) -> PublishResult:
                 "bytes": (temp_dir / filename).stat().st_size,
                 "review_status": (payload.get("dataset") or {}).get("review_status"),
             }
-        previous = _current_release_dir(out_root)
-        diff: dict[str, Any] = {}
-        changed = False
-        if previous is not None:
-            diff = diff_snapshots(previous, temp_dir)
-            changed = bool(diff.get("changed"))
-            if changed and not request.allow_content_change:
-                raise PublishError(
-                    "待发布内容与当前已发布版本不同；默认不覆盖已发布数据。"
-                    "确认要换版请加 --allow-content-change 并写明 --reason。"
-                    "差异：" + json.dumps(diff, ensure_ascii=False)
+        # 先在锁外做一次预检，兼容在 _current_release_dir/diff_snapshots 上设屏障的并发测试；
+        # 真正落盘 release.json 与切换 current 必须在排他锁内复核当前指针，防止交错覆盖。
+        observed_previous = _current_release_dir(out_root)
+        diff, changed = _check_content_change(
+            observed_previous,
+            temp_dir,
+            allow_content_change=request.allow_content_change,
+            reason=reason,
+        )
+        with _publish_lock(out_root):
+            previous = _current_release_dir(out_root)
+            if previous != observed_previous:
+                diff, changed = _check_content_change(
+                    previous,
+                    temp_dir,
+                    allow_content_change=request.allow_content_change,
+                    reason=reason,
                 )
-        release = {
-            "schema_version": RELEASE_SCHEMA_VERSION,
-            "release_id": release_id,
-            "snapshot_id": snapshot_id,
-            "dataset_kind": manifest.get("dataset_kind"),
-            "converter_version": manifest.get("converter_version"),
-            "business_fingerprint": manifest.get("business_fingerprint"),
-            "release_fingerprint": release_fingerprint,
-            "review_status": review_tag,
-            "review": review.as_dict() if review else None,
-            "published_at": utc_now(),
-            "source_snapshot": snapshot_id,
-            "files": files,
-            "content_changed": changed,
-            "content_diff": diff,
-            "reason": visible_text(request.reason),
-            "previous_release": previous.name if previous is not None else None,
-        }
-        write_json_atomic(temp_dir / "release.json", release)
-        write_json_atomic(temp_dir / "report.json", report)
-        if release_dir.exists():
-            shutil.rmtree(temp_dir)
-            release = read_json(release_dir / "release.json")
-        else:
-            try:
-                os.replace(temp_dir, release_dir)
-            except OSError:
-                # 并发发布同一 release：谁先到谁生效，另一方读现成的，不抛裸 OSError。
-                shutil.rmtree(temp_dir, ignore_errors=True)
-                if not release_dir.is_dir():
-                    raise PublishError(
-                        f"发布目录落盘失败，且目标不存在：{release_dir.name}"
+            while True:
+                after_diff_previous = _current_release_dir(out_root)
+                if after_diff_previous == previous:
+                    break
+                previous = after_diff_previous
+                diff, changed = _check_content_change(
+                    previous,
+                    temp_dir,
+                    allow_content_change=request.allow_content_change,
+                    reason=reason,
+                )
+            previous_release_id = previous.name if previous is not None else None
+            if previous_release_id == release_id and release_dir.is_dir():
+                existing_meta = read_json(release_dir / "release.json")
+                previous_release_id = existing_meta.get("previous_release")
+            release = {
+                "schema_version": RELEASE_SCHEMA_VERSION,
+                "release_id": release_id,
+                "snapshot_id": snapshot_id,
+                "dataset_kind": manifest.get("dataset_kind"),
+                "converter_version": manifest.get("converter_version"),
+                "business_fingerprint": manifest.get("business_fingerprint"),
+                "release_fingerprint": release_fingerprint,
+                "review_status": review_tag,
+                "review": review.as_dict() if review else None,
+                "published_at": utc_now(),
+                "source_snapshot": snapshot_id,
+                "files": files,
+                "content_changed": changed,
+                "content_diff": diff,
+                "reason": reason,
+                "previous_release": previous_release_id,
+            }
+            write_json_atomic(temp_dir / "release.json", release)
+            write_json_atomic(temp_dir / "report.json", report)
+            if release_dir.exists():
+                shutil.rmtree(temp_dir)
+                existing_release = read_json(release_dir / "release.json")
+                if (
+                    existing_release.get("previous_release") != previous_release_id
+                    or existing_release.get("content_changed") != changed
+                    or (reason and existing_release.get("reason") != reason)
+                ):
+                    write_json_atomic(release_dir / "release.json", release)
+                else:
+                    release = existing_release
+            else:
+                try:
+                    os.replace(temp_dir, release_dir)
+                    created_release_dir = True
+                except OSError:
+                    # 并发发布同一 release：谁先到谁生效，另一方读现成的，不抛裸 OSError。
+                    shutil.rmtree(temp_dir, ignore_errors=True)
+                    if not release_dir.is_dir():
+                        raise PublishError(
+                            f"发布目录落盘失败，且目标不存在：{release_dir.name}"
+                        )
+                    release = read_json(release_dir / "release.json")
+            if request.activate:
+                latest_previous = _current_release_dir(out_root)
+                if latest_previous != previous and (
+                    latest_previous is None or latest_previous.name != release_id
+                ):
+                    try:
+                        diff, changed = _check_content_change(
+                            latest_previous,
+                            release_dir,
+                            allow_content_change=request.allow_content_change,
+                            reason=reason,
+                        )
+                    except Exception:
+                        if created_release_dir:
+                            shutil.rmtree(release_dir, ignore_errors=True)
+                        raise
+                    previous = latest_previous
+                    release["previous_release"] = (
+                        previous.name if previous is not None else None
                     )
-                release = read_json(release_dir / "release.json")
-    except Exception:
+                    release["content_changed"] = changed
+                    release["content_diff"] = diff
+                    write_json_atomic(release_dir / "release.json", release)
+                _activate(out_root, release_id)
+                activated = True
+    except BaseException:
         shutil.rmtree(temp_dir, ignore_errors=True)
         raise
 
-    activated = False
-    if request.activate:
-        _activate(out_root, release_id)
-        activated = True
     return PublishResult(
         release_id=release_id,
         release_dir=release_dir,
@@ -458,32 +625,81 @@ def publish_release(request: PublishRequest) -> PublishResult:
 _RELEASE_ID = __import__("re").compile(r"^rel-[A-Za-z0-9][A-Za-z0-9._-]{0,80}$")
 
 
+def _restore_symlink(link: Path, old_target: str | None) -> None:
+    if old_target is None:
+        if link.is_symlink() or link.exists():
+            link.unlink(missing_ok=True)
+        return
+    if link.is_symlink() and os.readlink(link) == old_target:
+        return
+    restore_temp = link.parent / f".restore-current-{os.getpid()}-{uuid.uuid4().hex[:8]}"
+    try:
+        if restore_temp.exists() or restore_temp.is_symlink():
+            restore_temp.unlink(missing_ok=True)
+        os.symlink(old_target, restore_temp)
+        os.replace(restore_temp, link)
+    except OSError:
+        restore_temp.unlink(missing_ok=True)
+        link.unlink(missing_ok=True)
+        os.symlink(old_target, link)
+
+
+def _restore_file_bytes(path: Path, old_bytes: bytes | None) -> None:
+    for leftover in path.parent.glob(f".{path.name}.tmp-*"):
+        leftover.unlink(missing_ok=True)
+    if old_bytes is None:
+        if path.is_file() or path.exists():
+            path.unlink(missing_ok=True)
+        return
+    if path.is_file() and path.read_bytes() == old_bytes:
+        return
+    restore_temp = path.with_name(f".{path.name}.restore-{os.getpid()}-{uuid.uuid4().hex[:8]}")
+    try:
+        restore_temp.write_bytes(old_bytes)
+        os.replace(restore_temp, path)
+    except OSError:
+        restore_temp.unlink(missing_ok=True)
+        path.write_bytes(old_bytes)
+
+
 def _activate(out_root: Path, release_id: str) -> None:
-    releases_dir = out_root / "published" / "releases"
-    if not _RELEASE_ID.match(release_id or ""):
-        raise PublishError(f"release_id 形态不合法：{release_id!r}（只接受 rel-... 形式）")
-    release_dir = releases_dir / release_id
-    if not release_dir.is_dir():
-        raise PublishError(f"release 不存在：{release_id}")
-    release = read_json(release_dir / "release.json")
-    pointer = out_root / "published" / "current.json"
-    write_json_atomic(
-        pointer,
-        {
+    with _publish_lock(out_root):
+        releases_dir = out_root / "published" / "releases"
+        if not _RELEASE_ID.match(release_id or ""):
+            raise PublishError(f"release_id 形态不合法：{release_id!r}（只接受 rel-... 形式）")
+        release_dir = releases_dir / release_id
+        if not release_dir.is_dir():
+            raise PublishError(f"release 不存在：{release_id}")
+        release = read_json(release_dir / "release.json")
+        published_dir = out_root / "published"
+        published_dir.mkdir(parents=True, exist_ok=True)
+        pointer = published_dir / "current.json"
+        link = published_dir / "current"
+        temp_link = published_dir / f".current-{os.getpid()}-{uuid.uuid4().hex[:8]}"
+
+        old_pointer_bytes = pointer.read_bytes() if pointer.is_file() else None
+        old_link_target = os.readlink(link) if link.is_symlink() else None
+        pointer_payload = {
             "release_id": release_id,
             "release_fingerprint": release.get("release_fingerprint"),
             "business_fingerprint": release.get("business_fingerprint"),
             "review_status": release.get("review_status"),
             "activated_at": utc_now(),
-        },
-    )
-    # 稳定路径：current → 当前 release 目录；原子替换软链，读方不会拿到半个目录。
-    link = out_root / "published" / "current"
-    temp_link = out_root / "published" / f".current-{os.getpid()}"
-    if temp_link.exists() or temp_link.is_symlink():
-        temp_link.unlink()
-    os.symlink(os.path.join("releases", release_id), temp_link)
-    os.replace(temp_link, link)
+        }
+        try:
+            # 先原子切换 current 软链，再原子写 current.json；任一步失败均回滚两端，
+            # 防止中断后出现 current.json 与 current 软链指向不同版本。
+            if temp_link.exists() or temp_link.is_symlink():
+                temp_link.unlink()
+            os.symlink(os.path.join("releases", release_id), temp_link)
+            os.replace(temp_link, link)
+            write_json_atomic(pointer, pointer_payload)
+        except BaseException:
+            if temp_link.exists() or temp_link.is_symlink():
+                temp_link.unlink(missing_ok=True)
+            _restore_symlink(link, old_link_target)
+            _restore_file_bytes(pointer, old_pointer_bytes)
+            raise
 
 
 def activate_release(out_root: str | Path, release_id: str) -> dict[str, Any]:
@@ -495,13 +711,11 @@ def activate_release(out_root: str | Path, release_id: str) -> dict[str, Any]:
 
 
 def list_releases(out_root: str | Path) -> list[dict[str, Any]]:
-    releases_dir = Path(out_root) / "published" / "releases"
+    root = Path(out_root)
+    releases_dir = root / "published" / "releases"
     if not releases_dir.is_dir():
         return []
-    current = None
-    pointer = Path(out_root) / "published" / "current.json"
-    if pointer.is_file():
-        current = read_json(pointer).get("release_id")
+    current = _active_release_id(root)
     items: list[dict[str, Any]] = []
     for entry in sorted(releases_dir.iterdir()):
         if not entry.is_dir() or entry.name.startswith("."):
@@ -529,10 +743,9 @@ def dataset_paths(out_root: str | Path, *, release_id: str | None = None) -> dic
 
     root = Path(out_root)
     if release_id is None:
-        pointer = root / "published" / "current.json"
-        if not pointer.is_file():
+        release_id = _active_release_id(root)
+        if not release_id:
             raise PublishError("还没有发布任何 release：先 publish")
-        release_id = read_json(pointer)["release_id"]
     release_dir = root / "published" / "releases" / release_id
     release = read_json(release_dir / "release.json")
     return {

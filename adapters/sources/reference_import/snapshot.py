@@ -753,14 +753,18 @@ def build_snapshot(
     if verify_hook is not None:
         verification = _run_verification(verify_hook, snapshot_dir)
         report["verification"] = dict(verification)
+        if not verification.get("all_passed", False):
+            if int(exit_code) == int(ExitCode.SUCCESS):
+                exit_code = ExitCode.PARTIAL
+            report["exit_code"] = int(exit_code)
+            report["status"] = {
+                int(ExitCode.SUCCESS): "success",
+                int(ExitCode.PARTIAL): "partial",
+                int(ExitCode.FAILED): "failed",
+            }[int(exit_code)]
         write_json_atomic(snapshot_dir / "report.json", report)
         _write_report_markdown(snapshot_dir / "report.md", report)
         write_json_atomic(out_root / "verification" / f"{snapshot_id}.json", dict(verification))
-        if not verification.get("all_passed", False):
-            report["status"] = "partial"
-            if int(exit_code) == 0:
-                exit_code = ExitCode.PARTIAL
-                report["exit_code"] = int(exit_code)
     write_json_atomic(
         out_root / "runs" / f"{snapshot_id}-{utc_now().replace(':', '')}.json", report
     )
