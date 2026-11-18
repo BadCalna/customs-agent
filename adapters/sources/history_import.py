@@ -1119,6 +1119,12 @@ def _provenance_updates(
     更新溯源位置，不改变业务身份。
     """
 
+    # 校验结论、问题码、身份锚点和来源坐标都属于被校验的那份内容。
+    # changed/kept_existing 保留旧事实时，不能把新输入的“干净”标记或位置
+    # 拼到旧记录上；显式替换才允许整条采用新内容与新结论。
+    # 内容相同时仍允许重验标记及补图更新，兼容重复导入与图片消失处理。
+    if _business_fingerprint(current) != _business_fingerprint(payload):
+        return {}
     old_attributes = current.get("attributes") or {}
     new_attributes = payload.get("attributes") or {}
     updates: dict[str, str] = {}
@@ -1153,11 +1159,52 @@ def _provenance_updates(
             )
         if (new_value or clearable) and new_value != old_value:
             updates[key] = new_value
+    # 合并阶段产生的身份不确定性不是解析器可解除的结论。
+    # 同内容再次输入不能把旧的 identity_uncertain 自动洗成干净。
+    previous_review_codes = set(filter(None, str(old_attributes.get("review_issue_codes", "")).split(",")))
+    if "identity_uncertain" in previous_review_codes:
+        updates["needs_review"] = "true"
+        for key in ("import_issue_codes", "review_issue_codes"):
+            codes = set(filter(None, str(new_attributes.get(key, "")).split(",")))
+            codes.add("identity_uncertain")
+            updates[key] = ",".join(sorted(codes))
     # 旧快照在此增补稳定锚点，避免下一次变更退回旧的序号猜配。
     for key in ("change_anchor", "change_key", "business_key"):
         if new_attributes.get(key) and new_attributes.get(key) != old_attributes.get(key):
             updates[key] = str(new_attributes[key])
     return updates
+
+
+def _enforce_stored_hs_review(records: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
+    """校验最终实际保留的 HS，恢复受旧版清标缺陷影响的汇总记录。
+
+    不改编码、身份或业务字段；只允许把不合 ASCII 格式的记录加回待核，
+    不自动解除任何已有待核。修复逐条进入报告，旧 generation 保持不变。
+    """
+    repairs: list[dict[str, Any]] = []
+    for record in records:
+        attributes = record.get("attributes") or {}
+        if attributes.get("source_format") != FORMAT_CONSOLIDATED:
+            continue
+        hs = str(record.get("historical_hs", ""))
+        if re.fullmatch(r"[0-9]{10}", hs):
+            continue
+        code = "hs_non_ascii_digits" if any(char.isdecimal() and char not in "0123456789" for char in hs) else "hs_length_not_10"
+        before = {key: attributes.get(key, "") for key in (
+            "needs_review", "import_issue_codes", "review_issue_codes")}
+        attributes["needs_review"] = "true"
+        for key in ("import_issue_codes", "review_issue_codes"):
+            codes = set(filter(None, str(attributes.get(key, "")).split(",")))
+            codes.add(code)
+            attributes[key] = ",".join(sorted(codes))
+        record["attributes"] = attributes
+        if before != {key: attributes.get(key, "") for key in before}:
+            repairs.append({
+                "record_id": record.get("record_id", ""), "code": code,
+                "action": "restored_needs_review", "historical_hs": hs,
+                "message": "按最终保留的HS恢复待核；未替换旧业务内容，默认检索排除",
+            })
+    return repairs
 
 
 def _with_provenance(
@@ -2467,6 +2514,7 @@ def _import_history_templates(request: ImportRequest, staging: Path) -> ImportOu
                 for item in duplicates
             )
         }
+    review_state_repairs = _enforce_stored_hs_review(final_records)
     written_ids = {str(payload.get("record_id", "")) for payload in writes}
     for file_report in file_reports:
         file_report["importable_count"] = file_report.get("imported_count", 0)
@@ -2583,6 +2631,7 @@ def _import_history_templates(request: ImportRequest, staging: Path) -> ImportOu
             "records_ignored": records_ignored,
             "records_rejected": records_rejected,
             "records_needs_review": records_needs_review,
+            "records_review_state_repaired": len(review_state_repairs),
             "records_conflicts": records_conflicts,
             "records_business_key_variants": business_key_variants,
             "records_missing_from_source": len(missing),
@@ -2601,6 +2650,7 @@ def _import_history_templates(request: ImportRequest, staging: Path) -> ImportOu
             "image_status": image_totals,
             "image_copy_failures": len(image_copy_failures),
         },
+        "review_state_repairs": review_state_repairs,
         "duplicates": duplicates,
         "duplicate_within_batch": duplicate_in_batch,
         "conflicts": conflicts,
@@ -3047,6 +3097,7 @@ def render_markdown_report(report: Mapping[str, Any]) -> str:
                     ("拒绝/跳过", totals.get("records_rejected", 0)),
                     ("忽略行（空/合计/说明/重复表头）", totals.get("records_ignored", 0)),
                     ("待核记录", totals.get("records_needs_review", 0)),
+                    ("按保留HS恢复待核", totals.get("records_review_state_repaired", 0)),
                     ("批内重复", totals.get("records_duplicate_within_batch", 0)),
                     ("采集痕迹更新", totals.get("records_provenance_updated", 0)),
                     ("输出总记录", totals.get("records_total_in_output", 0)),

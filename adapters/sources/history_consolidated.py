@@ -1209,11 +1209,12 @@ class ConsolidatedParser:
                     field_name="hs",
                 )
             )
-        if hs and not re.fullmatch(r"\d{10}", hs):
+        if hs and not re.fullmatch(r"[0-9]{10}", hs):
+            code = "hs_non_ascii_digits" if any(char.isdecimal() and char not in "0123456789" for char in hs) else "hs_length_not_10"
             row.issues.append(
                 _issue(
-                    "hs_length_not_10",
-                    f"HS 编码原文为 {hs!r}，不是 10 位数字；按原文保留，不补零/不截断，标待核",
+                    code,
+                    f"HS 编码原文为 {hs!r}，不符合 10 位 ASCII 数字格式；按原文保留，不补零/不截断/不猜转换，标待核",
                     severity="warning",
                     sheet=row.sheet,
                     row=row.row,
@@ -1924,7 +1925,7 @@ class ConsolidatedParser:
                 "non_10_digit_rows": [
                     {"row": record.row, "hs": record.values.get("hs", "")}
                     for record in records
-                    if record.values.get("hs") and not re.fullmatch(r"\d{10}", record.values["hs"])
+                    if record.values.get("hs") and not re.fullmatch(r"[0-9]{10}", record.values["hs"])
                 ],
                 "text_cells": sum(
                     1
