@@ -4,7 +4,7 @@ from __future__ import annotations
 import io
 import json
 import os
-from contextlib import redirect_stderr
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
@@ -97,7 +97,7 @@ class RollbackResilienceTest(P23TestCase):
         stderr = io.StringIO()
         stdout = io.StringIO()
         from adapters.sources.reference_import.cli import main
-        with redirect_stderr(stderr), __import__("contextlib").redirect_stdout(stdout):
+        with redirect_stderr(stderr), redirect_stdout(stdout):
             code = main(["activate", "--out-root", str(self.out), "--release-id", self.a.release_id])
         self.assertEqual(code, 0)
         self.assertIn("差异警告", stderr.getvalue())
@@ -248,3 +248,202 @@ class RollbackResilienceTest(P23TestCase):
         self.assertEqual({p.name: p.read_bytes() for p in self.b.release_dir.iterdir()
                           if p.is_file()}, before_b)
         self.assertTrue(result.get("activation_event_id"))
+
+    def test_publish_rejects_when_previous_data_replaced_with_candidate_files(self):
+        """P2：前驱 B 的数据文件被换成 A 的内容时，普通 publish 不得跳过换版门禁并写入 computed/false。"""
+        a_batch = build_publish_batch(self.root / "A_repub", label="A")
+        a_built = build_snapshot(SnapshotRequest(a_batch.manifest, self.out))
+        write_verification(self.out, a_built.snapshot_id)
+        for fname in ("tariff.json", "elements.json", "regulatory_codes.json"):
+            (self.b.release_dir / fname).write_bytes((self.a.release_dir / fname).read_bytes())
+        before_events = sorted(p.name for p in (self.out / "published" / "activations").glob("*.json"))
+
+        for allow, reason in ((False, ""), (True, "试图跳过前驱损坏检查")):
+            with self.subTest(allow=allow):
+                with self.assertRaises(PublishError) as caught:
+                    publish_release(PublishRequest(
+                        a_built.snapshot_dir,
+                        self.out,
+                        allow_content_change=allow,
+                        reason=reason,
+                    ))
+                message = str(caught.exception)
+                self.assertIn("activate", message)
+                self.assertIn(self.b.release_id, message)
+                self.assertEqual(self.current_id(), self.b.release_id)
+                self.assertEqual(
+                    sorted(p.name for p in (self.out / "published" / "activations").glob("*.json")),
+                    before_events,
+                )
+
+        recovered = activate_release(self.out, self.a.release_id)
+        self.assertEqual(recovered["release_id"], self.a.release_id)
+        self.assertEqual(self.current_id(), self.a.release_id)
+        event = next(e for e in self.events() if e["event_id"] == recovered["activation_event_id"])
+        self.assertEqual(event["content_diff_status"], "unavailable")
+        self.assertIsNone(event["content_changed"])
+
+    def test_publish_rejects_when_previous_has_undeclared_dataset_file(self):
+        """P2：前驱 release 目录出现未声明的数据文件时，普通 publish 必须拒绝并提示 activate 恢复。"""
+        (self.b.release_dir / "tax_rates.json").write_text(
+            json.dumps({"dataset": {"synthetic": False, "review_status": "unreviewed"}, "records": []}),
+            encoding="utf-8",
+        )
+        c_batch = build_publish_batch(self.root / "C_undeclared", label="C", name_suffix="（新版本 C）")
+        c_built = build_snapshot(SnapshotRequest(c_batch.manifest, self.out))
+        write_verification(self.out, c_built.snapshot_id)
+        before_releases = sorted(p.name for p in (self.out / "published" / "releases").iterdir())
+        with self.assertRaises(PublishError) as caught:
+            publish_release(PublishRequest(c_built.snapshot_dir, self.out))
+        self.assertIn("activate", str(caught.exception))
+        self.assertIn("未声明的数据文件", str(caught.exception))
+        self.assertEqual(self.current_id(), self.b.release_id)
+        self.assertEqual(
+            sorted(p.name for p in (self.out / "published" / "releases").iterdir()),
+            before_releases,
+        )
+
+    def test_publish_revalidates_previous_inside_publish_lock(self):
+        """P2：锁外预检通过后、进入发布锁前前驱被篡改时，锁内重验仍须拦截并禁止落盘。"""
+        c_batch = build_publish_batch(self.root / "C_toctou", label="C", name_suffix="（锁内重验）")
+        c_built = build_snapshot(SnapshotRequest(c_batch.manifest, self.out))
+        write_verification(self.out, c_built.snapshot_id)
+        before_releases = sorted(p.name for p in (self.out / "published" / "releases").iterdir())
+        before_events = sorted(p.name for p in (self.out / "published" / "activations").glob("*.json"))
+
+        orig_lock = publishing._publish_lock
+        tampered = {"done": False}
+
+        def corrupt_before_lock(out_root):
+            if not tampered["done"]:
+                tampered["done"] = True
+                path = self.b.release_dir / "tariff.json"
+                path.write_text(json.dumps({"codes": []}), encoding="utf-8")
+            return orig_lock(out_root)
+
+        with patch.object(publishing, "_publish_lock", side_effect=corrupt_before_lock):
+            with self.assertRaises(PublishError) as caught:
+                publish_release(PublishRequest(
+                    c_built.snapshot_dir,
+                    self.out,
+                    allow_content_change=True,
+                    reason="锁前完好、入锁前前驱被篡改",
+                ))
+        self.assertTrue(tampered["done"])
+        self.assertIn("activate", str(caught.exception))
+        self.assertEqual(self.current_id(), self.b.release_id)
+        self.assertEqual(
+            sorted(p.name for p in (self.out / "published" / "releases").iterdir()),
+            before_releases,
+        )
+        self.assertEqual(
+            sorted(p.name for p in (self.out / "published" / "activations").glob("*.json")),
+            before_events,
+        )
+
+
+class NoActivateRetryTest(P23TestCase):
+    """P3：首次 --no-activate 成功后，current 按设计为空；原样重试应校验并复用既有 release。"""
+
+    def setUp(self):
+        super().setUp()
+        self.out = self.root / "out"
+        self.batch_a = build_publish_batch(self.root / "A", label="A")
+        self.snap_a = build_snapshot(SnapshotRequest(self.batch_a.manifest, self.out))
+        write_verification(self.out, self.snap_a.snapshot_id)
+
+    def test_first_no_activate_cli_retry_validates_and_reuses_release(self):
+        from adapters.sources.reference_import.cli import main
+
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        cmd = [
+            "publish",
+            "--snapshot", str(self.snap_a.snapshot_dir),
+            "--out-root", str(self.out),
+            "--no-activate",
+        ]
+        with redirect_stdout(stdout), redirect_stderr(stderr):
+            first_code = main(cmd)
+        self.assertEqual(first_code, 0, stderr.getvalue())
+        releases = list_releases(self.out)
+        self.assertEqual(len(releases), 1)
+        self.assertFalse(releases[0]["active"])
+        release_dir = self.out / "published" / "releases" / releases[0]["release_id"]
+        before_bytes = {p.name: p.read_bytes() for p in release_dir.iterdir() if p.is_file()}
+        self.assertFalse((self.out / "published" / "current").exists())
+        self.assertFalse((self.out / "published" / "current.json").exists())
+
+        stdout2 = io.StringIO()
+        stderr2 = io.StringIO()
+        with redirect_stdout(stdout2), redirect_stderr(stderr2):
+            retry_code = main(cmd)
+        self.assertEqual(retry_code, 0, stderr2.getvalue())
+        self.assertEqual(
+            {p.name: p.read_bytes() for p in release_dir.iterdir() if p.is_file()},
+            before_bytes,
+            "重试复用既有 release 时不得改写已有文件",
+        )
+        self.assertFalse((self.out / "published" / "current").exists())
+        self.assertFalse((self.out / "published" / "current.json").exists())
+        self.assertEqual(len(list_releases(self.out)), 1)
+
+        # 继续以 --no-activate 准备 B 后重试 A，随后正式激活 A 仍正常记录 no_previous。
+        batch_b = build_publish_batch(self.root / "B", label="B", name_suffix="（候选 B）")
+        snap_b = build_snapshot(SnapshotRequest(batch_b.manifest, self.out))
+        write_verification(self.out, snap_b.snapshot_id)
+        second = publish_release(PublishRequest(snap_b.snapshot_dir, self.out, activate=False))
+        self.assertFalse(second.activated)
+        retried_a = publish_release(PublishRequest(self.snap_a.snapshot_dir, self.out, activate=False))
+        self.assertEqual(retried_a.release_id, releases[0]["release_id"])
+        self.assertFalse(retried_a.activated)
+
+        activated_a = publish_release(PublishRequest(self.snap_a.snapshot_dir, self.out, activate=True))
+        self.assertTrue(activated_a.activated)
+        self.assertEqual(activated_a.activation["content_diff_status"], "no_previous")
+        self.assertEqual(publishing._active_release_id(self.out), releases[0]["release_id"])
+
+    def test_no_activate_retry_rejects_corrupted_existing_release(self):
+        first = publish_release(PublishRequest(self.snap_a.snapshot_dir, self.out, activate=False))
+        path = first.release_dir / "tariff.json"
+        raw = path.read_bytes()
+        path.write_bytes(raw.replace("合成".encode(), "篡改".encode(), 1))
+        self.assertEqual(path.stat().st_size, len(raw))
+        with self.assertRaises(PublishError) as caught:
+            publish_release(PublishRequest(self.snap_a.snapshot_dir, self.out, activate=False))
+        self.assertIn("SHA-256", str(caught.exception))
+        self.assertFalse((self.out / "published" / "current").exists())
+
+    def test_no_activate_still_rejects_after_activation_or_incomplete_activation(self):
+        # 场景 1：仅留未确认的激活意图（强杀中断），不得当作从未激活。
+        first = publish_release(PublishRequest(self.snap_a.snapshot_dir, self.out, activate=False))
+        activations_dir = self.out / "published" / "activations"
+        activations_dir.mkdir(parents=True, exist_ok=True)
+        (activations_dir / "activation-crash.json").write_text(
+            json.dumps({"event_id": "activation-crash", "release_id": first.release_id}),
+            encoding="utf-8",
+        )
+        with self.assertRaises(PublishError) as caught:
+            publish_release(PublishRequest(self.snap_a.snapshot_dir, self.out, activate=False))
+        self.assertIn("activate", str(caught.exception))
+
+    def test_no_activate_still_rejects_when_current_and_current_json_both_lost(self):
+        published = publish_release(PublishRequest(self.snap_a.snapshot_dir, self.out, activate=True))
+        (self.out / "published" / "current").unlink()
+        (self.out / "published" / "current.json").unlink()
+        self.assertTrue((published.release_dir / ".current.json").is_file())
+        with self.assertRaises(PublishError) as caught:
+            publish_release(PublishRequest(self.snap_a.snapshot_dir, self.out, activate=False))
+        self.assertIn("activate", str(caught.exception))
+
+    def test_retry_allowed_when_first_activation_cleanly_rolled_back_as_failed(self):
+        with patch.object(publishing.os, "symlink", side_effect=OSError("模拟首次激活建链失败")):
+            with self.assertRaises(PublishError):
+                publish_release(PublishRequest(self.snap_a.snapshot_dir, self.out, activate=True))
+        self.assertFalse((self.out / "published" / "current").exists())
+        self.assertFalse((self.out / "published" / "current.json").exists())
+        retried = publish_release(PublishRequest(self.snap_a.snapshot_dir, self.out, activate=False))
+        self.assertFalse(retried.activated)
+        activated = publish_release(PublishRequest(self.snap_a.snapshot_dir, self.out, activate=True))
+        self.assertTrue(activated.activated)
+        self.assertEqual(publishing._active_release_id(self.out), activated.release_id)

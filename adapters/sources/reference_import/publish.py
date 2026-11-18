@@ -478,6 +478,12 @@ def _validate_activation_target(release_dir: Path) -> dict[str, Any]:
         ):
             raise PublishError(f"发布文件复核人与时间不匹配：{name}")
         output_fingerprints[name] = fingerprint(payload)
+    declared_files = {info["file"] for info in files.values()}
+    for dataset in DatasetId:
+        if dataset.filename not in declared_files:
+            extra = release_dir / dataset.filename
+            if extra.exists() or extra.is_symlink():
+                raise PublishError(f"发布目录存在未声明的数据文件：{dataset.value}")
     calculated = fingerprint({
         "snapshot_business_fingerprint": release["business_fingerprint"],
         "converter_version": release.get("converter_version"),
@@ -487,6 +493,65 @@ def _validate_activation_target(release_dir: Path) -> dict[str, Any]:
     if calculated != release["release_fingerprint"]:
         raise PublishError("发布元数据与内容的 release_fingerprint 不匹配")
     return release
+
+
+def _activation_result_requires_repair(result_file: Path) -> bool:
+    """只有明确落盘为 failed 的激活结果文件才不视作历史激活。"""
+
+    if result_file.is_symlink() or not result_file.is_file():
+        return True
+    try:
+        result_payload = read_json(result_file)
+    except (OSError, ValueError, UnicodeError):
+        return True
+    return not isinstance(result_payload, Mapping) or result_payload.get("status") != "failed"
+
+
+def _has_prior_activation(out_root: Path) -> bool:
+    """判断发布目录是否曾发生过激活（或存在遗留/未确认的激活指针）。
+
+    若仅以 ``--no-activate`` 生成过 release 且从未激活过任何版本，
+    ``current`` 按设计为空，不应把这种情况误判成“指针丢失或损坏”。
+    """
+
+    published_dir = out_root / "published"
+    pointer = published_dir / "current.json"
+    if pointer.exists() or pointer.is_symlink():
+        return True
+
+    releases_dir = published_dir / "releases"
+    if releases_dir.is_dir():
+        for entry in releases_dir.iterdir():
+            if not entry.is_dir() or entry.name.startswith("."):
+                continue
+            release_pointer = entry / ".current.json"
+            if release_pointer.exists() or release_pointer.is_symlink():
+                return True
+
+    activations_dir = published_dir / "activations"
+    results_dir = published_dir / "activation-results"
+    for dir_path in (activations_dir, results_dir):
+        if (dir_path.exists() or dir_path.is_symlink()) and not dir_path.is_dir():
+            return True
+
+    if activations_dir.is_dir():
+        for event_file in sorted(activations_dir.iterdir()):
+            if event_file.name.startswith(".") or event_file.suffix != ".json":
+                continue
+            if event_file.is_symlink() or not event_file.is_file():
+                return True
+            if _activation_result_requires_repair(results_dir / event_file.name):
+                # 写过激活意图但缺少结果文件（如强杀中断）或非 failed，不能视为从未激活。
+                return True
+
+    if results_dir.is_dir():
+        for result_file in sorted(results_dir.iterdir()):
+            if result_file.name.startswith(".") or result_file.suffix != ".json":
+                continue
+            if _activation_result_requires_repair(result_file):
+                return True
+
+    return False
 
 
 def _active_release_id(out_root: Path) -> str | None:
@@ -508,12 +573,7 @@ def _active_release_id(out_root: Path) -> str | None:
                 )
             if pointer.is_symlink() and os.readlink(pointer) != os.path.join("current", ".current.json"):
                 raise PublishError("current.json 的派生软链目标不合法；可用 activate 修复")
-            releases_dir = out_root / "published" / "releases"
-            has_releases = releases_dir.is_dir() and any(
-                entry.is_dir() and not entry.name.startswith(".")
-                for entry in releases_dir.iterdir()
-            )
-            if pointer.is_symlink() or has_releases:
+            if pointer.is_symlink() or _has_prior_activation(out_root):
                 import time
 
                 for _ in range(5):
@@ -565,37 +625,82 @@ def _current_release_dir(out_root: Path) -> Path | None:
 
 
 def _previous_for_publish(out_root: Path) -> Path | None:
-    """发布入口的前驱：没有当前版本时，只有“从未发布”才允许继续。
+    """发布入口的前驱：没有当前版本时，只有“从未激活过任何版本”才允许无前驱。
 
-    若已存在 release 目录但 current 丢失/损坏，不能把它当成首次发布，
-    否则内容不同的新版本会绕过换版门禁并以“无前驱、内容未变”记审计。
+    若已激活过版本但 ``current`` 丢失/损坏，不能当成首次发布，
+    否则内容不同的新版本会绕过换版门禁并以“无前驱、内容未变”记审计；
+    若仅以 ``--no-activate`` 生成过 release，``current`` 按设计为空，应允许继续发布/重试。
     """
 
-    previous = _current_release_dir(out_root)
+    try:
+        previous = _current_release_dir(out_root)
+    except PublishError as exc:
+        if "activate" in str(exc):
+            raise
+        raise PublishError(
+            f"当前已发布版本指针或元数据损坏：{exc}；请先运行 activate 指定完好版本恢复，再发布新版本"
+        ) from exc
     if previous is not None:
         return previous
-    releases_dir = out_root / "published" / "releases"
-    has_releases = releases_dir.is_dir() and any(
-        entry.is_dir() and not entry.name.startswith(".") for entry in releases_dir.iterdir()
-    )
-    if has_releases:
+    try:
+        prior_activation = _has_prior_activation(out_root)
+    except OSError as exc:
+        raise PublishError("读取发布指针与激活记录失败") from exc
+    if prior_activation:
         raise PublishError(
-            "当前版本指针丢失或损坏（已有发布版本，但 current 无法解析）；"
+            "当前版本指针丢失或损坏（已有激活记录，但 current 无法解析）；"
             "请先运行 activate 指定版本修复，再发布新版本"
         )
     return None
 
 
-def _check_content_change(
+def _validate_previous_for_publish(previous: Path) -> None:
+    """在计算差异前校验当前活动版本完整性；损坏时拒绝普通 publish 并提示先用 activate 恢复。"""
+
+    try:
+        _validate_activation_target(previous)
+    except PublishError as exc:
+        raise PublishError(
+            f"当前已发布版本（{previous.name}）损坏或与发布清单不一致：{exc}；"
+            "请先运行 activate 切到完好版本恢复，再发布新版本"
+        ) from exc
+
+
+def _validate_existing_release_match(
+    release_dir: Path,
+    release_id: str,
+    release_fingerprint: str,
+    files: Mapping[str, Mapping[str, Any]],
+) -> dict[str, Any]:
+    """校验既有 release 目录完整性并确认与本次候选发布物完全一致，再允许复用。"""
+
+    if release_dir.is_symlink() or not release_dir.is_dir():
+        raise PublishError(f"已存在 release 路径不是目录：{release_id}")
+    release = _validate_activation_target(release_dir)
+    if release.get("release_fingerprint") != release_fingerprint:
+        raise PublishError(f"已存在 release 的发布指纹不匹配：{release_id}")
+    if set((release.get("files") or {}).keys()) != set(files.keys()):
+        raise PublishError(f"已存在 release 的数据类别清单不匹配：{release_id}")
+    for name, info in files.items():
+        path = release_dir / info["file"]
+        if not path.is_file() or sha256_file(path) != info["sha256"]:
+            raise PublishError(f"已存在 release 的数据文件损坏：{name}")
+    return release
+
+
+def _validate_and_diff_previous(
     previous: Path | None,
     candidate_dir: Path,
     *,
     allow_content_change: bool,
     reason: str,
 ) -> tuple[dict[str, Any], bool]:
+    """校验前驱发布物完整性后计算差异，防止基于损坏前驱跳过换版门禁。"""
+
     diff: dict[str, Any] = {}
     changed = False
     if previous is not None:
+        _validate_previous_for_publish(previous)
         diff = diff_snapshots(previous, candidate_dir)
         changed = bool(diff.get("changed"))
         if changed:
@@ -611,6 +716,21 @@ def _check_content_change(
                     "但未填写换版理由（--reason 不能为空）。"
                 )
     return diff, changed
+
+
+def _check_content_change(
+    previous: Path | None,
+    candidate_dir: Path,
+    *,
+    allow_content_change: bool,
+    reason: str,
+) -> tuple[dict[str, Any], bool]:
+    return _validate_and_diff_previous(
+        previous,
+        candidate_dir,
+        allow_content_change=allow_content_change,
+        reason=reason,
+    )
 
 
 def publish_release(request: PublishRequest) -> PublishResult:
@@ -702,24 +822,27 @@ def publish_release(request: PublishRequest) -> PublishResult:
         )
         with _publish_lock(out_root):
             previous = _previous_for_publish(out_root)
-            if previous != observed_previous:
-                diff, changed = _check_content_change(
-                    previous,
-                    temp_dir,
-                    allow_content_change=request.allow_content_change,
-                    reason=reason,
-                )
             while True:
+                if previous != observed_previous:
+                    diff, changed = _check_content_change(
+                        previous,
+                        temp_dir,
+                        allow_content_change=request.allow_content_change,
+                        reason=reason,
+                    )
+                    observed_previous = previous
+                elif previous is not None:
+                    # 即使前驱路径未变，锁内仍须重验前驱完整性并重算差异，消除锁前到锁内的 TOCTOU 窗口。
+                    diff, changed = _validate_and_diff_previous(
+                        previous,
+                        temp_dir,
+                        allow_content_change=request.allow_content_change,
+                        reason=reason,
+                    )
                 after_diff_previous = _previous_for_publish(out_root)
                 if after_diff_previous == previous:
                     break
                 previous = after_diff_previous
-                diff, changed = _check_content_change(
-                    previous,
-                    temp_dir,
-                    allow_content_change=request.allow_content_change,
-                    reason=reason,
-                )
             previous_release_id = previous.name if previous is not None else None
             release = {
                 "schema_version": RELEASE_SCHEMA_VERSION,
@@ -741,15 +864,15 @@ def publish_release(request: PublishRequest) -> PublishResult:
             }
             write_json_atomic(temp_dir / "release.json", release)
             write_json_atomic(temp_dir / "report.json", report)
-            if release_dir.exists():
-                # 内容寻址的 release 表示第一次发布，绝不能把本次激活的审计写回去。
-                release = read_json(release_dir / "release.json")
-                if release.get("release_fingerprint") != release_fingerprint:
-                    raise PublishError(f"已存在 release 的发布指纹不匹配：{release_id}")
-                for name, info in files.items():
-                    path = release_dir / info["file"]
-                    if not path.is_file() or sha256_file(path) != info["sha256"]:
-                        raise PublishError(f"已存在 release 的数据文件损坏：{name}")
+            if release_dir.exists() or release_dir.is_symlink():
+                # 内容寻址的 release 保留首次发布审计，绝不能把本次激活的审计写回去；
+                # 复用前必须完整校验既有 release 的结构、指纹与全部数据文件，拒绝复用被篡改目录。
+                release = _validate_existing_release_match(
+                    release_dir,
+                    release_id,
+                    release_fingerprint,
+                    files,
+                )
                 shutil.rmtree(temp_dir)
             else:
                 try:
@@ -912,6 +1035,8 @@ def _activate(
                     content_changed = None
                     diff_status = "unavailable"
                     diff_error = f"{type(exc).__name__}: {exc}"
+        elif previous is None and not content_diff and content_changed is False:
+            diff_status = "no_previous"
         if content_changed is None and diff_status == "computed":
             content_changed = bool(content_diff.get("changed"))
         # 目标校验与差异计算之间可能被外部改动；切换前再核一次目标完整性，
