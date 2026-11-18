@@ -74,6 +74,11 @@ class SkillPrecheckTests(SimpleTestCase):
         self.assertEqual(adapter.model.calls, [])
         self.assertEqual(request["reference_packet"]["p14_status"], "not_queried")
         self.assertEqual(request["reference_packet"]["p14"], [])
+        self.assertEqual(request["reference_packet"]["catalog_recall"]["status"], "no_match")
+        self.assertNotIn("hsbianma.com", rules)
+        self.assertNotIn("references/", rules)
+        self.assertNotIn("读取`references`", rules)
+        self.assertIn("supplied reference_packet", rules)
 
     def test_explicit_skill_hash_changes_and_unknown_layout_fails_closed(self):
         skill = self.root / "custom-skill.md"
@@ -194,6 +199,52 @@ class SkillPrecheckTests(SimpleTestCase):
         self.assertEqual(material["records"][0]["sections"], [])
         self.assertTrue(material["records"][0]["omitted_sections"])
 
+    def long_material_adapter(self, text, *, budget=24000):
+        from adapters.sources.commentary_text import render_commentary_text
+        from tests.p16_real.test_reference_bundle import payloads
+        data = payloads(reviewed=True)
+        record = data["tariff_commentary"]["records"][0]
+        record["sections"][0]["text"] = text
+        all_text = render_commentary_text(record["sections"])
+        record.update(text_all=all_text, text_length=len(all_text), section_char_total=len(text),
+                      text_sha256=hashlib.sha256(all_text.encode()).hexdigest())
+        release, _ = release_fixture(self.root / str(len(text)), data=data, reviewed=True)
+        bundle = ReferenceBundle.load(ReferenceBundleConfig(release_dir=release, include_commentary=True))
+        return self.adapter(reference_bundle=bundle, commentary_source=CommentaryReferenceSource(
+            source=bundle.commentary_source, max_total_chars=budget))
+
+    def test_long_material_uses_total_budget_not_fact_limit(self):
+        text = "材" * 10001
+        adapter = self.long_material_adapter(text)
+        request = adapter.build_request(payload(), commentary_keys=["0101"], commentary_keyword="")
+        record = request["reference_packet"]["commentary"]["records"][0]
+        self.assertEqual(record["sections"][0]["text"], text)
+        self.assertTrue(record["complete"])
+        # Explicit larger CommentaryReferenceSource budget is respected too.
+        larger = self.long_material_adapter("材" * 25000, budget=30000)
+        request = larger.build_request(payload(), commentary_keys=["0101"], commentary_keyword="")
+        self.assertEqual(len(request["reference_packet"]["commentary"]["records"][0]["sections"][0]["text"]), 25000)
+        for field in ("name", "elements_text", "attributes"):
+            item = payload(**({"attributes": {"material": text}} if field == "attributes" else {field: text}))
+            with self.subTest(field=field), self.assertRaises(EngineTechnicalError):
+                adapter.build_request(item)
+
+    def test_over_budget_material_omitted_not_mislabeled_complete(self):
+        adapter = self.long_material_adapter("材" * 24001)
+        request = adapter.build_request(payload(), commentary_keys=["0101"], commentary_keyword="")
+        material = request["reference_packet"]["commentary"]
+        self.assertTrue(material["truncated"])
+        self.assertEqual(material["records"][0]["sections"], [])
+        self.assertFalse(material["records"][0]["complete"])
+        self.assertEqual(material["limits"]["text_characters_omitted"], 24001)
+
+    def test_long_material_sensitive_markers_checked_across_old_10k_boundary(self):
+        for suffix in ("password=NO-LEAK", "PRIVATE-TASK"):
+            adapter = self.long_material_adapter("材" * 9996 + suffix)
+            with self.subTest(suffix=suffix), self.assertRaisesRegex(EngineTechnicalError, "^预审参考输入装配失败$") as caught:
+                adapter.build_request(payload(), commentary_keys=["0101"], commentary_keyword="")
+            self.assertIsNone(caught.exception.__cause__)
+
     def test_commentary_no_hit_version_uncertainty_and_safe_reasons_survive(self):
         metadata = copy.deepcopy(self.bundle.source_metadata)
         metadata["tariff_commentary"]["version"] = "unmatched-snapshot"
@@ -278,8 +329,8 @@ class SkillPrecheckTests(SimpleTestCase):
         self.assertNotEqual(adapter.model.calls[0]["facts"]["attributes"]["material"], "MODEL-MUTATED")
 
     def test_history_business_identifiers_are_anonymous_and_reference_only(self):
-        record = HistoryRecord(record_id="BUSINESS-RECORD-42", historical_hs=HS,
-                               historical_name="UNIT TEST TEXT", material="steel", recorded_at="2026-11-17",
+        record = HistoryRecord(record_id="BUSINESS-RECORD-42", historical_hs="9900000000",
+                               historical_name="UNIT TEST TEXT", material="copper", recorded_at="2026-11-17",
                                outcome="approved", hs_version="2026", source={
                                    "document": "CONTRACT-BUSINESS-PRIVATE", "locator": "BUSINESS-ITEM-42"})
         store = Mock()
@@ -291,12 +342,28 @@ class SkillPrecheckTests(SimpleTestCase):
         for identifier in (record.record_id, record.source.document, record.source.locator):
             self.assertNotIn(identifier, data)
         packet = request["reference_packet"]
-        self.assertTrue(packet["history"]["records"])
-        self.assertTrue(packet["history"]["records"][0]["reference_only"])
-        entries = [e for e in packet["evidence_index"] if e["source_type"] == "history"]
-        self.assertEqual(entries[0]["dataset"]["review_status"], "unknown")
-        self.assertEqual(entries[0]["status"], "version_unverified")
-        self.assertFalse(entries[0]["classification_support"])
+        self.assertEqual(packet["history"]["status"], "deferred_until_after_independent_recommendation")
+        self.assertEqual(packet["history"]["records"], [])
+        self.assertFalse(any(e["source_type"] == "history" for e in packet["evidence_index"]))
+        model_complete = adapter.model.complete
+        def complete(request):
+            history.search.assert_not_called()
+            self.assertNotIn("historical_hs", json.dumps(request))
+            self.assertNotIn("9900000000", json.dumps(request))
+            return model_complete(request)
+        with patch.object(history, "search", wraps=history.search) as search, patch.object(adapter.model, "complete", side_effect=complete):
+            result = adapter.recommend(payload())
+            self.assertEqual(search.call_count, 1)
+        self.assertEqual(result.suggested_hs, HS)
+        self.assertEqual(len(adapter.model.calls), 1)
+        self.assertIn("HISTORY_CROSSCHECK_PENDING", self.codes(result))
+        self.assertTrue(any("不同或未定码" in gap.message for gap in result.gaps))
+        self.assertTrue(any("关键属性冲突：有" in gap.message and "material" in gap.message for gap in result.gaps))
+        entries = [e for e in result.evidence if e.source_type == "history"]
+        self.assertEqual(entries[0].status, EvidenceStatus.VERSION_UNVERIFIED)
+        self.assertTrue(entries[0].document.startswith("history-document:"))
+        for identifier in (record.record_id, record.source.document, record.source.locator):
+            self.assertNotIn(identifier, result.model_dump_json())
 
     def test_no_env_default_sources_network_model_or_database_in_dry_run(self):
         with patch("dotenv.load_dotenv", side_effect=AssertionError("dotenv")), \
@@ -320,11 +387,87 @@ class SkillPrecheckTests(SimpleTestCase):
         history.search.side_effect = RuntimeError("token=HISTORY-SECRET")
         adapter = self.adapter(reference_bundle=replace(self.bundle, history_source=history))
         request = adapter.build_request(payload())
-        self.assertEqual(request["reference_packet"]["history"]["status"], "query_failed")
+        self.assertEqual(request["reference_packet"]["history"]["status"], "deferred_until_after_independent_recommendation")
+        history.search.assert_not_called()
         self.assertNotIn("HISTORY-SECRET", json.dumps(request))
         result = adapter.recommend(payload())
         self.assertEqual(result.evidence_status, EvidenceStatus.QUERY_FAILED)
         self.assertIn("HISTORY_QUERY_FAILED", self.codes(result))
+
+    def catalog_bundle(self, descriptions):
+        snapshot = self.bundle.tariff_store.load()
+        prototype = snapshot.codes[0]
+        records = tuple(prototype.model_copy(update={"code": code, "description": description})
+                        for code, description in descriptions)
+        store = Mock()
+        store.load.return_value = replace(snapshot, codes=records)
+        return replace(self.bundle, tariff_store=store)
+
+    def test_default_catalog_recall_name_alias_p14_commentary_and_disable(self):
+        bundle = self.catalog_bundle([(HS, "工业电缆 UNIT TEST TEXT")])
+        item = payload(name="包装主名称", attributes={"alias": "工业电缆", "material": "steel"})
+        before = item.model_dump()
+        adapter = self.adapter(reference_bundle=bundle)
+        request = adapter.build_request(item)
+        packet = request["reference_packet"]
+        recall = packet["catalog_recall"]
+        self.assertEqual(recall["status"], "matched")
+        self.assertEqual(recall["records"][0]["code"], HS)
+        self.assertTrue(recall["records"][0]["matched_tokens"]["alias"])
+        self.assertEqual(packet["p14"][0]["candidate_code"], HS)
+        self.assertTrue(packet["commentary"]["material_retrieved"])
+        self.assertTrue(recall["retrieval_only"])
+        self.assertFalse(recall["classification_support"])
+        self.assertFalse(recall["exhaustive"])
+        self.assertEqual(recall["version"], "2026")
+        disabled = adapter.build_request(item, candidate_codes=())["reference_packet"]
+        self.assertEqual(disabled["catalog_recall"]["status"], "disabled")
+        self.assertEqual(disabled["p14"], [])
+        self.assertEqual(item.model_dump(), before)
+        result = adapter.recommend(item)
+        self.assertEqual(result.suggested_hs, HS)
+        self.assertEqual(len(adapter.model.calls), 1)
+        self.assertIn("CLASSIFICATION_SUPPORT_PENDING", self.codes(result))
+
+    def test_catalog_top5_stable_version_and_numeric_model_not_enough(self):
+        rows = [(f"01012100{n:02d}", "工业电缆 X100") for n in range(7)]
+        adapter = self.adapter(reference_bundle=self.catalog_bundle(list(reversed(rows))))
+        item = payload(name="工业电缆", attributes={"specification": "100", "material": "steel"})
+        recall = adapter.build_request(item)["reference_packet"]["catalog_recall"]
+        self.assertEqual([r["code"] for r in recall["records"]], [r[0] for r in rows[:5]])
+        self.assertTrue(recall["truncated"])
+        self.assertEqual(recall["matched_count"], 7)
+        self.assertEqual(recall["omitted_count"], 2)
+        forward = self.adapter(reference_bundle=self.catalog_bundle(rows)).build_request(item)
+        self.assertEqual(recall, forward["reference_packet"]["catalog_recall"])
+        no_match = adapter.build_request(payload(name="完全不同产品", attributes={"specification": "X100"}))
+        self.assertEqual(no_match["reference_packet"]["catalog_recall"]["records"], [])
+        old = adapter.bundle.tariff_store.load()
+        adapter.bundle.tariff_store.load.return_value = replace(old, codes=(old.codes[0].model_copy(update={"version": "2025"}),))
+        self.assertEqual(adapter.build_request(item)["reference_packet"]["catalog_recall"]["status"], "no_match")
+
+    def test_catalog_failure_and_out_of_recall_model_candidate_remain_pending(self):
+        store = Mock()
+        store.load.side_effect = RuntimeError("token=RECALL-SECRET /tmp/source")
+        adapter = self.adapter(reference_bundle=replace(self.bundle, tariff_store=store))
+        request = adapter.build_request(payload())
+        self.assertEqual(request["reference_packet"]["catalog_recall"]["status"], "query_failed")
+        self.assertNotIn("RECALL-SECRET", json.dumps(request))
+        result = adapter.recommend(payload())
+        self.assertEqual(result.suggested_hs, HS)
+        self.assertIn("CATALOG_RECALL_PENDING", self.codes(result))
+        self.assertEqual(len(adapter.model.calls), 1)
+        # The recalled set is not a model-code allowlist.
+        adapter = self.adapter(reference_bundle=self.catalog_bundle([("0101210099", "UNIT TEST TEXT")]))
+        self.assertNotEqual(adapter.build_request(payload())["reference_packet"]["catalog_recall"]["records"][0]["code"], HS)
+        self.assertEqual(adapter.recommend(payload()).suggested_hs, HS)
+
+    def test_bad_model_answer_does_not_trigger_deferred_history(self):
+        history = Mock()
+        adapter = self.adapter(reference_bundle=replace(self.bundle, history_source=history), model=Model("bad-json"))
+        with self.assertRaises(EngineTechnicalError):
+            adapter.recommend(payload())
+        history.search.assert_not_called()
 
     def test_p14_source_returned_failure_preserves_failure_status(self):
         from adapters.sources.hs_lookup import HsLookupSource, TariffStoreError

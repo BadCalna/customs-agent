@@ -2,8 +2,9 @@
 
 Inject a pinned ReferenceBundle and a synchronous model.complete(dict). The
 optional CommentaryReferenceSource is material retrieval, never ClassificationNote.
-Build_request is a dry run: it calls only injected read-only reference sources,
-not the model. candidate_codes must be independently selected, never supplier HS.
+Build_request is a dry run: it calls only injected read-only catalog/P14/commentary
+sources, not model/history. Optional explicit candidate_codes must be independently
+selected, never supplier/history HS. History is read only after model validation.
 Original-code comparison remains inherited and outside all model requests.
 
 The input guard is deliberately conservative (10-digit strings in free facts
@@ -16,6 +17,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import unicodedata
 from copy import deepcopy
 from pathlib import Path
 
@@ -27,7 +29,7 @@ from .commentary_reference import CommentaryReferenceSource
 from .mock import EngineTechnicalError
 from .precheck import (
     ANCHORING_NOTICE, FACT_FIELDS, ModelRecommendation, PrecheckEngine,
-    _issue, _safe_text, _strict_json, _worst_status,
+    _PRIVATE, _issue, _safe_text, _strict_json, _worst_status,
 )
 from .protocols import Candidate, RecommendInput, RecommendOutput
 from .reference_bundle import ReferenceBundle
@@ -86,11 +88,22 @@ def _load_skill(path: Path) -> dict:
             match = re.search(rf"(?m)^{number}\. (.*?)(?=^\d+\. |\Z)", precheck, re.S)
             if not match:
                 raise ValueError("missing precheck rule")
-            picked.append(match.group(0).strip())
+            rule = match.group(0).strip()
+            if number == 2:
+                # Keep source priority/provenance, not local workbook or website
+                # execution instructions. Runtime uses supplied packets only.
+                rule = rule.split("读取`references`", 1)[0] + (
+                    "仅消费 supplied reference_packet，不读取本地Excel、不上网。"
+                    "历史成功记录和映射快照仅作佐证，不单独证明本批归类或当期税率；"
+                    "历史HS仅在独立判断完成后由模型外程序核对。记录实际来源、日期、版本与查询状态。")
+            elif number == 7:
+                rule = rule.replace("在映射底表`申报要素明细`取完整字段及必填标记",
+                                    "仅从supplied P14 packet取得完整字段及必填标记")
+            picked.append(rule)
         rules = "\n\n".join(picked)
         return {"name": "steel-hs-declaration", "stage": "precheck",
                 "sha256": hashlib.sha256(raw).hexdigest(),
-                "selected_rules_sha256": _hash(rules), "selection_version": "text-candidates-1",
+                "selected_rules_sha256": _hash(rules), "selection_version": "text-candidates-packet-only-2",
                 "rules": rules}
     except Exception:
         raise EngineTechnicalError("预审Skill读取或阶段规则校验失败") from None
@@ -158,7 +171,15 @@ class SkillPrecheckAdapter(PrecheckEngine):
         # Inspect every selected provenance/text field, not arbitrary full source
         # objects (which can include reviewer names, paths, query echoes or IDs).
         if isinstance(value, str):
-            _safe_text(value, hidden)
+            # Material budget is independent from the 10k fact guard. Inspect
+            # the WHOLE string, not chunks, so sensitive markers cannot straddle
+            # a chunk boundary. Commentary source already omits whole sections
+            # over its total budget; this is a second bounded-input guard.
+            limit = max(24000, self.commentary_source.max_total_chars) if self.commentary_source else 24000
+            if (len(value) > limit or _PRIVATE.search(value)
+                    or any(secret in value for secret in hidden)
+                    or value.lstrip().startswith(("{", "["))):
+                raise EngineTechnicalError("预审参考材料包含不允许的敏感或超限内容")
         elif isinstance(value, dict):
             for key, item in value.items():
                 _safe_text(key, hidden)
@@ -216,6 +237,60 @@ class SkillPrecheckAdapter(PrecheckEngine):
                                 "reason": "P14来源调用或响应校验失败；不等于查无或资料不足"}
         return packet, entries
 
+    @staticmethod
+    def _tokens(text):
+        text = unicodedata.normalize("NFKC", text).casefold()
+        tokens = set()
+        for run in re.findall(r"[\u3400-\u9fff]+|[a-z0-9]+", text):
+            if re.fullmatch(r"[\u3400-\u9fff]+", run):
+                tokens.update(run[i:i + 2] for i in range(len(run) - 1))
+            elif len(run) >= 2 and not run.isdigit():
+                tokens.add(run)
+        return tokens
+
+    def _catalog_recall(self, facts):
+        packet = {"status": "no_match", "algorithm_version": "name-alias-token-overlap-1",
+                  "retrieval_only": True, "classification_support": False, "exhaustive": False,
+                  "version": self.bundle.version, "limit": 5, "truncated": False,
+                  "scanned_count": 0, "matched_count": 0, "omitted_count": 0, "records": []}
+        try:
+            attrs = facts["attributes"]
+            fields = {"primary_name": attrs.get("primary_name") or facts["name"],
+                      "alias": attrs.get("alias", ""),
+                      "specification": " ".join(attrs.get(k, "") for k in (
+                          "specification", "规格型号", "manufacturer_model", "model", "型号"))}
+            tokens = {k: self._tokens(v) for k, v in fields.items()}
+            snapshot = self.bundle.tariff_store.load()
+            if snapshot.dataset.synthetic is not False:
+                packet["status"] = "origin_unverified"
+                return packet
+            packet["dataset"] = _dataset(snapshot.dataset)
+            matches = []
+            for record in snapshot.codes:
+                packet["scanned_count"] += 1
+                if record.version != self.bundle.version or not re.fullmatch(r"[0-9]{10}", record.code):
+                    continue
+                description_tokens = self._tokens(record.description)
+                hits = {k: sorted(v & description_tokens) for k, v in tokens.items()}
+                # Specification/model numbers alone never open a retrieval branch.
+                if not (hits["primary_name"] or hits["alias"]):
+                    continue
+                score = 4 * len(hits["primary_name"]) + 3 * len(hits["alias"]) + len(hits["specification"])
+                matches.append({"code": record.code, "description": record.description,
+                                "version": record.version, "matched_tokens": hits,
+                                "retrieval_score": score, "retrieval_only": True,
+                                "classification_support": False})
+            matches.sort(key=lambda r: (-r["retrieval_score"], r["code"], r["version"]))
+            # Bundle source parser guarantees (version, code) uniqueness.
+            packet.update(status="matched" if matches else "no_match", matched_count=len(matches),
+                          omitted_count=max(0, len(matches) - 5), truncated=len(matches) > 5,
+                          records=matches[:5])
+            return packet
+        except Exception:
+            packet.update(status="query_failed", records=[], matched_count=0,
+                          reason="固定目录召回失败；不等于没有适用编码，候选仍需独立判断")
+            return packet
+
     def _history(self, facts):
         if self.history_source is None:
             return {"status": "not_configured", "reference_only": True, "records": []}, []
@@ -245,6 +320,7 @@ class SkillPrecheckAdapter(PrecheckEngine):
                                 "historical_name": candidate.historical_name,
                                 "matched_keys": candidate.matched_keys, "diff_keys": candidate.diff_keys,
                                 "unverified_keys": candidate.unverified_keys,
+                                "key_attribute_conflict": candidate.key_attribute_conflict,
                                 "version": candidate.hs_version, "status": "version_unverified",
                                 "reference_only": True, "classification_support": False})
             return {"status": result.evidence_status.value if result.evidence_status else None,
@@ -253,21 +329,31 @@ class SkillPrecheckAdapter(PrecheckEngine):
             return {"status": "query_failed", "reference_only": True, "records": [],
                     "reason": "历史来源调用或响应校验失败；不等于未匹配"}, []
 
-    def build_request(self, payload: RecommendInput, *, candidate_codes=(), commentary_keys=(),
+    def build_request(self, payload: RecommendInput, *, candidate_codes=None, commentary_keys=(),
                       commentary_keyword=None) -> dict:
-        """Return detached JSON-ready request; never calls model/compare/persistence.
+        """Detached supplied-packet request; never model/history/compare/persistence.
 
-        Optional candidate codes are INDEPENDENT hypotheses, not supplier codes.
-        With no codes P14 honestly reports not_queried until model generation.
+        None recalls up to five catalog hypotheses by name/alias; () disables
+        recall; explicit codes must be supplier/history-independent hypotheses.
+        Recall never limits the model's candidate set or establishes support.
         """
         _, facts, basis, hidden = self._input(payload)
         try:
-            if isinstance(candidate_codes, (str, bytes)) or len(candidate_codes) > 5:
-                raise ValueError("codes")
-            codes = list(dict.fromkeys(candidate_codes))
+            if candidate_codes is None:
+                recall = self._catalog_recall(facts)
+                codes = [r["code"] for r in recall["records"]]
+            else:
+                if isinstance(candidate_codes, (str, bytes)) or len(candidate_codes) > 5:
+                    raise ValueError("codes")
+                codes = list(dict.fromkeys(candidate_codes))
+                recall = {"status": "explicit_hypotheses" if codes else "disabled", "records": [],
+                          "retrieval_only": True, "classification_support": False, "exhaustive": False,
+                          "version": self.bundle.version, "truncated": False}
             if any(not isinstance(c, str) or not re.fullmatch(r"[0-9]{10}", c) for c in codes):
                 raise ValueError("codes")
-            history, entries = self._history(facts)
+            history = {"status": "deferred_until_after_independent_recommendation",
+                       "reference_only": True, "records": []}
+            entries = []
             p14 = []
             for code in codes:
                 item, evidence = self._p14(code, facts, basis)
@@ -313,7 +399,7 @@ class SkillPrecheckAdapter(PrecheckEngine):
                       "images": "not_connected", "expert_review": "not_executed",
                       "bundle": {"version": self.bundle.version, "fingerprint": self.bundle.fingerprint},
                       "query_basis": basis.model_dump(mode="json"),
-                      "p14_status": "queried" if codes else "not_queried",
+                      "catalog_recall": recall, "p14_status": "queried" if codes else "not_queried",
                       "p14": p14, "history": history, "commentary": commentary,
                       "evidence_index": list(index.values())}
             self._check_text({"facts": facts, "reference_packet": packet}, hidden)
@@ -341,7 +427,32 @@ class SkillPrecheckAdapter(PrecheckEngine):
                 _issue("TAX_REGULATORY_NOT_CHECKED", "退税及监管核验未接入本适配器，不得视为已核")]
         evidence, statuses = [], []
         packet = request["reference_packet"]
-        history_status = packet["history"]["status"]
+        history, history_entries = self._history(facts)
+        try:
+            self._check_text({"history": history, "evidence": history_entries}, hidden)
+        except Exception:
+            raise EngineTechnicalError("预审参考输入装配失败") from None
+        history_status = history["status"]
+        recall_status = packet["catalog_recall"]["status"]
+        if recall_status in ("query_failed", "origin_unverified"):
+            statuses.append(EvidenceStatus.QUERY_FAILED if recall_status == "query_failed" else EvidenceStatus.VERSION_UNVERIFIED)
+            gaps.append(_issue("CATALOG_RECALL_PENDING", "目录召回失败或来源待核；不等于没有适用编码", role="operator"))
+        for retrieved in packet["p14"]:
+            for kind, prefix in (("hs", "HS"), ("elements", "ELEMENTS")):
+                status = retrieved[kind].get("status")
+                if status in {s.value for s in EvidenceStatus}:
+                    statuses.append(EvidenceStatus(status))
+                if status == "query_failed":
+                    gaps.append(_issue(prefix + "_QUERY_FAILED", "P14来源查询失败，不等于查无或供应商缺料", role="operator"))
+                elif status in ("version_unverified", "not_found"):
+                    gaps.append(_issue(prefix + "_BASIS_PENDING", "目录召回编码或要素的版本/资料待核"))
+        for record in history.get("records", []):
+            gaps.append(_issue("HISTORY_CROSSCHECK_PENDING",
+                               "独立判断后取得历史参考；编码" + ("相同" if record["historical_hs"] == answer.suggested_hs else "不同或未定码")
+                               + "不证明当前归类正确；差异字段：" + ("、".join(record["diff_keys"]) or "未列差异")
+                               + "；关键属性冲突：" + ("有" if record["key_attribute_conflict"] else "未标记")
+                               + "；未核字段：" + ("、".join(record["unverified_keys"]) or "未列")
+                               + "；历史版本及适用性仍待核"))
         commentary_status = packet["commentary"].get("evidence_status")
         if history_status == "query_failed":
             statuses.append(EvidenceStatus.QUERY_FAILED)
@@ -353,13 +464,16 @@ class SkillPrecheckAdapter(PrecheckEngine):
         if history_status in ("query_failed", "origin_unverified"):
             gaps.append(_issue("HISTORY_QUERY_FAILED" if history_status == "query_failed" else "HISTORY_ORIGIN_UNVERIFIED",
                                "历史来源失败或来源待核，不等于未匹配", role="operator"))
-        for entry in index.values():
+        for entry in [*index.values(), *history_entries]:
             if entry.get("status") in {s.value for s in EvidenceStatus}:
                 statuses.append(EvidenceStatus(entry["status"]))
                 evidence.append(EvidenceEntry(
                     evidence_id=entry["evidence_id"], source_type=entry["source_type"],
-                    title="预审参考材料（非候选归类支持）", status=EvidenceStatus(entry["status"]),
-                    document=entry.get("document"), locator=entry.get("locator"), excerpt=entry.get("excerpt")))
+                    title="P14候选后验核验" if entry.get("scope") in ("hs", "elements") else "预审参考材料（非候选归类支持）",
+                    status=EvidenceStatus(entry["status"]),
+                    document=entry.get("document"), locator=entry.get("locator"), excerpt=entry.get("excerpt"),
+                    retrieved_at=entry.get("retrieved_at"), effective_from=entry.get("effective_from"),
+                    effective_to=entry.get("effective_to")))
         candidates = []
         for candidate in answer.candidates:
             p14, entries = self._p14(candidate.hs, facts, basis)
