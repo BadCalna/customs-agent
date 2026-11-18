@@ -17,7 +17,8 @@ class ImportGuardTest(SimpleTestCase):
         self.assertIn("exit 3", self.source)
         # 拒绝必须发生在 loaddata 之前：否则覆盖已经发生，报错也没用。
         guard = self.source.index("nonempty=")
-        load = self.source.index("loaddata --ignorenonexistent")
+        load = self.source.index('manage.py loaddata "$fixture"')
+        self.assertNotIn('manage.py loaddata --ignorenonexistent', self.source)
         self.assertLess(guard, load)
 
     def test_guard_checks_the_actual_import_model_list(self):

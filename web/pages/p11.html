@@ -80,7 +80,7 @@
     <div class="mock-banner" role="note">
       <b>组件自测页，不是正式页面</b>
       <span>数据来自 <span class="mono">contracts/fixtures/</span> 与页内手工装配；不校验权限、不写库。</span>
-      <span class="fixture-warn">写端点当前为 501；本页的成功响应是演示假响应，不能当作接口可用性证明。</span>
+      <span class="fixture-warn">本页所有写响应都是页内演示假响应（默认模拟 501）；不请求真实端点，不能当作接口可用性证明。</span>
     </div>
 
     <main class="p11-main">
@@ -88,13 +88,15 @@
         <h1 id="p11-intro-title">处置表单与只读版本历史</h1>
         <p class="lede">
           左侧是业务员确认与整批提交，右侧是专家通过/退回；下方历史按版本、提交、专家决定分组。
-          所有写动作都集中在传入的 <span class="mono">api</span> 对象；当前后端返回 501，组件显示“未实现（501）”而不是成功。
-          409 会提示“内容已被他人修改，已刷新”并调用页面提供的重新拉取回调；失败时表单草稿保留。
+          所有写动作都集中在传入的 <span class="mono">api</span> 对象；本页用页内 demo api 模拟响应（默认模拟“501 未实现”），
+          组件显示“未实现（501）”而不是成功；真实 P09/P10 端点已实现，但本页不请求它们。
+          409 会提示「内容已被他人修改，已刷新」并调用页面提供的重新拉取回调；重读失败时页面继续抛出，
+          组件改提示「内容已被他人修改，请刷新后重试」（刷新未完成）。失败时表单草稿保留。
         </p>
         <div class="p11-toolbar" style="margin-top:10px">
           <label for="scenario">模拟后端响应</label>
           <select id="scenario">
-            <option value="not_implemented" selected>默认：501 未实现（当前真实行为）</option>
+            <option value="not_implemented" selected>默认：501 未实现（模拟未交付端点）</option>
             <option value="conflict">409 修订冲突（FIX-08）</option>
             <option value="forbidden">403 没有权限</option>
             <option value="unauthenticated">401 未登录 / 会话失效</option>
@@ -170,6 +172,7 @@
   <script type="module">
     import { createReviewActions } from "../components/review-actions.js";
     import { createVersionHistory } from "../components/version-history.js";
+    import { createConflictRefresh } from "./p11-conflict.js";
 
     const FIXTURE_PATHS = {
       fix08: "/demo/fixtures/FIX-08.json",
@@ -236,9 +239,12 @@
         if (mode === "unauthenticated") throw demoError(401, "unauthorized", "未登录或会话已失效（演示）");
         if (mode === "network") throw demoError(0, "network_error", "演示：网络中断，未收到 HTTP 响应");
         log(`演示假响应（非真实接口）：${action} → ${JSON.stringify(payload)}`);
+        // confirm 发 expected_revision，submit 发 revision，decide 没有修订号；
+        // 按 action 取对应字段，否则模拟提交响应永远算成 revision=1（P3）。
+        const submittedRevision = action === "confirm" ? payload.expected_revision : action === "submit" ? payload.revision : undefined;
         return {
           status: "accepted_for_review",
-          revision: Number(payload.expected_revision || 0) + 1,
+          revision: submittedRevision === undefined ? undefined : Number(submittedRevision) + 1,
           submission_id: action === "submit" ? "demo-submission-p11" : undefined,
           request_id: "p11-demo",
         };
@@ -476,16 +482,15 @@
       `;
     }
 
-    async function conflictRefresh(label) {
-      log(`${label}：收到 409，调用 onConflict 重新拉取（真实页面应重读任务/商品/历史；本页重读 fixture）。`);
-      try {
-        await loadFixtures();
-        currentData = buildData();
-        applyDataToPanels();
-      } catch (error) {
-        log(`409 后的重新拉取失败：${error.message}`);
-      }
+    async function reloadFixtures() {
+      await loadFixtures();
+      currentData = buildData();
+      applyDataToPanels();
     }
+
+    // 409 后重新拉取：重读失败必须继续抛出（模块见 pages/p11-conflict.js，行为由
+    // tests/p11/components.test.mjs 驱动 reload 的 resolve / reject 覆盖）。
+    const conflictRefresh = createConflictRefresh({ reload: reloadFixtures, log });
 
     function onChanged(detail) {
       log(`${detail.action} 成功回调（演示）：${JSON.stringify(detail.response)}`);
@@ -553,7 +558,7 @@
         mountPanels();
         booted = true;
         log("fixture 已加载：FIX-08 / FIX-09 / FIX-10 / DEMO-SET；组件已挂载。默认模拟 501。");
-        sceneStatus.textContent = "场景：501 未实现（当前真实行为）";
+        sceneStatus.textContent = "场景：501 未实现（模拟）";
       } catch (error) {
         fixtureSummary.innerHTML = `<b>fixture 读取失败</b><span>${esc(error.message)}</span><span>确认服务由 <span class="mono">make demo-components</span> 启动，且地址为 <span class="mono">/demo/assets/pages/p11.html</span>。</span>`;
         log(`启动失败：${error.message}`);

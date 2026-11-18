@@ -24,6 +24,20 @@
  * - 501 → 「未实现（501）」，显示 details.owner，不显示业务结论；
  * - 401 / 403 分开提示；CSRF 失败单独说明。
  *
+ * 草稿作用域（M-01）：确认草稿按「任务 + 版本」、专家决定草稿按「任务 + 版本 + 提交」
+ * 隔离。同一份提交刷新时沿用草稿；切到另一份提交时不带上一份快照的终值/原因/问题，
+ * 切回原提交时恢复它自己的草稿——不能只按 item_id 判断。
+ * 实现是两套 Map：`state.confirmBuckets`（两段键）与 `state.buckets`（三段键）。
+ *
+ * 在飞输入（R-05）：选择「成功后只清理仍等于提交时快照的字段」，不禁用本次提交涉及的
+ * 输入。理由：请求期间用户仍要核对/记录，禁用会让输入直接丢失；按字段比较既能清掉
+ * 已提交内容，又保证请求返回前的新输入不被较早的响应抹掉。清理还要绑定提交时的作用域：
+ * 请求在飞时切到另一份提交/版本，响应回来不得按旧快照清当前作用域的草稿，也不能把
+ * 别人的成功反馈显示成当前视图的结果。
+ *
+ * 修订号（R-06）：任务 / 商品 / 提交修订号都按原始值校验必填与整数类型，null、空串、
+ * 缺失和小数一律不发请求，不做 Number() 隐式转换。
+ *
  * 最终状态只读服务器响应，HTTP 2xx 也只表述为「服务端已响应」，不写成审批通过。
  * ========================================================================== */
 
@@ -119,6 +133,49 @@ function errorLine(id, message) {
   return `<p class="ra-error" id="${esc(id)}" role="alert">${esc(message)}</p>`;
 }
 
+/**
+ * 修订号校验（R-06）：只承认 >= 1 的整数原值或整数字符串。
+ *
+ * 先 Number() 再 Number.isInteger() 会把 null / "" / " " 变成 0 并照常发送；
+ * 这里对原始值判断类型，缺字段、空串、小数、非数字字符串都返回 ok:false，
+ * 调用方据此拦截请求。0 与负数同样是契约外取值（后端 `Field(ge=1)`），
+ * 一并拦在发请求之前，不靠服务端 422 兜底。
+ */
+function revisionOf(raw) {
+  const usable = (value) => Number.isSafeInteger(value) && value >= 1;
+  if (typeof raw === "number") {
+    return usable(raw) ? { ok: true, value: raw } : { ok: false, value: null };
+  }
+  if (typeof raw === "string") {
+    const trimmed = raw.trim();
+    if (!/^\d+$/.test(trimmed)) return { ok: false, value: null };
+    const parsed = Number(trimmed);
+    return usable(parsed) ? { ok: true, value: parsed } : { ok: false, value: null };
+  }
+  return { ok: false, value: null };
+}
+
+/* 草稿作用域（M-01）：确认草稿按「任务 + 版本」两段键；专家决定草稿按「任务 + 版本 +
+ * 提交」三段键。缺哪一项都当成独立的一档，不跨档复用。
+ *
+ * 为什么确认草稿不带 submission：确认发生在提交之前，页面刷新时随时可能补上 submission
+ * 字段（接 P09 后很常见）。两套草稿若共用三段键，scope 从 `t::v::` 变成 `t::v::sub-9`
+ * 就会把还没提交的确认值整档丢掉。
+ *
+ * 为什么决定草稿必须带提交：同一版本可能有多份提交快照，S1 的终值/原因/问题不能带进 S2。 */
+function confirmScopeOf(data) {
+  const value = data && typeof data === "object" ? data : {};
+  const taskId = value.task ? text(value.task.task_id) : "";
+  const versionId = text((value.version && value.version.version_id) || (value.task && value.task.current_version_id));
+  return `${taskId}::${versionId}`;
+}
+
+function scopeOf(data) {
+  const value = data && typeof data === "object" ? data : {};
+  const submissionId = value.submission ? text(value.submission.submission_id) : "";
+  return `${confirmScopeOf(value)}::${submissionId}`;
+}
+
 /* ----------------------------- 组件主体 ---------------------------------- */
 
 /**
@@ -142,16 +199,18 @@ export function createReviewActions(options = {}) {
   const uid = `ra-${++instanceSeq}`;
   let root = null;
 
+  const initialData = options.data && typeof options.data === "object" ? options.data : {};
+
   const state = {
     role: options.role === "expert" ? "expert" : "operator",
-    data: options.data || {},
-    confirmDrafts: new Map(),
-    decisionDraft: {
-      mode: "approve",
-      return_to: "",
-      reason: "",
-      rows: new Map(),
-    },
+    data: initialData,
+    /* 决定草稿作用域（三段）与确认草稿作用域（两段）分开记（P2）。 */
+    scopeKey: scopeOf(initialData),
+    confirmScopeKey: confirmScopeOf(initialData),
+    /* scopeKey → 决定草稿 { mode, return_to, reason, rows: Map } */
+    buckets: new Map(),
+    /* confirmScopeKey → 确认草稿 Map<itemId, {hs, reason}> */
+    confirmBuckets: new Map(),
     fieldErrors: {},
     pending: "",
     feedback: null,
@@ -171,17 +230,52 @@ export function createReviewActions(options = {}) {
     return list.includes(action);
   }
 
+  /* --------------------------- 草稿作用域（M-01） ------------------------- */
+
+  const DRAFT_SCOPE_LIMIT = 12;
+
+  function pruneScopeMap(map, keepKey) {
+    // 只保留最近若干份作用域草稿，防止长时间会话无限增长；不同作用域之间永不互借。
+    if (map.size <= DRAFT_SCOPE_LIMIT) return;
+    for (const key of map.keys()) {
+      if (key !== keepKey) {
+        map.delete(key);
+        break;
+      }
+    }
+  }
+
+  /** 决定草稿档：任务 + 版本 + 提交（三段键）。 */
+  function bucket() {
+    if (!state.buckets.has(state.scopeKey)) {
+      state.buckets.set(state.scopeKey, { mode: "approve", return_to: "", reason: "", rows: new Map() });
+      pruneScopeMap(state.buckets, state.scopeKey);
+    }
+    return state.buckets.get(state.scopeKey);
+  }
+
+  /** 确认草稿档：任务 + 版本（两段键），刷新带上 submission 也不丢（P2）。 */
+  function confirmBucket() {
+    if (!state.confirmBuckets.has(state.confirmScopeKey)) {
+      state.confirmBuckets.set(state.confirmScopeKey, new Map());
+      pruneScopeMap(state.confirmBuckets, state.confirmScopeKey);
+    }
+    return state.confirmBuckets.get(state.confirmScopeKey);
+  }
+
   function confirmDraft(itemId) {
-    if (!state.confirmDrafts.has(itemId)) state.confirmDrafts.set(itemId, { hs: "", reason: "" });
-    return state.confirmDrafts.get(itemId);
+    const drafts = confirmBucket();
+    if (!drafts.has(itemId)) drafts.set(itemId, { hs: "", reason: "" });
+    return drafts.get(itemId);
   }
 
   function decisionRow(itemId) {
-    if (!state.decisionDraft.rows.has(itemId)) {
-      state.decisionDraft.rows.set(itemId, { final_hs: "", change_reason: "", issue: "" });
-    }
-    return state.decisionDraft.rows.get(itemId);
+    const rows = bucket().rows;
+    if (!rows.has(itemId)) rows.set(itemId, { final_hs: "", change_reason: "", issue: "" });
+    return rows.get(itemId);
   }
+
+  const decisionDraft = () => bucket();
 
   function submissionRow(itemId) {
     const current = submission();
@@ -191,14 +285,77 @@ export function createReviewActions(options = {}) {
 
   function pruneDrafts() {
     const itemIds = new Set(items().map((item) => item.item_id));
-    for (const key of state.confirmDrafts.keys()) if (!itemIds.has(key)) state.confirmDrafts.delete(key);
+    const confirmCurrent = confirmBucket();
+    for (const key of confirmCurrent.keys()) if (!itemIds.has(key)) confirmCurrent.delete(key);
     const submissionIds = new Set(
       (submission() && Array.isArray(submission().items) ? submission().items : []).map((row) => row.item_id),
     );
-    for (const key of state.decisionDraft.rows.keys()) if (!submissionIds.has(key)) state.decisionDraft.rows.delete(key);
+    const decisionCurrent = bucket();
+    for (const key of decisionCurrent.rows.keys()) if (!submissionIds.has(key)) decisionCurrent.rows.delete(key);
+  }
+
+  /* ---------------------- 在飞请求的草稿快照（R-05） --------------------- */
+
+  function confirmDraftSnapshot(itemId) {
+    const draft = confirmDraft(itemId);
+    return { hs: draft.hs, reason: draft.reason };
+  }
+
+  function clearConfirmDraftIfUnchanged(itemId, submittedDraft) {
+    const draft = confirmDraft(itemId);
+    if (text(draft.hs) === text(submittedDraft.hs)) draft.hs = "";
+    if (text(draft.reason) === text(submittedDraft.reason)) draft.reason = "";
+  }
+
+  function decisionDraftSnapshot(snapRows) {
+    const current = decisionDraft();
+    const rows = new Map();
+    for (const row of snapRows) {
+      const draft = decisionRow(row.item_id);
+      rows.set(row.item_id, { final_hs: draft.final_hs, change_reason: draft.change_reason, issue: draft.issue });
+    }
+    return { reason: current.reason, rows };
+  }
+
+  function clearDecisionDraftsIfUnchanged(submittedDraft, mode) {
+    const current = decisionDraft();
+    if (text(current.reason) === text(submittedDraft.reason)) current.reason = "";
+    for (const [itemId, saved] of submittedDraft.rows) {
+      const draft = decisionRow(itemId);
+      if (mode === "approve") {
+        if (text(draft.final_hs) === text(saved.final_hs)) draft.final_hs = "";
+        if (text(draft.change_reason) === text(saved.change_reason)) draft.change_reason = "";
+      } else if (text(draft.issue) === text(saved.issue)) {
+        draft.issue = "";
+      }
+    }
   }
 
   /* ----------------------------- 反馈与错误 ----------------------------- */
+
+  /**
+   * 在飞响应的作用域绑定（R-05 补强，P2）：草稿归属于提交时的作用域。响应回来时如果
+   * 用户已经切到另一份提交/版本，按旧快照去清新作用域里「值恰好相同」的字段，会清掉
+   * 别的视图的新输入，并用别人的成功反馈冒充当前视图的结果。因此：
+   * - 作用域未变 → 返回 null，调用方照原逻辑清理并提示；
+   * - 作用域已变 → 不清理，只给一条「响应不属于当前作用域」的说明。
+   * 确认草稿用两段键（任务+版本），决定草稿用三段键（任务+版本+提交）。
+   */
+  function offScopeFeedback(action, submittedScope, currentScope, response) {
+    if (submittedScope === currentScope) return null;
+    const info = appliedFeedback(action, response);
+    const responseLines = info.lines.filter((line) => !line.startsWith("已清理的草稿仅限"));
+    return {
+      tone: "info",
+      title: `${ACTION_LABEL[action]}已返回，但当前视图已切换到另一份作用域`,
+      lines: [
+        `这次响应属于作用域 ${submittedScope || "（空）"}，当前作用域是 ${currentScope || "（空）"}。`,
+        "为避免误清新作用域的草稿，本次没有清理任何输入，也不把它算作当前视图的结果。",
+        ...responseLines,
+      ],
+      requestId: info.requestId,
+    };
+  }
 
   function setFeedback(tone, title, lines, requestId = "") {
     state.feedback = { tone, title, lines: lines.filter(Boolean), requestId: requestId || "" };
@@ -334,7 +491,7 @@ export function createReviewActions(options = {}) {
     lines.push(info.revision ? `服务器修订：${info.revision}` : "服务器未返回修订号");
     if (info.submissionId) lines.push(`submission_id：${info.submissionId}`);
     lines.push("本页只呈现服务端返回值，不把 HTTP 2xx 写成业务通过；请以重新拉取的数据为准。");
-    lines.push("草稿已清除（只在 HTTP 2xx 后清除；任何失败都会保留）。");
+    lines.push("已清理的草稿仅限与本次提交时相同（之后未被继续修改）的字段；请求期间的新输入保留。");
     return { tone: "info", title: `${ACTION_LABEL[action]}：服务端已响应`, lines, requestId: response && response.request_id ? response.request_id : "" };
   }
 
@@ -499,7 +656,11 @@ export function createReviewActions(options = {}) {
       ${renderSubmitSection()}`;
   }
 
-  function renderSubmitSection() {
+  /**
+   * 整批提交快照：预览与真实提交共用一份判断，避免「按钮能点、点了被拦」的两套规则。
+   * 修订号在这里做原始值校验（R-06），任务与逐行商品修订号都不允许隐式转换。
+   */
+  function submitSnapshot() {
     const rows = items().map((card) => {
       const confirmed = card.business_confirmed_hs || {};
       return {
@@ -507,13 +668,23 @@ export function createReviewActions(options = {}) {
         itemId: card.item_id,
         submittedHs: text(confirmed.value),
         confirmationId: text(confirmed.source_id),
-        itemRevision: card.revision,
+        revision: revisionOf(card.revision),
       };
     });
-    const missing = rows.filter((row) => !row.submittedHs || !row.confirmationId);
-    const revision = task().revision;
-    const revisionOk = Number.isInteger(Number(revision));
-    const blocked = !rows.length || missing.length > 0 || !revisionOk || allowed("submission.create") === false;
+    return {
+      rows,
+      missing: rows.filter((row) => !row.submittedHs || !row.confirmationId),
+      invalidRevisions: rows.filter((row) => !row.revision.ok),
+      taskRevision: revisionOf(task().revision),
+      versionId: text(version().version_id || task().current_version_id),
+    };
+  }
+
+  function renderSubmitSection() {
+    const { rows, missing, invalidRevisions, taskRevision, versionId } = submitSnapshot();
+    const blocked =
+      !rows.length || missing.length > 0 || invalidRevisions.length > 0 || !taskRevision.ok || !versionId ||
+      allowed("submission.create") === false;
     const pending = state.pending === "submit";
 
     const body = rows.map((row) => {
@@ -527,7 +698,7 @@ export function createReviewActions(options = {}) {
         <td>${isMissing
           ? badge("缺少确认", "cinnabar")
           : `<span class="mono">确认 ${esc(shortId(row.confirmationId))}</span>`}</td>
-        <td class="mono">${esc(row.itemRevision ?? "—")}</td>
+        <td class="mono">${row.revision.ok ? esc(row.revision.value) : badge("修订号无效", "cinnabar")}</td>
       </tr>`;
     }).join("");
 
@@ -539,7 +710,7 @@ export function createReviewActions(options = {}) {
       ${permissionNotice("submission.create", "整批提交")}
       <p class="ra-summary" id="${uid}-submit-summary" role="status" aria-live="polite">
         将提交 <b>${rows.length - missing.length}</b> 行；缺少确认 <b>${missing.length}</b> 行。
-        提交携带任务修订 <span class="mono">${esc(revision ?? "—")}</span>（字段名 revision）。
+        提交携带任务修订 <span class="mono">${esc(taskRevision.ok ? taskRevision.value : "—")}</span>（字段名 revision）。
       </p>
       <div class="ra-table-wrap">
         <table class="ra-table">
@@ -558,7 +729,15 @@ export function createReviewActions(options = {}) {
             <p>组件不会用预审建议、供应商原码、专家建议、旧提交或空值补位；请先逐行确认。</p>
           </div>`
         : `<p class="ra-hint">快照只取 <span class="mono">business_confirmed_hs</span> 的值与确认记录引用；预审建议、供应商原码和专家建议都不会进入提交。</p>`}
-      ${!revisionOk ? `<p class="ra-error" role="alert">缺少可用的任务修订号，不能安全生成 revision。</p>` : ""}
+      ${invalidRevisions.length
+        ? `<div class="ra-blocker" role="alert">
+            <b>不能整批提交：${invalidRevisions.length} 行商品修订号不是整数</b>
+            <ul>${invalidRevisions.map((row) => `<li>第 ${esc(row.card.source_location ? row.card.source_location.row_number : "—")} 行</li>`).join("")}</ul>
+            <p>修订号缺失、空串或小数都不发送请求；请重新拉取商品后再提交。</p>
+          </div>`
+        : ""}
+      ${!taskRevision.ok ? `<p class="ra-error" role="alert">缺少可用的任务修订号（revision 必须是整数），不能安全生成 revision。</p>` : ""}
+      ${!versionId ? `<p class="ra-error" role="alert">缺少版本标识（version_id），不能整批提交。</p>` : ""}
       <div class="ra-actions">
         <button type="button" class="btn btn-primary ra-btn" data-ra-act="submit"
           ${blocked ? "disabled" : ""} aria-busy="${pending}" aria-describedby="${uid}-submit-summary">
@@ -583,7 +762,7 @@ export function createReviewActions(options = {}) {
         </section>`;
     }
 
-    const mode = state.decisionDraft.mode;
+    const mode = decisionDraft().mode;
     const snapRows = Array.isArray(currentSubmission.items) ? currentSubmission.items : [];
     const pending = state.pending === "decide";
     const disabled = Boolean(state.pending) || allowed("decision.resolve") === false || !snapRows.length;
@@ -675,7 +854,7 @@ export function createReviewActions(options = {}) {
       <div class="ra-field">
         <label for="${uid}-decision-reason">整批说明 <span class="ra-note">可选</span></label>
         <textarea id="${uid}-decision-reason" rows="2" data-ra-field="decision-reason"
-          placeholder="例如：已核对申报要素与附图">${esc(state.decisionDraft.reason)}</textarea>
+          placeholder="例如：已核对申报要素与附图">${esc(decisionDraft().reason)}</textarea>
       </div>`;
   }
 
@@ -691,11 +870,11 @@ export function createReviewActions(options = {}) {
       <fieldset class="ra-choice"${targetError ? ` aria-describedby="${uid}-target-error"` : ""}>
         <legend>退回对象 <span class="ra-req">二选一</span></legend>
         <label class="ra-choice__option">
-          <input id="${uid}-return-supplier" type="radio" name="${uid}-return-to" value="supplier" data-ra-field="return-to" ${state.decisionDraft.return_to === "supplier" ? "checked" : ""}>
+          <input id="${uid}-return-supplier" type="radio" name="${uid}-return-to" value="supplier" data-ra-field="return-to" ${decisionDraft().return_to === "supplier" ? "checked" : ""}>
           <span><b>供应商</b><span class="ra-hint">补料重传，整表重新预审</span></span>
         </label>
         <label class="ra-choice__option">
-          <input id="${uid}-return-operator" type="radio" name="${uid}-return-to" value="operator" data-ra-field="return-to" ${state.decisionDraft.return_to === "operator" ? "checked" : ""}>
+          <input id="${uid}-return-operator" type="radio" name="${uid}-return-to" value="operator" data-ra-field="return-to" ${decisionDraft().return_to === "operator" ? "checked" : ""}>
           <span><b>业务员</b><span class="ra-hint">由业务员处理确认或补料</span></span>
         </label>
       </fieldset>
@@ -727,7 +906,7 @@ export function createReviewActions(options = {}) {
       <div class="ra-field">
         <label for="${uid}-return-reason">退回原因 <span class="ra-req">必填</span></label>
         <textarea id="${uid}-return-reason" rows="3" data-ra-field="decision-reason"
-          placeholder="说明整批退回的原因；不要只写“资料不全”" aria-invalid="${reasonError ? "true" : "false"}">${esc(state.decisionDraft.reason)}</textarea>
+          placeholder="说明整批退回的原因；不要只写“资料不全”" aria-invalid="${reasonError ? "true" : "false"}">${esc(decisionDraft().reason)}</textarea>
         ${reasonError ? errorLine(`${uid}-return-reason-error`, reasonError) : ""}
       </div>`;
   }
@@ -805,7 +984,7 @@ export function createReviewActions(options = {}) {
     const value = text(draft.hs);
     const reason = text(draft.reason);
     const current = text(card.business_confirmed_hs && card.business_confirmed_hs.value);
-    const revision = Number(card.revision);
+    const revision = revisionOf(card.revision);
     const errors = {};
 
     if (!value) errors[`${itemId}:hs`] = "请填写确认 HS；组件不会自动带入预审建议。";
@@ -813,7 +992,7 @@ export function createReviewActions(options = {}) {
     if (current && value && value !== current && !reason) {
       errors[`${itemId}:reason`] = "修改已有确认值必须填写修改原因（D2 Confirmation.reason）。";
     }
-    if (!Number.isInteger(revision)) errors[`${itemId}:hs`] = "缺少商品修订号，不能安全提交 expected_revision。";
+    if (!revision.ok) errors[`${itemId}:hs`] = "缺少商品修订号（revision 不是整数），不能安全提交 expected_revision。";
     if (allowed("confirmation.write") === false) {
       errors[`${itemId}:hs`] = "当前 allowed_actions 不含 confirmation.write；按钮禁用只是提示，服务端仍会校验。";
     }
@@ -830,11 +1009,20 @@ export function createReviewActions(options = {}) {
     state.pending = `confirm:${itemId}`;
     render();
 
-    const payload = { confirmed_hs: value, reason, expected_revision: revision };
+    const submittedDraft = confirmDraftSnapshot(itemId);
+    // 快照提交时的作用域：响应回来时若用户已切到别的任务/版本，不许按旧快照清理（R-05）。
+    const submittedScope = state.confirmScopeKey;
+    const payload = { confirmed_hs: value, reason, expected_revision: revision.value };
     try {
       const response = await WRITE_CALLS.confirm(api, payload);
-      state.feedback = appliedFeedback("confirm", response);
-      state.confirmDrafts.set(itemId, { hs: "", reason: "" });
+      const offScope = offScopeFeedback("confirm", submittedScope, state.confirmScopeKey, response);
+      if (offScope) {
+        state.feedback = offScope;
+      } else {
+        state.feedback = appliedFeedback("confirm", response);
+        // R-05：只清理仍等于提交时快照的字段；请求期间继续输入的内容保留。
+        clearConfirmDraftIfUnchanged(itemId, submittedDraft);
+      }
       notify("onChanged", { action: "confirm", payload, response });
     } catch (error) {
       const result = await failureFeedback("confirm", payload, error);
@@ -849,23 +1037,18 @@ export function createReviewActions(options = {}) {
 
   async function submitBatch() {
     if (state.pending) return;
-    const rows = items().map((card) => {
-      const confirmed = card.business_confirmed_hs || {};
-      return {
-        card,
-        itemId: card.item_id,
-        submittedHs: text(confirmed.value),
-        confirmationId: text(confirmed.source_id),
-        itemRevision: Number(card.revision),
-      };
-    });
-    const missing = rows.filter((row) => !row.submittedHs || !row.confirmationId);
-    const revision = Number(task().revision);
+    const { rows, missing, invalidRevisions, taskRevision, versionId } = submitSnapshot();
     const problems = [];
 
     if (!rows.length) problems.push("当前版本没有商品行，不能整批提交。");
-    if (!Number.isInteger(revision)) problems.push("缺少任务修订号，不能安全提交 revision。");
-    if (!version().version_id && !task().current_version_id) problems.push("缺少版本标识，不能整批提交。");
+    if (!taskRevision.ok) problems.push("缺少可用的任务修订号（revision 必须是整数），不能安全提交 revision。");
+    if (invalidRevisions.length) {
+      const rowsText = invalidRevisions
+        .map((row) => `第 ${row.card.source_location ? row.card.source_location.row_number : "—"} 行`)
+        .join("；");
+      problems.push(`${invalidRevisions.length} 行商品修订号不是整数（${rowsText}）；不能生成整批提交快照。`);
+    }
+    if (!versionId) problems.push("缺少版本标识，不能整批提交。");
     if (allowed("submission.create") === false) {
       problems.push("当前 allowed_actions 不含 submission.create；按钮禁用只是提示，服务端仍会校验。");
     }
@@ -889,8 +1072,9 @@ export function createReviewActions(options = {}) {
     state.pending = "submit";
     render();
 
+    const revision = taskRevision.value;
     const payload = {
-      version_id: version().version_id || task().current_version_id,
+      version_id: versionId,
       revision,
       items: rows.map((row) => ({
         item_id: row.itemId,
@@ -915,13 +1099,16 @@ export function createReviewActions(options = {}) {
     if (state.pending) return;
     const snapshot = submission();
     const snapRows = snapshot && Array.isArray(snapshot.items) ? snapshot.items : [];
-    const mode = state.decisionDraft.mode;
+    const mode = decisionDraft().mode;
+    const submissionRevision = revisionOf(snapshot && snapshot.revision);
     const problems = [];
     const fieldErrors = {};
 
     if (!snapshot || !snapshot.submission_id) problems.push("当前没有待审提交快照，不能提交专家决定。");
     if (!snapRows.length) problems.push("提交快照没有逐行明细，不能整批决定。");
-    
+    if (!submissionRevision.ok) {
+      problems.push("提交快照的修订号（revision 不是整数）不可用，不能安全生成决定；请重新拉取提交快照。");
+    }
     if (allowed("decision.resolve") === false) {
       problems.push("当前 allowed_actions 不含 decision.resolve；按钮禁用只是提示，服务端仍会校验。");
     }
@@ -949,7 +1136,7 @@ export function createReviewActions(options = {}) {
 
       payload = {
         action: "approve",
-        reason: text(state.decisionDraft.reason),
+        reason: text(decisionDraft().reason),
         items: rows.map((entry) => ({
           item_id: entry.row.item_id,
           final_hs: entry.final,
@@ -957,8 +1144,8 @@ export function createReviewActions(options = {}) {
         })),
       };
     } else {
-      const target = state.decisionDraft.return_to;
-      const reason = text(state.decisionDraft.reason);
+      const target = decisionDraft().return_to;
+      const reason = text(decisionDraft().reason);
       const issueRows = snapRows
         .map((row) => ({ row, issue: text(decisionRow(row.item_id).issue) }))
         .filter((entry) => entry.issue);
@@ -985,19 +1172,22 @@ export function createReviewActions(options = {}) {
       return;
     }
 
+    // 提交时的草稿快照：成功后只清这些值，请求期间的新输入保留（R-05）。
+    const submittedDraft = decisionDraftSnapshot(snapRows);
+    // 作用域快照：响应回来时若已切到另一份提交，不能按 S1 的快照清 S2 的草稿（R-05/P2）。
+    const submittedScope = state.scopeKey;
     state.fieldErrors = {};
     state.pending = "decide";
     render();
 
     try {
       const response = await WRITE_CALLS.decide(api, payload);
-      state.feedback = appliedFeedback("decide", response);
-      state.decisionDraft.reason = "";
-      for (const row of snapRows) {
-        const draft = decisionRow(row.item_id);
-        draft.final_hs = "";
-        draft.change_reason = "";
-        draft.issue = "";
+      const offScope = offScopeFeedback("decide", submittedScope, state.scopeKey, response);
+      if (offScope) {
+        state.feedback = offScope;
+      } else {
+        state.feedback = appliedFeedback("decide", response);
+        clearDecisionDraftsIfUnchanged(submittedDraft, mode);
       }
       notify("onChanged", { action: "decide", payload, response });
     } catch (error) {
@@ -1021,11 +1211,11 @@ export function createReviewActions(options = {}) {
     if (name === "confirm-hs") confirmDraft(itemId).hs = field.value;
     else if (name === "confirm-reason") confirmDraft(itemId).reason = field.value;
     else if (name === "decision-mode") {
-      state.decisionDraft.mode = field.value === "return" ? "return" : "approve";
+      decisionDraft().mode = field.value === "return" ? "return" : "approve";
       render();
       return;
-    } else if (name === "return-to") state.decisionDraft.return_to = field.value;
-    else if (name === "decision-reason") state.decisionDraft.reason = field.value;
+    } else if (name === "return-to") decisionDraft().return_to = field.value;
+    else if (name === "decision-reason") decisionDraft().reason = field.value;
     else if (name === "final-hs") {
       decisionRow(itemId).final_hs = field.value;
       updateEffectivePreview(itemId);
@@ -1081,8 +1271,14 @@ export function createReviewActions(options = {}) {
   }
 
   function update(data) {
-    state.data = data || {};
+    const next = data && typeof data === "object" ? data : {};
     state.fieldErrors = {};
+    // M-01：作用域变了就换到该提交自己的草稿档；同一份提交刷新（scope 不变）沿用草稿。
+    // 切回旧作用域时恢复它自己的草稿，而不是把最近一次编辑结果带过去。
+    // 确认草稿只按「任务+版本」换档：刷新时带上 submission 不会丢掉未提交的确认值（P2）。
+    state.scopeKey = scopeOf(next);
+    state.confirmScopeKey = confirmScopeOf(next);
+    state.data = next;
     pruneDrafts();
     render();
     return controller;
@@ -1105,13 +1301,17 @@ export function createReviewActions(options = {}) {
   }
 
   function getDraft() {
+    const confirmDrafts = confirmBucket();
+    const current = bucket();
     return {
-      confirm: Object.fromEntries(Array.from(state.confirmDrafts.entries()).map(([key, value]) => [key, { ...value }])),
+      scope: state.scopeKey,
+      confirmScope: state.confirmScopeKey,
+      confirm: Object.fromEntries(Array.from(confirmDrafts.entries()).map(([key, value]) => [key, { ...value }])),
       decision: {
-        mode: state.decisionDraft.mode,
-        return_to: state.decisionDraft.return_to,
-        reason: state.decisionDraft.reason,
-        rows: Object.fromEntries(Array.from(state.decisionDraft.rows.entries()).map(([key, value]) => [key, { ...value }])),
+        mode: current.mode,
+        return_to: current.return_to,
+        reason: current.reason,
+        rows: Object.fromEntries(Array.from(current.rows.entries()).map(([key, value]) => [key, { ...value }])),
       },
       pending: state.pending,
     };
