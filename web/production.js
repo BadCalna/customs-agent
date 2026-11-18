@@ -14,7 +14,8 @@ const key = () => crypto.randomUUID();
 const state = {me: null, tasks: [], cursor: null, claims: [], claimCursor: null,
   task: null, versionId: null, items: [],
   history: null, importJob: null, run: null, card: null, selectedItemId: null,
-  expertAction: "approve", uploadIntent: null, actionKeys: new Map(), generation: 0, timer: null, busy: false};
+  decisionDrafts: new Map(), renderedDecisionScope: null,
+  uploadIntent: null, actionKeys: new Map(), generation: 0, timer: null, busy: false};
 
 function notice(message, error = false) {
   const host = $("#notice");
@@ -48,6 +49,8 @@ function showSession() {
   if (!state.me) {
     state.generation += 1;
     clearTimeout(state.timer);
+    state.decisionDrafts.clear();
+    state.renderedDecisionScope = null;
     state.task = null;
     state.tasks = [];
     state.claims = [];
@@ -106,6 +109,24 @@ function pendingSubmission() {
   return currentHistoryVersion()?.submissions.findLast(submission => submission.status === "pending");
 }
 
+function decisionScope(submission) {
+  return JSON.stringify([state.task.task_id, state.versionId, submission.submission_id]);
+}
+
+function decisionDraft(scope) {
+  if (!state.decisionDrafts.has(scope))
+    state.decisionDrafts.set(scope, {action: "approve", approveFields: {}, returnFields: {}});
+  return state.decisionDrafts.get(scope);
+}
+
+function captureDecisionDraft() {
+  const form = $("#decision-form");
+  if (!state.renderedDecisionScope || !form) return;
+  const fields = Object.fromEntries(new FormData(form));
+  const draft = decisionDraft(state.renderedDecisionScope);
+  draft[fields.action === "return" ? "returnFields" : "approveFields"] = fields;
+}
+
 function activeRunId() {
   if (state.versionId === state.task?.current_version_id) return state.task.latest_run_id;
   return currentHistoryVersion()?.runs.at(-1)?.run_id || null;
@@ -117,7 +138,6 @@ async function openTask(taskId, versionId = null, itemId = null) {
   const task = await api.getTask(taskId);
   if (generation !== state.generation) return;
   state.task = task;
-  state.expertAction = "approve";
   renderTaskList();
   await openVersion(versionId || task.current_version_id, itemId);
 }
@@ -176,16 +196,21 @@ function schedulePoll(generation) {
       state.importJob = job;
       state.run = run;
       if (importFinished || runFinished) await openTask(state.task.task_id, state.versionId, state.selectedItemId);
-      else { renderDetail(); schedulePoll(generation); }
+      else { renderRun(); schedulePoll(generation); }
     } catch (error) { if (generation === state.generation) fail(error); }
   }, 2500);
 }
 
 function renderTask() {
   const host = $("#task-detail");
+  captureDecisionDraft();
   const task = state.task;
   host.hidden = !task;
-  if (!task) return;
+  if (!task) {
+    host.innerHTML = "";
+    state.renderedDecisionScope = null;
+    return;
+  }
   const current = state.versionId === task.current_version_id;
   const live = task.result_mode === "live";
   const submission = pendingSubmission();
@@ -197,7 +222,8 @@ function renderTask() {
       <button data-action="submit" class="primary" ${state.items.length && !["submitted", "approved"].includes(task.stage) ? "" : "disabled"}>提交专家审核</button></div>
     ${task.stage !== "approved" && task.stage !== "submitted" ? `<form id="return-form" class="action-form"><h3>退回供应商补料</h3>
       <label>原因<textarea name="reason" required></textarea></label><button type="submit" class="danger">退回</button></form>` : ""}` : "";
-  const decision = state.me.role === "expert" && current && live && submission ? decisionPanel(submission) : "";
+  const scope = state.me.role === "expert" && current && live && submission ? decisionScope(submission) : null;
+  const decision = scope ? decisionPanel(submission, decisionDraft(scope)) : "";
   host.innerHTML = `<div class="section-heading"><h1>${esc(task.title)}</h1><span class="status ${esc(task.stage)}">${esc(label(task.stage))}</span></div>
     <div class="meta"><span>任务 ${esc(task.task_id)}</span><span>供应商 ${esc(task.supplier)}</span>
       <span>修订 ${esc(task.revision)}</span></div>
@@ -207,23 +233,26 @@ function renderTask() {
       · <a href="${esc(state.importJob.original_download_url)}">下载原件</a></p>
       ${Object.keys(state.importJob.error || {}).length ? `<p class="error">${esc(state.importJob.error.message || "解析失败，请修正文件后上传新版本")}</p>` : ""}` : ""}
     ${operatorActions}${decision}`;
+  state.renderedDecisionScope = scope;
 }
 
-function decisionPanel(submission) {
-  const isApprove = state.expertAction === "approve";
+function decisionPanel(submission, draft) {
+  const isApprove = draft.action === "approve";
+  const approve = draft.approveFields;
+  const returned = draft.returnFields;
   const names = new Map(state.items.map(item => [item.item_id, item.name]));
   return `<div class="action-form"><h3>专家决定</h3><div class="actions">
       <button data-decision-mode="approve" class="${isApprove ? "primary" : ""}">整批通过</button>
       <button data-decision-mode="return" class="${!isApprove ? "primary" : ""}">退回补料</button></div>
-    <form id="decision-form" class="action-form"><input type="hidden" name="action" value="${state.expertAction}">
+    <form id="decision-form" class="action-form"><input type="hidden" name="action" value="${draft.action}">
       ${isApprove ? `<div class="table-wrap"><table><thead><tr><th>商品</th><th>提交编码</th><th>专家终值</th><th>改码原因</th></tr></thead><tbody>
         ${submission.items.map(line => `<tr class="decision-row"><td>${esc(names.get(line.item_id) || line.item_id)}</td>
-          <td>${esc(line.submitted_hs)}</td><td><input name="final-${esc(line.item_id)}" value="${esc(line.submitted_hs)}" pattern="[0-9]{10}" required></td>
-          <td><input class="reason" name="reason-${esc(line.item_id)}" placeholder="改码时必填"></td></tr>`).join("")}
-        </tbody></table></div><label>审核意见<textarea name="reason"></textarea></label>` : `
-        <label>退回对象<select name="return_to"><option value="operator">业务员</option><option value="supplier">供应商</option></select></label>
-        <label>退回原因<textarea name="reason" required></textarea></label>
-        <label>具体问题<textarea name="issue" required></textarea></label>`}
+          <td>${esc(line.submitted_hs)}</td><td><input name="final-${esc(line.item_id)}" value="${esc(approve[`final-${line.item_id}`] ?? line.submitted_hs)}" pattern="[0-9]{10}" required></td>
+          <td><input class="reason" name="reason-${esc(line.item_id)}" value="${esc(approve[`reason-${line.item_id}`] ?? "")}" placeholder="改码时必填"></td></tr>`).join("")}
+        </tbody></table></div><label>审核意见<textarea name="reason">${esc(approve.reason ?? "")}</textarea></label>` : `
+        <label>退回对象<select name="return_to"><option value="operator" ${returned.return_to === "supplier" ? "" : "selected"}>业务员</option><option value="supplier" ${returned.return_to === "supplier" ? "selected" : ""}>供应商</option></select></label>
+        <label>退回原因<textarea name="reason" required>${esc(returned.reason ?? "")}</textarea></label>
+        <label>具体问题<textarea name="issue" required>${esc(returned.issue ?? "")}</textarea></label>`}
       <button class="${isApprove ? "primary" : "danger"}" type="submit">${isApprove ? "确认整批通过" : "确认退回"}</button></form></div>`;
 }
 
@@ -361,7 +390,7 @@ async function decide(form) {
   const submission = pendingSubmission();
   const fields = new FormData(form);
   let payload;
-  if (state.expertAction === "approve") {
+  if (fields.get("action") === "approve") {
     payload = {action: "approve", reason: fields.get("reason"), items: submission.items.map(line => ({
       item_id: line.item_id, final_hs: fields.get(`final-${line.item_id}`),
       change_reason: fields.get(`reason-${line.item_id}`) || "",
@@ -373,6 +402,8 @@ async function decide(form) {
       issues: [{message: fields.get("issue")}]};
   }
   await api.decideSubmission(submission.submission_id, payload, actionKey("decision", payload));
+  state.decisionDrafts.delete(decisionScope(submission));
+  state.renderedDecisionScope = null;
   notice(payload.action === "approve" ? "整批审核已通过。" : "已退回补料。");
   await openTask(state.task.task_id);
 }
@@ -424,7 +455,9 @@ document.addEventListener("click", event => {
   const target = event.target.closest("[data-task],[data-version],[data-item],[data-claim],[data-action],[data-decision-mode]");
   if (!target) return;
   if (target.dataset.decisionMode) {
-    state.expertAction = target.dataset.decisionMode;
+    captureDecisionDraft();
+    if (!state.renderedDecisionScope) return;
+    decisionDraft(state.renderedDecisionScope).action = target.dataset.decisionMode;
     renderTask();
     return;
   }
