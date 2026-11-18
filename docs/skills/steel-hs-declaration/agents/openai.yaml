@@ -1,4 +1,4 @@
 interface:
   display_name: "HS预审与专家审核助手"
-  short_description: "联合两页签比较供应商HS与AI建议，分阶段核查要素、附图、退税及法规并说明待补资料"
-  default_prompt: "使用 $steel-hs-declaration 对这份Excel执行业务员预审，保留供应商海关编码，在其右侧填写AI推荐HScode和预审结论，标出差异、置信度及补料要求；专家审核另行执行。"
+  short_description: "按品名规格推荐HS，预审核对供应商编码、退税率和申报要素，专家复核依据"
+  default_prompt: "使用 $steel-hs-declaration 对这份Excel执行业务员预审。无图时按品名和规格型号判断，在申报要素页填写AI推荐HScode，并在预审结论分别说明HS一致性及佐证、退税率/税码核对、申报要素差异和待补资料；保留供应商原值。"
