@@ -350,11 +350,19 @@ def command_publish(args: argparse.Namespace) -> ExitCode:
     _print(f"复核状态：{release['review_status']}")
     if result.activated:
         _print("已切换 current 指针")
+        if result.activation:
+            event = result.activation
+            _print(f"本次激活事件：{event['event_id']}（前驱 {event['previous_release'] or '无'}）")
+            _print(f"本次换版理由：{event['reason'] or '未提供（无内容换版）'}")
     if result.changed:
         _print(f"内容相对上一版有变化：{json.dumps(result.diff, ensure_ascii=False)}")
     _print("数据文件：")
     for name, info in sorted((release.get("files") or {}).items()):
         _print(f"  - {name}: {result.release_dir / info['file']}（复核 {info['review_status']}）")
+    warning = (result.activation_result or {}).get("audit_warning")
+    if warning:
+        _print(f"审计警告：{warning}", file=sys.stderr)
+        return ExitCode.PARTIAL
     return ExitCode.SUCCESS
 
 
@@ -379,6 +387,10 @@ def command_activate(args: argparse.Namespace) -> ExitCode:
         _print(f"切换失败：{exc}", file=sys.stderr)
         return ExitCode.FAILED
     _print(f"当前 release：{current['release_id']}")
+    _print(f"本次激活事件：{current['activation_event_id']}")
+    if current.get("audit_warning"):
+        _print(f"审计警告：{current['audit_warning']}", file=sys.stderr)
+        return ExitCode.PARTIAL
     return ExitCode.SUCCESS
 
 

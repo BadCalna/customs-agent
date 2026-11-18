@@ -13,8 +13,11 @@
   P14/P17 因此仍然不会给出“可作依据”的结论——发布不等于复核；
 - 程序不会替你填复核人，也不会把“程序校验通过”写成“专业复核通过”；
 - 覆盖已发布内容需要 ``--allow-content-change`` 并写明理由，同时输出内容差异报告；
-- 旧 release 目录不删除，``current`` 指针与 ``current.json`` 决定当前使用哪一个，
-  可随时 ``activate`` 回到之前的版本。
+- 旧 release 目录不删除，``release.json`` 保留首次发布审计且永不改写；
+  重复发布/显式回滚分别追加 ``activations/<event_id>.json`` 与
+  ``activation-results/<event_id>.json``，本次理由、前驱和差异属于激活事件。
+- ``current`` 是唯一激活提交点，``current.json`` 是其派生链接；可随时
+  ``activate`` 回到之前的版本。
 
 **不修改 ``.env``，不切换运行环境的数据来源**：这里只产出目录与指针，
 环境变量由使用方自己指过来（D6 第 2.7 节）。
@@ -321,6 +324,8 @@ class PublishResult:
     activated: bool
     changed: bool = False
     diff: dict[str, Any] = field(default_factory=dict)
+    activation: dict[str, Any] | None = None
+    activation_result: dict[str, Any] | None = None
 
 
 def _verification_for(out_root: Path, snapshot_id: str) -> dict[str, Any] | None:
@@ -498,8 +503,9 @@ def publish_release(request: PublishRequest) -> PublishResult:
     if temp_dir.exists():
         shutil.rmtree(temp_dir)
     temp_dir.mkdir(parents=True, exist_ok=True)
-    created_release_dir = False
     activated = False
+    activation = None
+    activation_result = None
     try:
         files: dict[str, Any] = {}
         for name, payload in sorted(payloads.items()):
@@ -541,9 +547,6 @@ def publish_release(request: PublishRequest) -> PublishResult:
                     reason=reason,
                 )
             previous_release_id = previous.name if previous is not None else None
-            if previous_release_id == release_id and release_dir.is_dir():
-                existing_meta = read_json(release_dir / "release.json")
-                previous_release_id = existing_meta.get("previous_release")
             release = {
                 "schema_version": RELEASE_SCHEMA_VERSION,
                 "release_id": release_id,
@@ -565,52 +568,25 @@ def publish_release(request: PublishRequest) -> PublishResult:
             write_json_atomic(temp_dir / "release.json", release)
             write_json_atomic(temp_dir / "report.json", report)
             if release_dir.exists():
+                # 内容寻址的 release 表示第一次发布，绝不能把本次激活的审计写回去。
+                release = read_json(release_dir / "release.json")
+                if release.get("release_fingerprint") != release_fingerprint:
+                    raise PublishError(f"已存在 release 的发布指纹不匹配：{release_id}")
+                for name, info in files.items():
+                    path = release_dir / info["file"]
+                    if not path.is_file() or sha256_file(path) != info["sha256"]:
+                        raise PublishError(f"已存在 release 的数据文件损坏：{name}")
                 shutil.rmtree(temp_dir)
-                existing_release = read_json(release_dir / "release.json")
-                if (
-                    existing_release.get("previous_release") != previous_release_id
-                    or existing_release.get("content_changed") != changed
-                    or (reason and existing_release.get("reason") != reason)
-                ):
-                    write_json_atomic(release_dir / "release.json", release)
-                else:
-                    release = existing_release
             else:
                 try:
                     os.replace(temp_dir, release_dir)
-                    created_release_dir = True
-                except OSError:
-                    # 并发发布同一 release：谁先到谁生效，另一方读现成的，不抛裸 OSError。
-                    shutil.rmtree(temp_dir, ignore_errors=True)
-                    if not release_dir.is_dir():
-                        raise PublishError(
-                            f"发布目录落盘失败，且目标不存在：{release_dir.name}"
-                        )
-                    release = read_json(release_dir / "release.json")
+                except OSError as exc:
+                    raise PublishError(f"发布目录落盘失败：{release_id}") from exc
             if request.activate:
-                latest_previous = _current_release_dir(out_root)
-                if latest_previous != previous and (
-                    latest_previous is None or latest_previous.name != release_id
-                ):
-                    try:
-                        diff, changed = _check_content_change(
-                            latest_previous,
-                            release_dir,
-                            allow_content_change=request.allow_content_change,
-                            reason=reason,
-                        )
-                    except Exception:
-                        if created_release_dir:
-                            shutil.rmtree(release_dir, ignore_errors=True)
-                        raise
-                    previous = latest_previous
-                    release["previous_release"] = (
-                        previous.name if previous is not None else None
-                    )
-                    release["content_changed"] = changed
-                    release["content_diff"] = diff
-                    write_json_atomic(release_dir / "release.json", release)
-                _activate(out_root, release_id)
+                activation, activation_result = _activate(
+                    out_root, release_id, operation="publish", reason=reason,
+                    content_diff=diff, content_changed=changed,
+                )
                 activated = True
     except BaseException:
         shutil.rmtree(temp_dir, ignore_errors=True)
@@ -623,6 +599,8 @@ def publish_release(request: PublishRequest) -> PublishResult:
         activated=activated,
         changed=changed,
         diff=diff,
+        activation=activation,
+        activation_result=activation_result,
     )
 
 
@@ -666,7 +644,10 @@ def _restore_file_bytes(path: Path, old_bytes: bytes | None) -> None:
         path.write_bytes(old_bytes)
 
 
-def _activate(out_root: Path, release_id: str) -> None:
+def _activate(
+    out_root: Path, release_id: str, *, operation: str = "activate", reason: str = "",
+    content_diff: dict[str, Any] | None = None, content_changed: bool | None = None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
     with _publish_lock(out_root):
         releases_dir = out_root / "published" / "releases"
         if not _RELEASE_ID.match(release_id or ""):
@@ -702,9 +683,39 @@ def _activate(out_root: Path, release_id: str) -> None:
             "review_status": release.get("review_status"),
             "activated_at": utc_now(),
         }
+        # 显式 activate 仍可修复遗留双指针不一致：前驱以权威 current 软链为准。
+        # publish 的前置门禁继续严格拒绝不一致，不因该恢复入口放宽。
+        if operation == "activate" and link.is_symlink():
+            previous_id = Path(os.readlink(link)).name
+            previous = releases_dir / previous_id
+        else:
+            previous = _current_release_dir(out_root)
+        if content_diff is None:
+            content_diff = diff_snapshots(previous, release_dir) if previous else {}
+        if content_changed is None:
+            content_changed = bool(content_diff.get("changed"))
+        event_id = f"activation-{uuid.uuid4().hex}"
+        activation = {
+            "schema_version": "p23.activation.1",
+            "event_id": event_id,
+            "operation": operation,
+            "release_id": release_id,
+            "release_fingerprint": release.get("release_fingerprint"),
+            "previous_release": previous.name if previous else None,
+            "reason": reason,
+            "content_changed": content_changed,
+            "content_diff": content_diff,
+            "requested_at": utc_now(),
+        }
+        # 意图先追加落盘，结果另存；强制退出时无结果的事件明确表示结果尚未确认。
         try:
-            # 1. 先在目标 release 目录内写好 .current.json（未切换 current 前对外不可见）。
-            write_json_atomic(release_pointer, pointer_payload)
+            write_json_atomic(published_dir / "activations" / f"{event_id}.json", activation)
+        except OSError as exc:
+            raise PublishError(f"激活意图无法落盘，未切换 current（{event_id}）") from exc
+        try:
+            # 已存在 release 中的元数据也不可改写：激活时刻属于事件，不属于 release。
+            if not release_pointer.is_file():
+                write_json_atomic(release_pointer, pointer_payload)
             # 2. 确保 published/current.json 是指向 current/.current.json 的派生软链。
             if not (old_pointer_is_symlink and old_pointer_link_target == pointer_rel_target):
                 if temp_pointer_link.exists() or temp_pointer_link.is_symlink():
@@ -730,17 +741,48 @@ def _activate(out_root: Path, release_id: str) -> None:
                 _restore_file_bytes(pointer, old_pointer_bytes)
             elif old_link_target is None:
                 pointer.unlink(missing_ok=True)
+            try:
+                write_json_atomic(
+                    published_dir / "activation-results" / f"{event_id}.json",
+                    {"schema_version": "p23.activation-result.1", "event_id": event_id,
+                     "status": "failed", "finished_at": utc_now(), "error_type": type(exc).__name__},
+                )
+            except OSError as audit_exc:
+                raise PublishError(
+                    f"激活失败且结果审计无法落盘，current 已恢复；请核查事件 {event_id}"
+                ) from audit_exc
             if isinstance(exc, OSError) and not isinstance(exc, PublishError):
                 raise PublishError(f"激活 release 失败（{release_id}）：{exc}") from exc
             raise
+        activation_result = {
+            "schema_version": "p23.activation-result.1", "event_id": event_id,
+            "status": "committed", "finished_at": utc_now(),
+        }
+        try:
+            write_json_atomic(
+                published_dir / "activation-results" / f"{event_id}.json", activation_result,
+            )
+        except OSError as exc:
+            # 唯一提交点已成功，不能谎报“激活失败”或回滚已经对外可见的提交。
+            # 返回真实提交结果及显式审计缺口；意图已持久化，可按 event_id 和 current 核查。
+            activation_result["audit_warning"] = (
+                f"current 已提交，但激活结果文件写入失败（{type(exc).__name__}）；"
+                f"请按事件 {event_id} 核查指针，勿把缺少结果文件视为未激活"
+            )
+        return activation, activation_result
 
 
 def activate_release(out_root: str | Path, release_id: str) -> dict[str, Any]:
     """显式回到（或切到）某个已发布版本；只改指针，不动数据文件。"""
 
     root = Path(out_root)
-    _activate(root, release_id)
-    return read_json(root / "published" / "current.json")
+    with _publish_lock(root):
+        event, result = _activate(root, release_id)
+        current = dict(read_json(root / "published" / "current.json"))
+        current["activation_event_id"] = event["event_id"]
+        if result.get("audit_warning"):
+            current["audit_warning"] = result["audit_warning"]
+        return current
 
 
 def list_releases(out_root: str | Path) -> list[dict[str, Any]]:
