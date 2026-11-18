@@ -204,7 +204,10 @@ def item_to_card(user, item) -> ItemCard:
     task = item.version.task
     stages = _stages(item)
     precheck = stages["precheck"]
-    result = (precheck.result or {}) if precheck else {}
+    result = dict((precheck.result or {}) if precheck else {})
+    if getattr(user, "role", None) == "supplier":
+        result.pop("history_reference", None)
+        result["evidence"] = [entry for entry in result.get("evidence", []) if entry.get("source_type") != "history"]
     submission_item = current_submission_item(item)
     images = list(item.images.all())
     return ItemCard(

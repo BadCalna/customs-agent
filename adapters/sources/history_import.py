@@ -1782,6 +1782,210 @@ def _dataset_payload(
     }
 
 
+def _clone_json(value: Any) -> Any:
+    return json.loads(json.dumps(value, ensure_ascii=False))
+
+
+def _partition_merged_records(
+    final_records: Sequence[Mapping[str, Any]],
+    *,
+    writes: Sequence[Mapping[str, Any]],
+    duplicates: Sequence[Mapping[str, Any]],
+    new_meta: Mapping[str, Any],
+) -> tuple[list[Mapping[str, Any]], list[Mapping[str, Any]]]:
+    """区分合并后仍保留旧来源的记录与本次新采纳/更新溯源的记录。"""
+
+    written_ids = {str(item.get("record_id", "")) for item in writes}
+    provenance_updated_ids = {
+        str(item.get("record_id", ""))
+        for item in duplicates
+        if item.get("action") == "provenance_updated"
+    }
+    unchanged_duplicate_ids = {
+        str(item.get("record_id", ""))
+        for item in duplicates
+        if item.get("kind") == "duplicate" and item.get("action") == "kept"
+    }
+    new_sha_by_source = {
+        str(item.get("source_id", "")): str(item.get("sha256", ""))
+        for item in (new_meta.get("source_files") or [])
+        if isinstance(item, Mapping) and item.get("source_id")
+    }
+    retained: list[Mapping[str, Any]] = []
+    adopted: list[Mapping[str, Any]] = []
+    for record in final_records:
+        record_id = str(record.get("record_id", ""))
+        attributes = record.get("attributes") or {}
+        source_id = str(attributes.get("source_file_id", ""))
+        record_sha = str(attributes.get("source_file_sha256", ""))
+        new_sha = new_sha_by_source.get(source_id, "")
+        if record_id in written_ids or record_id in provenance_updated_ids:
+            adopted.append(record)
+        elif record_id in unchanged_duplicate_ids and not (
+            record_sha and new_sha and record_sha != new_sha
+        ):
+            adopted.append(record)
+        else:
+            retained.append(record)
+    return retained, adopted
+
+
+def _declaration_entry(meta: Mapping[str, Any]) -> dict[str, Any] | None:
+    declaration = meta.get("human_declaration")
+    if not isinstance(declaration, Mapping):
+        return None
+    entry = _clone_json(dict(declaration))
+    batch_id = meta.get("import_batch_id")
+    if isinstance(batch_id, str) and batch_id.strip():
+        entry.setdefault("import_batch_id", batch_id)
+    return entry
+
+
+def _merge_dataset_metadata(
+    old_meta: Mapping[str, Any] | None,
+    new_meta: Mapping[str, Any],
+    final_records: Sequence[Mapping[str, Any]],
+    *,
+    writes: Sequence[Mapping[str, Any]],
+    duplicates: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    """保留旧记录时同步保留原来源哈希与原人工声明，不被新批次覆盖。
+
+    - 全量采纳新批次（含首次导入、``replace_changed=True`` 全量替换）：使用新批次元数据；
+    - 仅保留旧记录（新批次未采纳任何新增/替换/同内容溯源更新）：保留旧数据集元数据；
+    - 混合保留旧记录与新批次记录：主 ``source_files`` / ``human_declaration`` 保持保留记录的
+      原来源与原声明，同时在 ``active_source_files`` / ``active_declarations`` 保留所有仍在
+      ``final_records`` 中有效记录对应的文件哈希与声明，供按批次/哈希双向回查。
+    """
+
+    if not old_meta:
+        merged = _clone_json(dict(new_meta))
+        merged["record_count"] = len(final_records)
+        return merged
+
+    retained, adopted = _partition_merged_records(
+        final_records, writes=writes, duplicates=duplicates, new_meta=new_meta
+    )
+    if not retained:
+        merged = _clone_json(dict(new_meta))
+        merged["record_count"] = len(final_records)
+        return merged
+    if not adopted:
+        merged = _clone_json(dict(old_meta))
+        merged["record_count"] = len(final_records)
+        return merged
+
+    merged = _clone_json(dict(old_meta))
+    merged["record_count"] = len(final_records)
+
+    old_sources_by_id = {
+        str(item.get("source_id", "")): _clone_json(dict(item))
+        for item in (old_meta.get("source_files") or [])
+        if isinstance(item, Mapping) and item.get("source_id")
+    }
+    new_sources_by_id = {
+        str(item.get("source_id", "")): _clone_json(dict(item))
+        for item in (new_meta.get("source_files") or [])
+        if isinstance(item, Mapping) and item.get("source_id")
+    }
+    retained_sids = {
+        str((record.get("attributes") or {}).get("source_file_id", ""))
+        for record in retained
+    }
+    if "" in retained_sids:
+        retained_sids.update(old_sources_by_id)
+    active_file_keys = {
+        (
+            str((record.get("attributes") or {}).get("source_file_id", "")),
+            str((record.get("attributes") or {}).get("source_file_sha256", "")),
+        )
+        for record in final_records
+    }
+    sids_without_sha = {sid for sid, sha in active_file_keys if not sha}
+    candidate_sources = [
+        *(old_meta.get("active_source_files") or old_meta.get("source_files") or []),
+        *(new_meta.get("source_files") or []),
+    ]
+    active_sources: list[dict[str, Any]] = []
+    seen_source_keys: set[tuple[str, str]] = set()
+    for item in candidate_sources:
+        if not isinstance(item, Mapping):
+            continue
+        sid = str(item.get("source_id", ""))
+        sha = str(item.get("sha256", ""))
+        if not sid or (sid, sha) in seen_source_keys:
+            continue
+        if (sid, sha) in active_file_keys or sid in sids_without_sha or not sha:
+            seen_source_keys.add((sid, sha))
+            active_sources.append(_clone_json(dict(item)))
+    if active_sources:
+        merged["active_source_files"] = active_sources
+
+    active_sources_by_id: dict[str, list[dict[str, Any]]] = {}
+    for item in active_sources:
+        active_sources_by_id.setdefault(str(item.get("source_id", "")), []).append(item)
+
+    merged_sources: list[dict[str, Any]] = []
+    ordered_sids = list(dict.fromkeys([*old_sources_by_id, *new_sources_by_id]))
+    for sid in ordered_sids:
+        if sid in retained_sids:
+            old_entry = old_sources_by_id.get(sid)
+            old_sha = str(old_entry.get("sha256", "")) if old_entry else ""
+            sid_active = active_sources_by_id.get(sid, [])
+            if old_entry and (not old_sha or (sid, old_sha) in active_file_keys or sid in sids_without_sha):
+                merged_sources.append(old_entry)
+            elif sid_active:
+                merged_sources.append(_clone_json(sid_active[0]))
+            elif old_entry:
+                merged_sources.append(old_entry)
+        elif sid in new_sources_by_id:
+            merged_sources.append(new_sources_by_id[sid])
+        elif sid in old_sources_by_id:
+            merged_sources.append(old_sources_by_id[sid])
+    if merged_sources:
+        merged["source_files"] = merged_sources
+
+    active_batch_ids = {
+        str((record.get("attributes") or {}).get("batch_id", ""))
+        for record in final_records
+    }
+    has_records_without_batch = "" in active_batch_ids
+    candidate_declarations = [
+        *(old_meta.get("active_declarations") or []),
+        *([_declaration_entry(old_meta)] if not old_meta.get("active_declarations") else []),
+        _declaration_entry(new_meta),
+    ]
+    active_declarations: list[dict[str, Any]] = []
+    seen_decl_keys: set[tuple[str, str, str, str]] = set()
+    for item in candidate_declarations:
+        if not isinstance(item, Mapping):
+            continue
+        batch_key = str(item.get("import_batch_id", ""))
+        if batch_key and not has_records_without_batch and batch_key not in active_batch_ids:
+            continue
+        dedup_key = (
+            str(item.get("declaration_id", "")),
+            batch_key,
+            str(item.get("declared_by", "")),
+            str(item.get("statement", "")),
+        )
+        if dedup_key in seen_decl_keys:
+            continue
+        seen_decl_keys.add(dedup_key)
+        active_declarations.append(_clone_json(dict(item)))
+    if active_declarations:
+        merged["active_declarations"] = active_declarations
+        old_batch_id = str(old_meta.get("import_batch_id", "") or "")
+        if old_batch_id and not has_records_without_batch and old_batch_id not in active_batch_ids:
+            fallback = _clone_json(active_declarations[0])
+            fallback_batch = fallback.pop("import_batch_id", None)
+            merged["human_declaration"] = fallback
+            if fallback_batch:
+                merged["import_batch_id"] = fallback_batch
+
+    return merged
+
+
 # --------------------------------------------------------------------------- 主流程
 class ImportIncompleteError(ValueError):
     """导入未完整完成；旧输出必须保持可用。"""
@@ -2546,7 +2750,7 @@ def _import_history_templates(request: ImportRequest, staging: Path) -> ImportOu
     if records_rejected or records_conflicts:
         status = "partial"
 
-    dataset = _dataset_payload(
+    input_dataset = _dataset_payload(
         batch_id=batch_id,
         dataset_kind=request.dataset_kind,
         dataset_id=request.dataset_id,
@@ -2564,6 +2768,13 @@ def _import_history_templates(request: ImportRequest, staging: Path) -> ImportOu
             }
             for meta in source_metas
         ],
+    )
+    dataset = _merge_dataset_metadata(
+        (existing_payload or {}).get("dataset") if existing_payload and existing_payload.get("records") else None,
+        input_dataset,
+        final_records,
+        writes=writes,
+        duplicates=duplicates,
     )
     records_payload = {
         "schema_version": SCHEMA_VERSION,
@@ -2603,6 +2814,7 @@ def _import_history_templates(request: ImportRequest, staging: Path) -> ImportOu
         "out_dir": str(request.out_dir),
         "records_path": str(records_path),
         "human_declaration": declaration.as_dict(batch_id) if declaration else None,
+        "input_dataset": input_dataset,
         "dataset": dataset,
         "source_files": [
             {

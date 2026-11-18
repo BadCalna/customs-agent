@@ -18,6 +18,7 @@ from apps.reviews.api.confirmations import router as confirmations_router
 from apps.reviews.api.decisions import router as decisions_router
 from apps.reviews.api.exports import router as exports_router
 from apps.reviews.api.history import router as history_router
+from apps.reviews.api.history_reference import router as history_reference_router
 from apps.reviews.api.imports import router as imports_router
 from apps.reviews.api.read import router as reviews_read_router
 from apps.reviews.api.submissions import router as submissions_router
@@ -45,6 +46,7 @@ api_v1.add_router("", confirmations_router)
 api_v1.add_router("", submissions_router)
 api_v1.add_router("", decisions_router)
 api_v1.add_router("", history_router)
+api_v1.add_router("", history_reference_router)
 api_v1.add_router("", runs_router)
 api_v1.add_router("", exports_router)
 api_v1.add_router("", pending_router)

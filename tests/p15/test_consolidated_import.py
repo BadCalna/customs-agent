@@ -959,6 +959,54 @@ class ConsolidatedP15IntegrationTest(SimpleTestCase):
             )
             self.assertEqual(_records(replaced)[0]["historical_name"], "合成乙")
 
+    def test_reimport_retaining_changed_record_keeps_original_hash_and_declaration_in_snapshot(self):
+        import hashlib
+
+        with tempfile.TemporaryDirectory() as raw_tmp:
+            tmp = Path(raw_tmp)
+            workbook = build_consolidated_workbook(tmp / "real-style.xlsx", rows=[dict(BASE_ROW, hs="7307210000")])
+            sha1 = hashlib.sha256(workbook.read_bytes()).hexdigest()
+            first = import_history_templates(
+                ImportRequest(
+                    files=[workbook],
+                    out_dir=tmp / "out",
+                    dataset_kind="real",
+                    declared_success=True,
+                    declared_by="Jay",
+                    declaration_note="初版人工声明",
+                    input_format=FORMAT_CONSOLIDATED,
+                    skip_validation=True,
+                )
+            )
+            self.assertEqual(json.loads(first.records_path.read_text())["dataset"]["source_files"][0]["sha256"], sha1)
+
+            build_consolidated_workbook(workbook, rows=[dict(BASE_ROW, hs="7307990000")])
+            sha2 = hashlib.sha256(workbook.read_bytes()).hexdigest()
+            self.assertNotEqual(sha1, sha2)
+            second = import_history_templates(
+                ImportRequest(
+                    files=[workbook],
+                    out_dir=tmp / "out",
+                    dataset_kind="real",
+                    declared_success=True,
+                    declared_by="Reviewer2",
+                    declaration_note="修正版人工声明",
+                    input_format=FORMAT_CONSOLIDATED,
+                    replace_changed=False,
+                    skip_validation=True,
+                )
+            )
+            snapshot = json.loads(second.records_path.read_text(encoding="utf-8"))
+            self.assertEqual(snapshot["records"][0]["historical_hs"], "7307210000")
+            self.assertEqual(snapshot["records"][0]["attributes"]["source_file_sha256"], sha1)
+            self.assertEqual(snapshot["dataset"]["source_files"][0]["sha256"], sha1)
+            self.assertEqual(snapshot["dataset"]["human_declaration"]["declared_by"], "Jay")
+            report = json.loads(second.report_json_path.read_text(encoding="utf-8"))
+            self.assertEqual(report["human_declaration"]["declared_by"], "Reviewer2")
+            self.assertEqual(report["source_files"][0]["sha256"], sha2)
+            self.assertEqual(report["input_dataset"]["human_declaration"]["declared_by"], "Reviewer2")
+            self.assertEqual(report["input_dataset"]["source_files"][0]["sha256"], sha2)
+
 
 @unittest.skipUnless(
     REAL_FILE.is_file(),

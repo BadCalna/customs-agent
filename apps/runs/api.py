@@ -24,4 +24,4 @@ def get_run(request, run_id: str):
         # 非法 UUID 与不存在同形返回 404，不把取值错误暴露成 500。
         raise Http404("执行不存在或不在可见范围") from exc
     require_action(request.auth, READ, run)
-    return run_to_detail(run)
+    return run_to_detail(run, request.auth)

@@ -78,7 +78,8 @@ make test TASK=P02     # 与上一条同入口，59 项
 - 身份：`POST /auth/login`、`POST /auth/logout`、`GET /me`
 - 任务读取：`GET /tasks`、`GET /tasks/{task_id}`、`GET /tasks/claimable`、`GET /tasks/{task_id}/history`
 - 版本与商品读取：`GET /versions/{version_id}/import`、`GET /versions/{version_id}/items`、
-  `GET /versions/{version_id}/items/{item_id}`、`GET /runs/{run_id}`
+  `GET /versions/{version_id}/items/{item_id}`、`GET /versions/{version_id}/items/{item_id}/history-reference`（内部 `operator` / `expert` 只读）、
+  `GET /runs/{run_id}`
 - 文件下载：`GET /files/{file_id}`
 - 写入：`POST /tasks`（P06 上传）、`POST /tasks/{task_id}/versions`（P06 补料）、
   `POST /tasks/{task_id}/claim`（P06 认领）、`PATCH /versions/{version_id}/items/{item_id}/confirmation`（P09）、

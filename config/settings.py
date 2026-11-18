@@ -32,6 +32,12 @@ def mode(name, default, choices):
 PAGE_DATA_MODE = mode("CUSTOMS_PAGE_MODE", "live", ("live", "fixture"))
 ENGINE_MODE = mode("CUSTOMS_ENGINE_MODE", "mock", ("mock",))
 EXECUTOR_MODE = mode("CUSTOMS_EXECUTOR_MODE", "inline", ("inline",))
+# 历史案例只作为参考证据；默认保持 JSON 兼容，实际部署显式选择 database。
+HISTORY_BACKEND = mode("CUSTOMS_HISTORY_BACKEND", "json", ("json", "database"))
+HISTORY_DATASET_KEY = os.environ.get("CUSTOMS_HISTORY_DATASET_KEY", "historical-success").strip()
+HISTORY_REFERENCE_ENABLED = os.environ.get("CUSTOMS_HISTORY_REFERENCE_ENABLED", "0").strip() == "1"
+if HISTORY_BACKEND == "database" and not HISTORY_DATASET_KEY:
+    raise ImproperlyConfigured("CUSTOMS_HISTORY_DATASET_KEY must not be empty for database history.")
 
 
 def byte_setting(name: str, default: int) -> int:
@@ -78,6 +84,7 @@ INSTALLED_APPS = [
     "apps.reviews",
     "apps.runs",
     "apps.notifications",
+    "apps.history_reference",
     "ninja",
     "apps.api",
 ]

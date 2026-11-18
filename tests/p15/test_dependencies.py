@@ -34,6 +34,7 @@ SEARCH_ALLOWED_TOP_LEVEL = {
     "unicodedata",
     "ninja",
     "pydantic",
+    "django",  # 显式存储选择仅延迟读取settings，默认JSON行为保留。
     "apps",
 }
 
