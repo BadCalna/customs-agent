@@ -88,6 +88,12 @@ async function harness(overrides = {}) {
   };
 }
 
+function bindDecisionForm(h, form) {
+  const [taskId, versionId, submissionId] = JSON.parse(h.state.renderedDecisionScope);
+  return {...form, fields: {...form.fields, scope_task_id: taskId,
+    scope_version_id: versionId, scope_submission_id: submissionId}};
+}
+
 for (const action of ['return', 'approve']) {
   test(`${action}: same submission network retry reuses key; new submission with identical payload gets a new key`, async () => {
     let submission = {submission_id: 'S1', status: 'pending', items: [{item_id: 'item-A', submitted_hs: '1234567890'}]};
@@ -105,13 +111,14 @@ for (const action of ['return', 'approve']) {
       ? {action, return_to: 'operator', reason: '补充资料', issue: '用途不清'}
       : {action, reason: '同意', 'final-item-A': '1234567890', 'reason-item-A': ''}};
     await h.openTask('A');
-    await assert.rejects(h.decide(form), /offline/);
-    await h.decide(form);
+    const boundForm = bindDecisionForm(h, form);
+    await assert.rejects(h.decide(boundForm), /offline/);
+    await h.decide(boundForm);
     assert.equal(calls[0].id, 'S1');
     assert.equal(calls[0].key, calls[1].key, 'network retry must retain the original idempotency key');
     submission = {...submission, submission_id: 'S2', status: 'pending'};
     await h.openTask('A');
-    await h.decide(form);
+    await h.decide(bindDecisionForm(h, form));
     assert.equal(calls[2].id, 'S2');
     assert.equal(JSON.stringify(calls[0].payload), JSON.stringify(calls[2].payload));
     assert.notEqual(calls[0].key, calls[2].key, 'new submission is a new decision intent, even on the same version');

@@ -113,7 +113,7 @@ async function harness() {
     return form;
   };
   return {
-    currentForm, decisions,
+    currentForm, decisions, api,
     status: () => vm.runInContext('state.run?.status', context),
     set(name, value) { currentForm().controls.get(name).value = value; },
     value(name) { return currentForm().controls.get(name).value; },
@@ -145,11 +145,16 @@ async function harness() {
       vm.runInContext('state.me = {id: "expert-2", username: "expert-2", role: "expert", role_label: "Expert"}; showSession()', context);
       await context.hooks.openTask(taskId);
     },
+    async submitForm(target) {
+      handlers.get('submit')({target, preventDefault() {}});
+      await new Promise(resolve => setImmediate(resolve));
+    },
     async submit() {
       const target = currentForm();
       handlers.get('submit')({target, preventDefault() {}});
       await new Promise(resolve => setImmediate(resolve));
     },
+    openTask(id) { return context.hooks.openTask(id); },
   };
 }
 
@@ -228,5 +233,37 @@ async function harness() {
   assert.equal(scope.value('final-item-1'), '4444444444', 'original task scope should recover its draft');
   await scope.newSession();
   assert.equal(scope.value('final-item-1'), '1111111111', 'new session must not inherit prior draft');
-  console.log('PASS: running/completed polls, approve/return drafts, scoped refresh and decision POST');
+
+  // P1: a form rendered for S1 must never be rebound to the new S2 submission.
+  const stale = await harness();
+  const oldSubmissionForm = stale.currentForm();
+  await stale.switchScope({submission: 'submission-2'});
+  assert.notEqual(stale.currentForm(), oldSubmissionForm);
+  await stale.submitForm(oldSubmissionForm);
+  assert.equal(stale.decisions.length, 0, 'detached S1 form must not decide current S2');
+
+  // The same protection must apply while the next task is still loading: the old
+  // task remains in state briefly, but its write controls are already invalid.
+  const loading = await harness();
+  const loadingForm = loading.currentForm();
+  let releaseTask;
+  loading.api.getTask = id => new Promise(resolve => {
+    loading.api.getRun = async () => ({run_id: 'run-1', task_id: id, version_id: 'version-1',
+      kind: 'expert_check', status: 'succeeded',
+      progress: {total: 1, succeeded: 1, failed: 0, running: 0, queued: 0},
+      items: [], retry_allowed: false, retry_item_ids: [], result_mode: 'live'});
+    releaseTask = () => resolve({task_id: id, title: 'Review B', current_version_id: 'version-1',
+      current_version_number: 1, stage: 'submitted', result_mode: 'live', latest_run_id: 'run-1',
+      versions: [{version_id: 'version-1', number: 1, original_filename: 'input.xlsx'}],
+      supplier: 'Supplier', revision: 1});
+  });
+  const navigating = loading.openTask('task-2');
+  await loading.submitForm(loadingForm);
+  assert.equal(loading.decisions.length, 0, 'navigation must invalidate old form before getTask resolves');
+  releaseTask();
+  await navigating;
+  await loading.submit();
+  assert.equal(loading.decisions.length, 1, 'freshly bound form remains usable');
+
+  console.log('PASS: running/completed polls, approve/return drafts, scoped refresh and stale-form rejection');
 })().catch(error => { console.error(error); process.exitCode = 1; });

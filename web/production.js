@@ -15,7 +15,8 @@ const state = {me: null, tasks: [], cursor: null, claims: [], claimCursor: null,
   task: null, versionId: null, items: [],
   history: null, importJob: null, run: null, card: null, selectedItemId: null,
   decisionDrafts: new Map(), renderedDecisionScope: null,
-  uploadIntent: null, actionKeys: new Map(), generation: 0, timer: null, busy: false};
+  uploadIntent: null, actionKeys: new Map(), generation: 0, timer: null, busy: false,
+  reviewLoading: false};
 
 function notice(message, error = false) {
   const host = $("#notice");
@@ -136,8 +137,17 @@ function runMatchesScope(run, taskId, versionId, runId) {
   return !!run && run.task_id === taskId && run.version_id === versionId && run.run_id === runId;
 }
 
+function invalidateDecisionForm() {
+  captureDecisionDraft();
+  state.reviewLoading = true;
+  state.renderedDecisionScope = null;
+  // Detached controls must be inert too; identity is checked again in decide().
+  $("#decision-form")?.remove?.();
+}
+
 async function openTask(taskId, versionId = null, itemId = null) {
   clearTimeout(state.timer);
+  invalidateDecisionForm();
   const generation = ++state.generation;
   // Navigation invalidates retry immediately, even while getTask is still pending.
   state.run = null;
@@ -152,6 +162,7 @@ async function openTask(taskId, versionId = null, itemId = null) {
 
 async function openVersion(versionId, itemId = null) {
   clearTimeout(state.timer);
+  invalidateDecisionForm();
   const generation = ++state.generation;
   const taskId = state.task?.task_id;
   const isCurrent = () => generation === state.generation
@@ -163,7 +174,10 @@ async function openVersion(versionId, itemId = null) {
   state.card = null;
   state.selectedItemId = null;
   renderDetail();
-  if (!versionId) return;
+  if (!versionId) {
+    state.reviewLoading = false;
+    return;
+  }
   if (!taskId || !state.task.versions.some(version => version.version_id === versionId))
     throw new Error("版本不属于当前任务，请刷新后重试");
   const [items, history, importJob] = await Promise.all([
@@ -180,6 +194,7 @@ async function openVersion(versionId, itemId = null) {
   if (run && !runMatchesScope(run, taskId, versionId, runId))
     throw new Error("运行结果归属不匹配，请刷新后重试");
   state.run = run;
+  state.reviewLoading = false;
   renderDetail();
   if (itemId) await openItem(itemId);
   schedulePoll(generation);
@@ -243,7 +258,8 @@ function renderTask() {
       <button data-action="submit" class="primary" ${state.items.length && !["submitted", "approved"].includes(task.stage) ? "" : "disabled"}>提交专家审核</button></div>
     ${task.stage !== "approved" && task.stage !== "submitted" ? `<form id="return-form" class="action-form"><h3>退回供应商补料</h3>
       <label>原因<textarea name="reason" required></textarea></label><button type="submit" class="danger">退回</button></form>` : ""}` : "";
-  const scope = state.me.role === "expert" && current && live && submission ? decisionScope(submission) : null;
+  const scope = !state.reviewLoading && state.me.role === "expert" && current && live && submission
+    ? decisionScope(submission) : null;
   const decision = scope ? decisionPanel(submission, decisionDraft(scope)) : "";
   host.innerHTML = `<div class="section-heading"><h1>${esc(task.title)}</h1><span class="status ${esc(task.stage)}">${esc(label(task.stage))}</span></div>
     <div class="meta"><span>任务 ${esc(task.task_id)}</span><span>供应商 ${esc(task.supplier)}</span>
@@ -265,7 +281,11 @@ function decisionPanel(submission, draft) {
   return `<div class="action-form"><h3>专家决定</h3><div class="actions">
       <button data-decision-mode="approve" class="${isApprove ? "primary" : ""}">整批通过</button>
       <button data-decision-mode="return" class="${!isApprove ? "primary" : ""}">退回补料</button></div>
-    <form id="decision-form" class="action-form"><input type="hidden" name="action" value="${draft.action}">
+    <form id="decision-form" class="action-form">
+      <input type="hidden" name="scope_task_id" value="${esc(state.task.task_id)}">
+      <input type="hidden" name="scope_version_id" value="${esc(state.versionId)}">
+      <input type="hidden" name="scope_submission_id" value="${esc(submission.submission_id)}">
+      <input type="hidden" name="action" value="${draft.action}">
       ${isApprove ? `<div class="table-wrap"><table><thead><tr><th>商品</th><th>提交编码</th><th>专家终值</th><th>改码原因</th></tr></thead><tbody>
         ${submission.items.map(line => `<tr class="decision-row"><td>${esc(names.get(line.item_id) || line.item_id)}</td>
           <td>${esc(line.submitted_hs)}</td><td><input name="final-${esc(line.item_id)}" value="${esc(approve[`final-${line.item_id}`] ?? line.submitted_hs)}" pattern="[0-9]{10}" required></td>
@@ -408,8 +428,18 @@ async function submitTask() {
 }
 
 async function decide(form) {
-  const submission = pendingSubmission();
   const fields = new FormData(form);
+  const scope = JSON.stringify([
+    fields.get("scope_task_id"), fields.get("scope_version_id"), fields.get("scope_submission_id"),
+  ]);
+  // The form, not the current pending submission, owns the decision intent.
+  // Never rebind an old/detached form to a new task, version or submission.
+  if (state.reviewLoading || scope !== state.renderedDecisionScope)
+    throw new Error("审核表单已过期或审核对象已切换，请核对当前提交后重试");
+  const submission = pendingSubmission();
+  if (!submission || decisionScope(submission) !== scope)
+    throw new Error("审核提交已变化，请刷新后核对当前提交再决定");
+  const [taskId, , submissionId] = JSON.parse(scope);
   let payload;
   if (fields.get("action") === "approve") {
     payload = {action: "approve", reason: fields.get("reason"), items: submission.items.map(line => ({
@@ -422,12 +452,15 @@ async function decide(form) {
     payload = {action: "return", return_to: fields.get("return_to"), reason: fields.get("reason"),
       issues: [{message: fields.get("issue")}]};
   }
-  await api.decideSubmission(submission.submission_id, payload,
-    actionKey("decision", payload, submission.submission_id));
-  state.decisionDrafts.delete(decisionScope(submission));
-  state.renderedDecisionScope = null;
-  notice(payload.action === "approve" ? "整批审核已通过。" : "已退回补料。");
-  await openTask(state.task.task_id);
+  await api.decideSubmission(submissionId, payload,
+    actionKey("decision", payload, submissionId));
+  state.decisionDrafts.delete(scope);
+  const sameView = !state.reviewLoading && state.renderedDecisionScope === scope
+    && state.task?.task_id === taskId;
+  if (sameView) state.renderedDecisionScope = null;
+  const completed = payload.action === "approve" ? "整批审核已通过" : "已退回补料";
+  notice(sameView ? `${completed}。` : `${completed}（原提交 ${submissionId}）；当前审核对象未改变。`);
+  if (sameView) await openTask(taskId);
 }
 
 $("#login-form").addEventListener("submit", event => {

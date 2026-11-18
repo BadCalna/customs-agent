@@ -75,7 +75,7 @@ const RETURN_TARGET_LABEL = Object.freeze({ supplier: "供应商", operator: "�
 const WRITE_CALLS = Object.freeze({
   confirm: (api, payload) => api.confirm(payload),
   submit: (api, payload) => api.submit(payload),
-  decide: (api, payload) => api.decide(payload),
+  decide: (api, payload, expectedSubmissionId) => api.decide(payload, expectedSubmissionId),
 });
 
 let instanceSeq = 0;
@@ -1181,7 +1181,7 @@ export function createReviewActions(options = {}) {
     render();
 
     try {
-      const response = await WRITE_CALLS.decide(api, payload);
+      const response = await WRITE_CALLS.decide(api, payload, snapshot.submission_id);
       const offScope = offScopeFeedback("decide", submittedScope, state.scopeKey, response);
       if (offScope) {
         state.feedback = offScope;

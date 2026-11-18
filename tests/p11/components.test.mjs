@@ -294,6 +294,34 @@ test('M-01 专家草稿按任务+版本+提交隔离：S1 的终值/原因不会
   controller.destroy();
 });
 
+test('P1 update(S2) 不得让固定 S1 请求适配器接收 S2 表单', async () => {
+  let owner = 'sub-1';
+  const writes = [];
+  const api = {
+    confirm: async () => ({}), submit: async () => ({}),
+    async decide(payload, expectedSubmissionId) {
+      if (expectedSubmissionId !== owner) throw new Error('提交快照与请求目标不一致');
+      writes.push({owner, payload});
+      return {};
+    },
+  };
+  const controller = createReviewActions({api, role: 'expert', data: expertData({submissionId: 'sub-1'})});
+  const node = host();
+  controller.mount(node);
+  controller.update(expertData({submissionId: 'sub-2'}));
+  dispatchClick(node.child, {act: 'decide'});
+  await flush();
+  assert.equal(writes.length, 0, 'S2 表单不能写入旧 S1 owner');
+
+  owner = 'sub-2';
+  dispatchClick(node.child, {act: 'decide'});
+  await flush();
+  assert.equal(writes.length, 1, '匹配的 S2 owner 仍可正常提交');
+  assert.equal(writes[0].owner, 'sub-2');
+  assert.deepEqual(writes[0].payload.items, [{item_id: ITEM, final_hs: SUBMITTED, change_reason: ''}]);
+  controller.destroy();
+});
+
 test('M-01 退回草稿同样按提交隔离：S1 的逐商品问题不进入 S2 退回', async () => {
   const api = recordingApi();
   const first = expertData({submissionId: 'sub-1'});
