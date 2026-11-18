@@ -1,0 +1,108 @@
+{
+  "schema_version": "p23.sources.1",
+  "batch_id": "customs-reference-2026-11-17",
+  "dataset_kind": "real",
+  "prepared_at": "2026-11-18T01:00:00+08:00",
+  "notes": "P23 官方参考数据导入来源清单：登记本批实际取得的原件、它们各自喂给哪个数据类别，以及哪些数据类别用户尚未提供。原件不复制、不改写；导入前后核对 SHA-256。",
+  "defaults": {
+    "dataset_prefix": "customs-reference-2026-11-17",
+    "tariff_version": "2026",
+    "tariff_effective_from": "2026-11-16",
+    "elements_version": "2026",
+    "elements_effective_from": "2026-11-16",
+    "tax_version": "2026C",
+    "commentary_version": "2026-11-17T10-20"
+  },
+  "datasets": [
+    {
+      "dataset": "p14_tariff",
+      "status": "provided",
+      "inputs": ["M01", "M02"]
+    },
+    {
+      "dataset": "p14_elements",
+      "status": "provided",
+      "inputs": ["M01", "M02"]
+    },
+    {
+      "dataset": "p17_tax_rates",
+      "status": "provided",
+      "inputs": ["M02"]
+    },
+    {
+      "dataset": "regulatory_code_ledger",
+      "status": "provided",
+      "inputs": ["M01", "M02"]
+    },
+    {
+      "dataset": "p17_regulatory",
+      "status": "not_provided",
+      "reason": "用户尚未提供监管条件表：本批只有监管条件代码字符串，没有进出口方向、措施名称、主管机关、证件与生效/失效日期；按代码猜含义会凭空造出监管结论，因此不生成 P17 监管条件库"
+    },
+    {
+      "dataset": "tariff_commentary",
+      "status": "provided",
+      "inputs": ["C01"]
+    }
+  ],
+  "inputs": [
+    {
+      "source_id": "M01",
+      "kind": "hs_element_mapping_workbook",
+      "repository_path": "data/import-basis/2026-11-17/mappings/HS编码与申报要素映射_2026-11-16.xlsx",
+      "original_filename": "HS编码与申报要素映射_2026-11-16.xlsx",
+      "sha256": "58d0e7314dc87ac3e32b402ecf21f5e7409837c2cee7fbc99f3593d061b3ad92",
+      "bytes": 4072906,
+      "roles": ["hs_catalog", "declaration_elements"],
+      "retrieved_at": "2026-11-15T16:40:44.265Z",
+      "recorded_source": {
+        "publisher": "海关总署",
+        "hs_system": "海关总署「互联网+海关」税则查询（用户导出整理）",
+        "elements_system": "海关总署规范申报要素查询（用户导出整理）",
+        "hs_url": "https://online.customs.gov.cn/ociswebserver/pages/cus/#/tgcs/info?paramCode=CusComplex",
+        "elements_url": "https://online.customs.gov.cn/ociswebserver/pages/cus/#/tgcs/info?paramCode=CusMerchElement",
+        "collection_timestamps_raw": "HS: 2026-11-15T16:40:44.265Z  要素: 2026-11-15T16:31:21.802Z"
+      },
+      "notes": "与 M02 的 HS 编码索引、申报要素明细两页签逐格一致（导入期核对），用于验证同内容重复导入不产生重复记录。retrieved_at 取来源页内记录的 HS 采集时间（UTC）。"
+    },
+    {
+      "source_id": "M02",
+      "kind": "hs_element_tax_rate_workbook",
+      "repository_path": "data/HS编码与申报要素及出口退税率映射_2026-11-17.xlsx",
+      "original_filename": "HS编码与申报要素及出口退税率映射_2026-11-17.xlsx",
+      "sha256": "4edde78951997c7f1583b292122f6c77b726fdba68cb8cfb143a2a623a0f4be9",
+      "bytes": 4112071,
+      "roles": ["hs_catalog", "declaration_elements", "tax_rates"],
+      "retrieved_at": "2026-11-15T16:40:44.265Z",
+      "recorded_source": {
+        "publisher": "海关总署 / 国家税务总局",
+        "hs_system": "海关总署「互联网+海关」税则查询（用户导出整理）",
+        "elements_system": "海关总署规范申报要素查询（用户导出整理）",
+        "tax_system": "国家税务总局出口退税率文库 2026C 版（用户导出整理）",
+        "hs_url": "https://online.customs.gov.cn/ociswebserver/pages/cus/#/tgcs/info?paramCode=CusComplex",
+        "elements_url": "https://online.customs.gov.cn/ociswebserver/pages/cus/#/tgcs/info?paramCode=CusMerchElement",
+        "tax_url": "https://hd.chinatax.gov.cn/nszx2023/cktslcx2023.html",
+        "collection_timestamps_raw": "HS: 2026-11-15T16:40:44.265Z  要素: 2026-11-15T16:31:21.802Z",
+        "tax_checked_at_raw": "2026-11-17"
+      },
+      "notes": "在 M01 基础上增加出口退税率相关列（出口退税率、税务匹配编码、匹配层级、税率生效日/失效日、11 位细分税码及税率、税率核验状态）。"
+    },
+    {
+      "source_id": "C01",
+      "kind": "commentary_json",
+      "repository_path": null,
+      "local_path_hint": "data/customs_tariff_commentary/品目注释_全量_20261117_1020.json",
+      "original_filename": "品目注释_全量_20261117_1020.json",
+      "sha256": "4abfdee14751017485feacbbd350f320a93a62a9b6d8abaa6a32413d1fe17fbb",
+      "bytes": 55109162,
+      "roles": ["tariff_commentary"],
+      "retrieved_at": "2026-11-17 00:36:05",
+      "recorded_source": {
+        "publisher": "海关总署",
+        "system": "海关总署商品归类参数查询（品目注释）",
+        "url": "http://www.customs.gov.cn/customs/302427/302442/jckszspjpmzscx/index.html"
+      },
+      "notes": "原件 55 MB，未随仓库分发：默认在仓库内 data/customs_tariff_commentary/ 与仓库同级 data/customs_tariff_commentary/ 两处查找，取不到时该数据类别记为 input_missing，不影响其它类别。同目录下 .xlsx 与批次 _0036 为历史/派生副本，未导入。"
+    }
+  ]
+}
