@@ -198,6 +198,16 @@ class IncompleteImportTests(TransactionTestCase):
         with self.assertRaisesRegex(ValueError, "导入原件未保全"):
             table_counts.main(["--require-complete-imports", "--files-root", str(self.root)])
 
+    def test_legacy_succeeded_without_original_retains_empty_manifest(self):
+        self.reserved_job(status=ImportJob.Status.SUCCEEDED)
+        self.root.mkdir()
+        self.assertIsNone(require_completed_imports(self.root))
+        self.assertEqual(verify_copy.attachment_manifest(self.root), [])
+        with redirect_stdout(io.StringIO()):
+            self.assertEqual(table_counts.main([
+                "--require-complete-imports", "--files-root", str(self.root),
+            ]), 0)
+
     def test_corrected_v3_preserves_failed_v2_across_all_complete_gates(self):
         first = self.upload()
         bad_data = sample(order=(2, 1, 3))
@@ -238,6 +248,17 @@ class IncompleteImportTests(TransactionTestCase):
                           ])):
                 with self.assertRaisesRegex(ValueError, "哈希不符"):
                     check()
+
+        relocated = self.root / "relocated.xlsx"
+        relocated.write_bytes(bad_data)
+        FileVersion.objects.filter(pk=failed.version_id).update(storage_path=relocated.name)
+        for check in (lambda: require_completed_imports(self.root),
+                      lambda: verify_copy.attachment_manifest(self.root),
+                      lambda: table_counts.main([
+                          "--require-complete-imports", "--files-root", str(self.root),
+                      ])):
+            with self.assertRaisesRegex(ValueError, "路径不符"):
+                check()
 
     def test_incomplete_job_blocks_manifest_even_when_another_import_succeeded(self):
         self.upload()
