@@ -41,6 +41,10 @@ SCENARIOS = (
     "association_error",
     "supplier_invalid",
     "expert_conflict",
+    "expert_elements_unknown",
+    "expert_images_unknown",
+    "expert_tax_unknown",
+    "expert_regulatory_unknown",
 )
 
 
@@ -182,6 +186,77 @@ class MockEngine:
 
     def expert_check(self, payload: ExpertCheckInput) -> ExpertCheckOutput:
         scenario = self._scenario(payload)
+        if scenario == "tech_failure":
+            raise EngineTechnicalError("mock 模拟的技术失败：上游模型超时")
+
+        unknown_scenarios = {
+            "expert_elements_unknown": (
+                "elements",
+                "mock：申报要素未核实（条件或版本待核），不视为相符",
+                IssueEntry(
+                    code="MOCK_ELEMENTS_UNKNOWN",
+                    message="mock：申报要素条件或版本待核",
+                    field="elements_text",
+                    suggested_role="expert",
+                ),
+            ),
+            "expert_images_unknown": (
+                "images",
+                "mock：附图未取得或读取失败，不推断材质、工艺或税率",
+                IssueEntry(
+                    code="MOCK_IMAGES_UNKNOWN",
+                    message="mock：附图事实未核或读取失败",
+                    field="images",
+                    suggested_role="operator",
+                ),
+            ),
+            "expert_tax_unknown": (
+                "tax",
+                "mock：退税率查无或条件未核，不按 0% 处理",
+                IssueEntry(
+                    code="MOCK_TAX_UNKNOWN",
+                    message="mock：退税率未核实，不得读作 0% 或无风险",
+                    field="supplier_tax_rate_raw",
+                    suggested_role="expert",
+                ),
+            ),
+            "expert_regulatory_unknown": (
+                "regulatory",
+                "mock：监管条件方向不明或含两用物项线索，不得读作无监管",
+                IssueEntry(
+                    code="MOCK_REGULATORY_UNKNOWN",
+                    message="mock：监管条件或两用物项线索待专家核定",
+                    field="regulatory",
+                    suggested_role="expert",
+                ),
+            ),
+        }
+        if scenario in unknown_scenarios:
+            target_aspect, unknown_reason, issue = unknown_scenarios[scenario]
+            matched_reasons = {
+                "elements": "mock：申报要素与提交码的合成核对相符",
+                "images": "mock：附图可见事实与申报品名合成核对相符",
+                "tax": "mock：退税率与原表数值合成核对相符",
+                "regulatory": "mock：监管条件合成核对无未决项",
+            }
+            findings = [
+                ExpertFinding(
+                    aspect=aspect,
+                    verdict=ExpertVerdict.UNKNOWN if aspect == target_aspect else ExpertVerdict.MATCHED,
+                    reason=unknown_reason if aspect == target_aspect else matched_reasons[aspect],
+                    evidence_ids=[] if aspect == target_aspect else ["mock-obtained"],
+                )
+                for aspect in ("elements", "images", "tax", "regulatory")
+            ]
+            return ExpertCheckOutput(
+                target_hs=payload.submitted_hs,
+                findings=findings,
+                suggested_hs=None,
+                issues=[issue],
+                evidence=[_synthetic_evidence(EvidenceStatus.OBTAINED, "mock 专家核查合成依据")],
+                evidence_status=EvidenceStatus.OBTAINED,
+            )
+
         findings = [
             ExpertFinding(
                 aspect="elements",
