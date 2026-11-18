@@ -50,6 +50,7 @@ function showSession() {
   if (!state.me) {
     state.generation += 1;
     clearTimeout(state.timer);
+    state.reviewLoading = false;
     state.decisionDrafts.clear();
     state.renderedDecisionScope = null;
     state.task = null;
@@ -124,6 +125,10 @@ function captureDecisionDraft() {
   const form = $("#decision-form");
   if (!state.renderedDecisionScope || !form) return;
   const fields = Object.fromEntries(new FormData(form));
+  const formScope = JSON.stringify([
+    fields.scope_task_id ?? null, fields.scope_version_id ?? null, fields.scope_submission_id ?? null,
+  ]);
+  if (formScope !== state.renderedDecisionScope) return;
   const draft = decisionDraft(state.renderedDecisionScope);
   draft[fields.action === "return" ? "returnFields" : "approveFields"] = fields;
 }
@@ -215,6 +220,7 @@ function schedulePoll(generation) {
   if (!active) return;
   state.timer = setTimeout(async () => {
     if (generation !== state.generation) return;
+    if (state.busy) { schedulePoll(generation); return; }
     try {
       const taskId = state.task?.task_id;
       const versionId = state.versionId;
@@ -224,6 +230,7 @@ function schedulePoll(generation) {
         runId ? api.getRun(runId) : null,
       ]);
       if (generation !== state.generation || state.task?.task_id !== taskId || state.versionId !== versionId) return;
+      if (state.busy) { schedulePoll(generation); return; }
       if (run && !runMatchesScope(run, taskId, versionId, runId))
         throw new Error("运行结果归属不匹配，请刷新后重试");
       const importFinished = state.importJob?.parse_status === "staged" && job?.parse_status !== "staged";
@@ -440,17 +447,20 @@ async function decide(form) {
   if (!submission || decisionScope(submission) !== scope)
     throw new Error("审核提交已变化，请刷新后核对当前提交再决定");
   const [taskId, , submissionId] = JSON.parse(scope);
+  const action = fields.get("action");
   let payload;
-  if (fields.get("action") === "approve") {
+  if (action === "approve") {
     payload = {action: "approve", reason: fields.get("reason"), items: submission.items.map(line => ({
       item_id: line.item_id, final_hs: fields.get(`final-${line.item_id}`),
       change_reason: fields.get(`reason-${line.item_id}`) || "",
     }))};
     if (payload.items.some((line, index) => line.final_hs !== submission.items[index].submitted_hs && !line.change_reason.trim()))
       throw new Error("专家改码时必须填写对应商品的改码原因");
-  } else {
+  } else if (action === "return") {
     payload = {action: "return", return_to: fields.get("return_to"), reason: fields.get("reason"),
       issues: [{message: fields.get("issue")}]};
+  } else {
+    throw new Error("无效的审核决定类型，请刷新后重试");
   }
   await api.decideSubmission(submissionId, payload,
     actionKey("decision", payload, submissionId));
@@ -510,9 +520,10 @@ document.addEventListener("click", event => {
   const target = event.target.closest("[data-task],[data-version],[data-item],[data-claim],[data-action],[data-decision-mode]");
   if (!target) return;
   if (target.dataset.decisionMode) {
+    if (state.busy || state.reviewLoading || !state.renderedDecisionScope) return;
     captureDecisionDraft();
-    if (!state.renderedDecisionScope) return;
-    decisionDraft(state.renderedDecisionScope).action = target.dataset.decisionMode;
+    const mode = target.dataset.decisionMode === "return" ? "return" : "approve";
+    decisionDraft(state.renderedDecisionScope).action = mode;
     renderTask();
     return;
   }

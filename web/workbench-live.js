@@ -78,7 +78,10 @@ export function createWorkbenchReview({host, client, getContext, getUser, getSes
       return bound===owner && !host.hidden && getSession()===owner.ticket && ctx===owner.ctx && binding(ctx.store.get(),getUser()?.role)?.scope===owner.scope;
     }
     panel=createReviewActions({role,data:next.data,api:{
-      confirm:payload=>client.confirmItem(owner.versionId,owner.itemId,payload),
+      confirm:payload=>{
+        if (!stillCurrent() || !getContext().store.get().task?.allowed_actions?.includes('confirmation.write')) return Promise.reject(new Error('审核上下文正在刷新、已切换或无操作权限；草稿已保留，请核对后再提交。'));
+        return client.confirmItem(owner.versionId,owner.itemId,payload);
+      },
       submit:()=>Promise.reject(new Error('请使用本批次提交入口，避免只提交选中商品')),
       decide:(payload,expectedSubmissionId)=>{
         if (!stillCurrent() || expectedSubmissionId!==owner.submissionId

@@ -105,7 +105,7 @@ async function harness() {
     clearTimeout: timer => { if (timer) timer.canceled = true; },
   };
   vm.createContext(context);
-  vm.runInContext(source + '\nglobalThis.hooks = {openTask};', context);
+  vm.runInContext(source + '\nglobalThis.hooks = {openTask, openVersion};', context);
   await new Promise(resolve => setImmediate(resolve));
   await context.hooks.openTask(taskId);
   const currentForm = () => {
@@ -114,6 +114,9 @@ async function harness() {
   };
   return {
     currentForm, decisions, api,
+    hasForm: () => !!form,
+    state: () => vm.runInContext('state', context),
+    notice: () => element('#notice').textContent,
     status: () => vm.runInContext('state.run?.status', context),
     set(name, value) { currentForm().controls.get(name).value = value; },
     value(name) { return currentForm().controls.get(name).value; },
@@ -129,6 +132,11 @@ async function harness() {
       await completion;
     },
     finish() { runStatus = 'succeeded'; },
+    setScope({task = taskId, version = versionId, submission = submissionId}) {
+      taskId = task;
+      versionId = version;
+      submissionId = submission;
+    },
     async refresh(submission = submissionId) {
       submissionId = submission;
       await context.hooks.openTask(taskId);
@@ -155,6 +163,7 @@ async function harness() {
       await new Promise(resolve => setImmediate(resolve));
     },
     openTask(id) { return context.hooks.openTask(id); },
+    openVersion(id) { return context.hooks.openVersion(id); },
   };
 }
 
@@ -264,6 +273,107 @@ async function harness() {
   await navigating;
   await loading.submit();
   assert.equal(loading.decisions.length, 1, 'freshly bound form remains usable');
+
+  // Same task & version: history already returned S2 while getRun is hanging.
+  // Clicking the stale S1 form must never decide S2 either during loading or after S2 renders.
+  const sameVersionWait = await harness();
+  sameVersionWait.set('final-item-1', '2222222222');
+  sameVersionWait.set('reason-item-1', 'S1-only edit');
+  const s1FormBeforeRunHang = sameVersionWait.currentForm();
+  let releaseRun;
+  sameVersionWait.setScope({submission: 'submission-2'});
+  sameVersionWait.api.getRun = () => new Promise(resolve => {
+    releaseRun = () => resolve({run_id: 'run-1', task_id: 'task-1', version_id: 'version-1',
+      kind: 'expert_check', status: 'succeeded',
+      progress: {total: 1, succeeded: 1, failed: 0, running: 0, queued: 0},
+      items: [], retry_allowed: false, retry_item_ids: [], result_mode: 'live'});
+  });
+  const refreshingSameVersion = sameVersionWait.openVersion('version-1');
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(sameVersionWait.state().history.versions[0].submissions[0].submission_id, 'submission-2');
+  assert.equal(sameVersionWait.hasForm(), false, 'old decision form must be removed while getRun is pending');
+  await sameVersionWait.submitForm(s1FormBeforeRunHang);
+  assert.equal(sameVersionWait.decisions.length, 0, 'S1 form cannot submit to S2 while getRun is pending');
+  releaseRun();
+  await refreshingSameVersion;
+  await sameVersionWait.submitForm(s1FormBeforeRunHang);
+  assert.equal(sameVersionWait.decisions.length, 0, 'stale S1 form stays rejected after S2 renders');
+  assert.equal(sameVersionWait.value('final-item-1'), '1111111111', 'S2 must not inherit S1 edits');
+  assert.equal(sameVersionWait.value('reason-item-1'), '');
+  await sameVersionWait.submit();
+  assert.equal(sameVersionWait.decisions.length, 1);
+  assert.equal(sameVersionWait.decisions[0].id, 'submission-2');
+  assert.equal(sameVersionWait.decisions[0].payload.items[0].final_hs, '1111111111');
+
+  // In-flight S1 decision resolving after switching to S2 must preserve S2 scope/draft without reloading S1.
+  const inflight = await harness();
+  inflight.set('final-item-1', '5555555555');
+  inflight.set('reason-item-1', 'S1 pending edit');
+  let releaseS1Decide;
+  let getTaskCount = 0;
+  const baseGetTask = inflight.api.getTask;
+  inflight.api.getTask = async id => { getTaskCount++; return baseGetTask(id); };
+  const baseDecide = inflight.api.decideSubmission;
+  inflight.api.decideSubmission = (id, payload, key) => {
+    if (id === 'submission-1') return new Promise(resolve => {
+      releaseS1Decide = () => resolve(baseDecide(id, payload, key));
+    });
+    return baseDecide(id, payload, key);
+  };
+  const s1Submit = inflight.submit();
+  await s1Submit;
+  assert.ok(releaseS1Decide, 'S1 decideSubmission should be in flight');
+  await inflight.switchScope({task: 'task-2', submission: 'submission-2'});
+  inflight.set('final-item-1', '6666666666');
+  inflight.set('reason-item-1', 'S2 draft kept');
+  const getTaskAfterSwitch = getTaskCount;
+  releaseS1Decide();
+  while (inflight.state().busy) await new Promise(resolve => setImmediate(resolve));
+  assert.equal(inflight.state().task.task_id, 'task-2', 'in-flight S1 resolution must stay on S2');
+  assert.equal(getTaskCount, getTaskAfterSwitch, 'in-flight S1 resolution must not reload S1');
+  assert.equal(inflight.value('final-item-1'), '6666666666', 'S2 draft must remain intact');
+  await inflight.submit();
+  assert.equal(inflight.decisions.length, 2);
+  assert.equal(inflight.decisions[0].id, 'submission-1');
+  assert.equal(inflight.decisions[1].id, 'submission-2');
+  assert.notEqual(inflight.decisions[0].key, inflight.decisions[1].key);
+
+  // Failed navigation/reload stays fail-closed until a subsequent load succeeds.
+  const failRecover = await harness();
+  const oldFailedForm = failRecover.currentForm();
+  const baseGetRun = failRecover.api.getRun;
+  failRecover.api.getRun = async () => { throw Object.assign(new Error('run load failed'), {status: 502}); };
+  await assert.rejects(failRecover.openTask('task-1'), /run load failed/);
+  assert.equal(failRecover.hasForm(), false);
+  await failRecover.submitForm(oldFailedForm);
+  assert.equal(failRecover.decisions.length, 0, 'failed load must keep old decision form non-writable');
+  failRecover.api.getRun = baseGetRun;
+  await failRecover.openTask('task-1');
+  await failRecover.submit();
+  assert.equal(failRecover.decisions.length, 1, 'subsequent successful load restores a usable form');
+
+  // Background poll firing while decide() is in flight defers rather than interrupting sameView refresh.
+  const pollBusy = await harness();
+  let releaseBusyDecide;
+  let historyCalls = 0;
+  const origHistory = pollBusy.api.taskHistory;
+  pollBusy.api.taskHistory = async id => { historyCalls++; return origHistory(id); };
+  pollBusy.api.decideSubmission = (id, payload, key) => new Promise(resolve => {
+    releaseBusyDecide = () => {
+      pollBusy.setScope({submission: 'submission-2'});
+      pollBusy.decisions.push({id, payload, key});
+      resolve();
+    };
+  });
+  await pollBusy.submit();
+  assert.ok(releaseBusyDecide, 'decideSubmission should be in flight');
+  const historyBeforePoll = historyCalls;
+  pollBusy.finish();
+  await pollBusy.poll();
+  assert.equal(historyCalls, historyBeforePoll, 'poll must defer while decide is busy');
+  releaseBusyDecide();
+  while (pollBusy.state().busy) await new Promise(resolve => setImmediate(resolve));
+  assert.equal(pollBusy.currentForm().controls.get('scope_submission_id').value, 'submission-2');
 
   console.log('PASS: running/completed polls, approve/return drafts, scoped refresh and stale-form rejection');
 })().catch(error => { console.error(error); process.exitCode = 1; });
