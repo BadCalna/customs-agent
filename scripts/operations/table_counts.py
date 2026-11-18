@@ -249,7 +249,14 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--files-root")
     parser.add_argument("--out")
+    parser.add_argument("--require-complete-imports", action="store_true",
+                        help="完整备份/恢复核对：拒绝仍依赖 incoming 暂存恢复状态的未完成导入")
     args = parser.parse_args(argv)
+    if args.require_complete_imports:
+        import django
+        django.setup()
+        from scripts.database.import_guard import require_completed_imports
+        require_completed_imports()
     counts, fingerprints, db_name, oid = database_inventory()
     from django.conf import settings
     from django.db import connection

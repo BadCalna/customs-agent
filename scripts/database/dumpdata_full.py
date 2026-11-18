@@ -29,27 +29,7 @@ django.setup()
 from django.apps import apps  # noqa: E402
 from django.core import serializers  # noqa: E402
 
-DEFAULT_MODELS = [
-    "auth.Group",
-    "accounts.User",
-    "reviews.Task",
-    "accounts.TaskAssignment",
-    "reviews.FileVersion",
-    "reviews.Item",
-    "reviews.ItemMember",
-    "reviews.ItemImage",
-    "reviews.Confirmation",
-    "reviews.Submission",
-    "reviews.SubmissionItem",
-    "runs.Run",
-    "reviews.Issue",
-    "reviews.Decision",
-    "reviews.DecisionItem",
-    "reviews.AuditEvent",
-    "reviews.IdempotencyRecord",
-    "runs.RunItem",
-    "notifications.Message",
-]
+from scripts.database.model_inventory import migration_models  # noqa: E402
 
 
 def encoder(value):
@@ -68,12 +48,11 @@ def main():
         print(__doc__, file=sys.stderr)
         return 2
     target = Path(sys.argv[1])
-    labels = sys.argv[2:] or DEFAULT_MODELS
+    selected = [apps.get_model(label) for label in sys.argv[2:]] if sys.argv[2:] else migration_models()
     objects = []
-    for label in labels:
-        model = apps.get_model(label)
+    for model in selected:
         for obj in model._default_manager.all().order_by("pk"):
-            objects.extend(serializers.serialize("python", [obj]))
+            objects.extend(serializers.serialize("python", [obj], use_natural_foreign_keys=True))
     target.parent.mkdir(parents=True, exist_ok=True)
     with target.open("w", encoding="utf-8") as handle:
         json.dump(objects, handle, ensure_ascii=False, default=encoder)
