@@ -1,6 +1,6 @@
 # D4 Agent 输入输出与证据约定
 
-版本：0.6，2026-11-18。状态：P02 第一批已发布引擎协议与 mock 实现；P14 已发布 HS 与申报要素来源适配契约（第 6 节，合成样本自验，真实官方来源未接入）；P17 已发布退税与监管来源适配契约（第 7 节，同样是合成样本自验）；P06 已补充 inline mock 接线与独立推荐输入隔离说明；P23 已补充官方参考数据导入流水线（第 8 节，真实原件已导入但未复核）。协议 DTO 在 `adapters/engines/protocols.py`，固定场景实现与比较优先级在 `adapters/engines/mock.py`，JSON Schema 见 `contracts/schemas/engine/`。本文件规定系统内关务 AI 引擎；编程 Agent 的分工见 [协作与交接约定](Agent协作与交接约定.md)。
+版本：0.6，2026-11-18。状态：P02 第一批已发布引擎协议与 mock 实现；P14 已发布 HS 与申报要素来源适配契约（第 6 节，合成样本自验，真实官方来源未接入）；P17 已发布退税与监管来源适配契约（第 7 节，同样是合成样本自验）；P06 已补充 inline mock 接线与独立推荐输入隔离说明；P23 已补充官方参考数据导入流水线（第 8 节，真实原件已导入但未复核）；P18 已补充专家 AI 核查组合引擎、Mock 场景与展示组件边界（第 9 节，技术验证通过，真实 D-09 与 D-11 金标准未接入）。协议 DTO 在 `adapters/engines/protocols.py`，固定场景实现与比较优先级在 `adapters/engines/mock.py`，JSON Schema 见 `contracts/schemas/engine/`。本文件规定系统内关务 AI 引擎；编程 Agent 的分工见 [协作与交接约定](Agent协作与交接约定.md)。
 
 ## 1. 引擎边界
 
@@ -54,7 +54,7 @@ mock 的固定结果由测试场景选择，不依赖随机数或请求轮询次
 
 P02 第一批落地情况：
 
-- 场景由 `ExecutionContext.mock_scenario` 显式选择，已登记 `normal`、`missing_facts`、`image_failed`、`query_failed`、`tech_failure`、`association_error`、`supplier_invalid`、`expert_conflict`；未登记的场景显式报错，不随意成功。
+- 场景由 `ExecutionContext.mock_scenario` 显式选择，已登记 `normal`、`missing_facts`、`image_failed`、`query_failed`、`tech_failure`、`association_error`、`supplier_invalid`、`expert_conflict`、`expert_elements_unknown`、`expert_images_unknown`、`expert_tax_unknown`、`expert_regulatory_unknown`；未登记的场景显式报错，不随意成功。
 - 比较结论的判定顺序只有 `adapters/engines/mock.py::compare_original` 一份实现，P16 真实引擎应复用。
 - 技术失败用 `EngineTechnicalError` 表达，落库为行级 `status=failed` 与 `error_message`，不与业务待确认混用。
 - 上面的 JSON 示例字段名与正式契约一致，但正式结构以 `contracts/schemas/engine/` 为准；示例中的 `T001` 等标识在真实响应里是 UUID。
@@ -417,3 +417,17 @@ P06 不读取 P10 候选对照，不使用旧版本确认/审批，不调用真�
 P06 对抗性修复（2026-11-17）：`_build_recommend_input` 不再透传 Item.attributes。
 只从固定白名单取标量商品事实；`excel_fields`、原 HS、退税率、历史审核意见、未识别备注和旧结果列留库核查，
 不进入独立推荐 DTO。原码仅进入 compare 阶段；自由文本事实中可能自然出现编码，仍记录锚定风险。
+
+## 9. 专家 AI 核查组合与展示边界（P18 发布，2026-11-18）
+
+- 组合引擎实现见 `adapters/engines/expert_check.py`（`engine_version="expert-check-0.1.0"`、`prompt_version="expert-check-json-1"`、`rules_version="d4-0.6-p14-p17-p18"`），提示词与模板见 `adapters/engines/prompts/expert/`。
+- 引擎按独立注入模式集成 P14 `DeclarationElementsSource`（及可选 `HsLookupSource`）、附图事实、P17 `TaxRateSource`/`RegulatorySource`、可选 P15 `HistorySearchSource`（默认 `None`，不静默读取合成历史；仅作为参考线索，不覆盖三项正式来源结果；`ResultMode.LIVE` 排除 `synthetic != false` 记录）及可选多模态判定模型。
+- 所有口径红线由 `AspectEvaluation` 与 `ExpertCheckAssembly` 构造期强校验保障：
+  - `target_hs` 恒等于提交时的 `submitted_hs`，专家后续改码不修改已有核查目标；
+  - 仅在 `usable_as_basis=true`、`expert_review_required=false` 且非合成数据时允许判 `matched`；非正向（`conflict`/`unknown`）必须给出非空中文理由与原因码并同步落入 `issues`；
+  - `images` 中 `read_failed` 与 `absent` 严格区分，未给可见描述不得推断材质、工艺或税率；
+  - `tax` 查无或原表空白不按 `0%` 处理（仅显式 `rate_kind=zero_rate` 可判 `0%`）；C-18（`not_refundable` 等非数值状态）保持 `unknown`；8 位子目一律 `usable=false` 且判 `unknown`；
+  - `elements` 条件要素未提供（C-03）判 `unknown` 且不生成 `supplier` 补料项（仅 `sufficiency=insufficient` 可生补料）；
+  - 每条引用的 `evidence_id` 必须在 `output.evidence` 中真实存在且具非空 `document` 与 `locator`；内部异常与校验失败统一结构化降级为 `evidence_status=query_failed` 与四项 `unknown`。
+- P16 `adapters/engines/precheck.py::PrecheckEngine.expert_check` 保持 `NotImplementedError`，`adapters/engines/protocols.py::get_engine()` 仍默认返回 `MockEngine`，后续接入真实 D-09 数据源与大模型时显式切换。
+- 前端纯渲染展示组件见 `web/components/expert-checks.js`（`renderExpertChecks`），直接读取 `ExpertCheckRef` 展示 `target_hs` 与四行分项，未修改 `web/components/commodity-card.js` 公共入口签名。
