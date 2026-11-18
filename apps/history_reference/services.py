@@ -15,7 +15,7 @@ from django.db import connections, transaction
 from adapters.sources.history_consolidated import CONSOLIDATED_IDENTITY_VERSION, FORMAT_CONSOLIDATED
 from adapters.sources.history_import import (
     _business_fingerprint, _enforce_stored_hs_review,
-    _merge_consolidated_records, _merge_records,
+    _merge_consolidated_records, _merge_dataset_metadata, _merge_records,
 )
 from adapters.sources.history_search import (
     SCHEMA_VERSION, HistoryStoreError, _blocking_issue_codes, _needs_review,
@@ -182,8 +182,19 @@ def import_history_snapshot(path, dataset_key, replace_changed=False, expected_c
                            d.get("kind") == "changed" and d.get("action") == "replaced" and
                            (p.get("attributes") or {}).get("source_key") == d.get("source_key") for d in duplicates)]
         repairs = _enforce_stored_hs_review(final)
+        merged_metadata = _merge_dataset_metadata(
+            dataset.metadata if existing_rows else None,
+            metadata,
+            final,
+            writes=writes,
+            duplicates=duplicates,
+        )
         # Revalidate the complete merged generation, not just input.
-        _snapshot_from_payload({"schema_version": SCHEMA_VERSION, "dataset": metadata, "records": final}, source_name="merged")
+        _validate_payload(
+            {"schema_version": SCHEMA_VERSION, "dataset": merged_metadata, "records": final},
+            expected_count=len(final),
+            require_real=require_real,
+        )
         old_by_id = {row.record_id: row for row in existing_rows}
         final_ids = [p["record_id"] for p in final]
         if len(final_ids) != len(set(final_ids)):
@@ -213,14 +224,14 @@ def import_history_snapshot(path, dataset_key, replace_changed=False, expected_c
             "status": "partial" if kept_changed or conflict_count else "success", "dry_run": dry_run,
             "duplicates": duplicates, "conflict_details": conflicts, "missing_details": missing,
             "review_state_repairs": repairs, "input_dataset": copy.deepcopy(metadata),
+            "dataset": copy.deepcopy(merged_metadata),
             "revision": dataset.revision + 1,
         }
         if dry_run:
             transaction.set_rollback(True, using=using)
             return report
         dataset.revision += 1
-        metadata["record_count"] = len(final)
-        dataset.metadata = metadata
+        dataset.metadata = merged_metadata
         dataset.record_count = len(final)
         dataset.save(using=using)
         batch = HistoryImportBatch.objects.using(using).create(

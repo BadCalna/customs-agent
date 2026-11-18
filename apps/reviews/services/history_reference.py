@@ -22,12 +22,20 @@ def query_for_item(item) -> HistoryQuery:
     )
 
 
-def search_item_history(item):
-    return HistorySearchSource().search(query_for_item(item))
+def precheck_history_source():
+    """在单次预审批次内复用同一历史快照，避免逐商品全量读库与校验。"""
+    if not getattr(settings, "HISTORY_REFERENCE_ENABLED", False):
+        return None
+    return HistorySearchSource(cache_snapshot=True)
 
 
-def precheck_history_reference(item):
+def search_item_history(item, *, source=None):
+    active_source = source if source is not None else HistorySearchSource()
+    return active_source.search(query_for_item(item))
+
+
+def precheck_history_reference(item, *, source=None):
     """Opt-in real history evidence, independent of mock engine's recommendation."""
     if not getattr(settings, "HISTORY_REFERENCE_ENABLED", False):
         return None
-    return search_item_history(item)
+    return search_item_history(item, source=source)

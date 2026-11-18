@@ -724,6 +724,181 @@
         "title": "HistoryAuditEvent",
         "type": "object"
       },
+      "HistoryCandidate": {
+        "description": "一条历史参考候选。字段名与 ``Candidate`` 不同，防止直接当推荐结果使用。",
+        "properties": {
+          "age_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "历史业务日期距今天数；无法解析时为空",
+            "title": "Age Days"
+          },
+          "applicable_scope": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Applicable Scope"
+          },
+          "blocking_issue_codes": {
+            "description": "导致待核的导入/P04 问题码，如 missing_contract、reversed_item_range",
+            "items": {
+              "type": "string"
+            },
+            "title": "Blocking Issue Codes",
+            "type": "array"
+          },
+          "diff_keys": {
+            "description": "查询与历史不一致的属性键；关键差异不会被总分吞掉",
+            "items": {
+              "type": "string"
+            },
+            "title": "Diff Keys",
+            "type": "array"
+          },
+          "historical_hs": {
+            "description": "历史成功 HS；仅参考，不是当前建议",
+            "title": "Historical Hs",
+            "type": "string"
+          },
+          "historical_name": {
+            "title": "Historical Name",
+            "type": "string"
+          },
+          "historical_outcome": {
+            "default": "",
+            "title": "Historical Outcome",
+            "type": "string"
+          },
+          "hs_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hs Version"
+          },
+          "key_attribute_conflict": {
+            "default": false,
+            "description": "是否至少有一项关键属性不一致",
+            "title": "Key Attribute Conflict",
+            "type": "boolean"
+          },
+          "matched_keys": {
+            "description": "查询与历史一致的属性键",
+            "items": {
+              "type": "string"
+            },
+            "title": "Matched Keys",
+            "type": "array"
+          },
+          "needs_review": {
+            "default": false,
+            "description": "导入时该历史行是否被标为待核异常；true 时不能当作成功案例直接采用",
+            "title": "Needs Review",
+            "type": "boolean"
+          },
+          "record_id": {
+            "title": "Record Id",
+            "type": "string"
+          },
+          "recorded_at": {
+            "description": "历史业务日期，原样保留，不解析、不补时区",
+            "title": "Recorded At",
+            "type": "string"
+          },
+          "reference_only": {
+            "const": true,
+            "default": true,
+            "title": "Reference Only",
+            "type": "boolean"
+          },
+          "score": {
+            "description": "规则相似度，可复算，不是概率",
+            "maximum": 1,
+            "minimum": 0,
+            "title": "Score",
+            "type": "number"
+          },
+          "similarity_note": {
+            "default": "",
+            "description": "可读的相似依据与差异说明",
+            "title": "Similarity Note",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/HistorySourceRef"
+          },
+          "stale": {
+            "default": false,
+            "description": "按历史业务日期判断是否过旧",
+            "title": "Stale",
+            "type": "boolean"
+          },
+          "unverified_keys": {
+            "description": "查询有、历史记录未提供，无法核对的属性键",
+            "items": {
+              "type": "string"
+            },
+            "title": "Unverified Keys",
+            "type": "array"
+          },
+          "usage_note": {
+            "default": "历史成功码仅作参考线索，不能作为当前归类结论；须按现行税则与申报要素重新核对。",
+            "title": "Usage Note",
+            "type": "string"
+          },
+          "valid_until": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid Until"
+          },
+          "validity_note": {
+            "default": "",
+            "description": "适用范围/有效期未知或过期的标注",
+            "title": "Validity Note",
+            "type": "string"
+          },
+          "version_status": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EvidenceStatus"
+              }
+            ],
+            "default": "version_unverified",
+            "description": "历史记录的 HS 版本在本包内无法核实，固定为 version_unverified"
+          }
+        },
+        "required": [
+          "record_id",
+          "historical_hs",
+          "historical_name",
+          "recorded_at",
+          "source",
+          "score"
+        ],
+        "title": "HistoryCandidate",
+        "type": "object"
+      },
       "HistoryConfirmation": {
         "properties": {
           "confirmation_id": {
@@ -770,6 +945,46 @@
           "created_at"
         ],
         "title": "HistoryConfirmation",
+        "type": "object"
+      },
+      "HistoryDatasetInfo": {
+        "description": "数据集说明。``synthetic`` 是给下游的诚实标记，不允许默认当成真实数据。",
+        "properties": {
+          "dataset_id": {
+            "default": "",
+            "title": "Dataset Id",
+            "type": "string"
+          },
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "generated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generated At"
+          },
+          "synthetic": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "true=合成样本；false=调用方明确声明为真实数据；null=未声明来源",
+            "title": "Synthetic"
+          }
+        },
+        "title": "HistoryDatasetInfo",
         "type": "object"
       },
       "HistoryIssue": {
@@ -848,6 +1063,42 @@
         "title": "HistoryItemRef",
         "type": "object"
       },
+      "HistoryQuery": {
+        "description": "检索输入：品名 + 申报要素键值 + 规格/材质。\n\n刻意不复用 ``RecommendInput``：本适配器不接收执行上下文，也不接收供应商原码，\n避免历史检索被误当成一次推荐执行。",
+        "properties": {
+          "attributes": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Attributes",
+            "type": "object"
+          },
+          "elements": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Elements",
+            "type": "object"
+          },
+          "material": {
+            "default": "",
+            "title": "Material",
+            "type": "string"
+          },
+          "name": {
+            "default": "",
+            "title": "Name",
+            "type": "string"
+          },
+          "spec": {
+            "default": "",
+            "title": "Spec",
+            "type": "string"
+          }
+        },
+        "title": "HistoryQuery",
+        "type": "object"
+      },
       "HistoryRun": {
         "properties": {
           "created_at": {
@@ -899,6 +1150,164 @@
           "created_at"
         ],
         "title": "HistoryRun",
+        "type": "object"
+      },
+      "HistorySearchOutcome": {
+        "description": "检索结果状态。``no_match`` 与 ``query_failed`` 必须分开，不能互相顶替。",
+        "enum": [
+          "matched",
+          "no_match",
+          "query_failed",
+          "invalid_query"
+        ],
+        "title": "HistorySearchOutcome",
+        "type": "string"
+      },
+      "HistorySearchResult": {
+        "description": "一次检索的结构化结果。\n\n``outcome`` 与 ``evidence_status`` 由校验器绑定，避免调用方把“没查到”\n写成“查询失败”或反过来。``to_evidence_entries`` 只对 matched 产出条目，\nno_match / query_failed 不会生成貌似可点击的虚构引用。",
+        "properties": {
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/HistoryCandidate"
+            },
+            "title": "Candidates",
+            "type": "array"
+          },
+          "dataset": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HistoryDatasetInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "evidence_status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EvidenceStatus"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "D4 四态；invalid_query 时为 null（未发起查询）"
+          },
+          "excluded_needs_review": {
+            "default": 0,
+            "description": "本次检索因 needs_review=true 而未纳入成功案例的记录数",
+            "minimum": 0,
+            "title": "Excluded Needs Review",
+            "type": "integer"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/HistorySearchOutcome"
+          },
+          "query": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HistoryQuery"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "query_gaps": {
+            "description": "输入缺口，如缺品名/缺申报要素；不阻断检索但降低可信度",
+            "items": {
+              "type": "string"
+            },
+            "title": "Query Gaps",
+            "type": "array"
+          },
+          "reason": {
+            "default": "",
+            "title": "Reason",
+            "type": "string"
+          },
+          "reference_only": {
+            "const": true,
+            "default": true,
+            "title": "Reference Only",
+            "type": "boolean"
+          },
+          "scanned_records": {
+            "default": 0,
+            "minimum": 0,
+            "title": "Scanned Records",
+            "type": "integer"
+          },
+          "searched_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "本次检索时间；未检索时为空",
+            "title": "Searched At"
+          },
+          "truncated": {
+            "default": false,
+            "description": "输入超长被截断，仅用截断后的内容检索",
+            "title": "Truncated",
+            "type": "boolean"
+          },
+          "usage_note": {
+            "default": "历史成功码仅作参考线索，不能作为当前归类结论；须按现行税则与申报要素重新核对。",
+            "title": "Usage Note",
+            "type": "string"
+          }
+        },
+        "required": [
+          "outcome"
+        ],
+        "title": "HistorySearchResult",
+        "type": "object"
+      },
+      "HistorySourceRef": {
+        "description": "历史记录的来源引用，必须能定位到具体单据与项号。",
+        "properties": {
+          "document": {
+            "description": "单据/文件标识，原样保留",
+            "minLength": 1,
+            "title": "Document",
+            "type": "string"
+          },
+          "locator": {
+            "description": "单据内的项号、行号或页签定位",
+            "minLength": 1,
+            "title": "Locator",
+            "type": "string"
+          },
+          "system": {
+            "default": "",
+            "description": "来源系统标识，便于区分真实库与合成样本",
+            "title": "System",
+            "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "可打开的来源地址；无则为空",
+            "title": "Url"
+          }
+        },
+        "required": [
+          "document",
+          "locator"
+        ],
+        "title": "HistorySourceRef",
         "type": "object"
       },
       "HistorySubmission": {
@@ -3633,6 +4042,47 @@
         "summary": "Confirm Item",
         "tags": [
           "业务员确认"
+        ]
+      }
+    },
+    "/api/v1/versions/{version_id}/items/{item_id}/history-reference": {
+      "get": {
+        "operationId": "apps_reviews_api_history_reference_get_history_reference",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "version_id",
+            "required": true,
+            "schema": {
+              "title": "Version Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "title": "Item Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HistorySearchResult"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Get History Reference",
+        "tags": [
+          "历史参考"
         ]
       }
     },

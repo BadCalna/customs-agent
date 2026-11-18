@@ -77,6 +77,7 @@ make test TASK=P02     # 与上一条同入口，58 项
 
 - `GET /api/v1/tasks`、`GET /api/v1/tasks/{task_id}`
 - `GET /api/v1/versions/{version_id}/items`、`GET /api/v1/versions/{version_id}/items/{item_id}`
+- `GET /api/v1/versions/{version_id}/items/{item_id}/history-reference`（内部 `operator` / `expert` 只读）
 - `GET /api/v1/runs/{run_id}`
 
 显式 501（`error.code=not_implemented`，`details.owner` 标交付任务包）：

@@ -449,6 +449,30 @@ class InMemoryHistoryStore:
         return HistorySnapshot(dataset=self._dataset, records=tuple(parsed))
 
 
+class _CachedHistoryStore:
+    """在单次批量执行内复用同一次 ``load()`` 快照或异常，避免逐商品重读整库。"""
+
+    def __init__(self, inner: HistoryRecordStore):
+        self._inner = inner
+        self._loaded = False
+        self._snapshot: HistorySnapshot | None = None
+        self._error: BaseException | None = None
+
+    def load(self) -> HistorySnapshot:
+        if not self._loaded:
+            try:
+                self._snapshot = self._inner.load()
+            except BaseException as exc:
+                self._error = exc
+                raise
+            finally:
+                self._loaded = True
+        if self._error is not None:
+            raise self._error
+        assert self._snapshot is not None
+        return self._snapshot
+
+
 def _snapshot_from_payload(payload: Any, *, source_name: str) -> HistorySnapshot:
     if isinstance(payload, list):
         dataset_raw: Any = {}
@@ -651,6 +675,7 @@ class HistorySearchSource:
         min_score: float = DEFAULT_MIN_SCORE,
         stale_days: int = DEFAULT_STALE_DAYS,
         include_needs_review: bool = False,
+        cache_snapshot: bool = False,
     ):
         if records is not None and store is not None:
             raise ValueError("records 与 store 只能二选一")
@@ -662,6 +687,10 @@ class HistorySearchSource:
             self._store = store
         else:
             self._store = default_history_store()
+        if not isinstance(cache_snapshot, bool):
+            raise ValueError("cache_snapshot 必须是 bool")
+        if cache_snapshot:
+            self._store = _CachedHistoryStore(self._store)
         if limit < 1:
             raise ValueError("limit 必须 >= 1")
         if not 0 <= min_score <= 1:

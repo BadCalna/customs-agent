@@ -114,6 +114,70 @@ class HistoryWiringTests(TestCase):
         self.assertEqual(row.result["history_reference"]["outcome"], "query_failed")
         self.assertTrue(row.suggested_hs)
 
+    @override_settings(HISTORY_REFERENCE_ENABLED=True, HISTORY_BACKEND="database", HISTORY_DATASET_KEY="batch-1198")
+    def test_precheck_batch_reuses_one_history_snapshot_without_exclusive_locks(self):
+        import json
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+        from django.db import connection
+        from apps.history_reference.services import import_history_snapshot
+        from apps.history_reference.store import DatabaseHistoryStore
+        from tests.p15_pg.test_persistence import payload as pg_payload, row as pg_row
+
+        for idx in range(2, 7):
+            Item.objects.create(
+                version=self.version,
+                source_sheet="SYN",
+                source_row=idx + 1,
+                name="测试法兰盘" if idx % 2 == 0 else f"无关橡胶件{idx}",
+                supplier_hs_raw="9999999999",
+                supplier_elements_raw="材质：不锈钢|规格：DN50",
+            )
+        records = [pg_row(f"r{i}", anchor=f"a{i}", material=f"材质{i}") for i in range(1197)]
+        records.append(pg_row("r-hit", anchor="a-hit", material="不锈钢"))
+        with TemporaryDirectory() as raw:
+            snap_path = Path(raw) / "records.json"
+            snap_path.write_text(json.dumps(pg_payload(records), ensure_ascii=False), encoding="utf-8")
+            import_history_snapshot(snap_path, "batch-1198", allow_sqlite=True)
+
+        seen_for_update = []
+        def observe(execute, sql, params, many, context):
+            if "FOR UPDATE" in sql.upper() and "history_reference_" in sql:
+                seen_for_update.append(sql)
+            return execute(sql, params, many, context)
+
+        import apps.history_reference.services as history_services
+        original_load = DatabaseHistoryStore.load
+        with (
+            patch.object(DatabaseHistoryStore, "load", autospec=True, side_effect=original_load) as load_spy,
+            patch.object(history_services, "_validate_payload", wraps=history_services._validate_payload) as validate_spy,
+            connection.execute_wrapper(observe),
+        ):
+            run = execute_precheck(self.version)
+
+        self.assertEqual(load_spy.call_count, 1)
+        self.assertEqual(validate_spy.call_count, 1)
+        self.assertEqual(seen_for_update, [])
+        rows = list(run.items.order_by("item__source_row"))
+        self.assertEqual(len(rows), 6)
+        self.assertTrue(all("history_reference" in r.result for r in rows))
+        self.assertEqual(rows[1].result["history_reference"]["outcome"], "matched")
+        self.assertEqual(rows[1].result["history_reference"]["scanned_records"], 1198)
+
+    @override_settings(HISTORY_REFERENCE_ENABLED=True, HISTORY_BACKEND="database", HISTORY_DATASET_KEY="SYN-missing")
+    def test_store_failure_with_multiple_items_loads_once(self):
+        from apps.history_reference.store import DatabaseHistoryStore
+
+        Item.objects.create(version=self.version, source_sheet="SYN", source_row=3, name="商品二", supplier_hs_raw="9999999999")
+        Item.objects.create(version=self.version, source_sheet="SYN", source_row=4, name="商品三", supplier_hs_raw="9999999999")
+        original_load = DatabaseHistoryStore.load
+        with patch.object(DatabaseHistoryStore, "load", autospec=True, side_effect=original_load) as load_spy:
+            run = execute_precheck(self.version)
+        self.assertEqual(load_spy.call_count, 1)
+        rows = list(run.items.all())
+        self.assertEqual(len(rows), 3)
+        self.assertTrue(all(r.status == "succeeded" and r.result["history_reference"]["outcome"] == "query_failed" for r in rows))
+
     @override_settings(HISTORY_BACKEND="json")
     def test_explicit_json_loader_keeps_existing_behavior(self):
         source = HistorySearchSource(records=fixture_store().load().records)

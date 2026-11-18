@@ -338,3 +338,125 @@ class PersistenceTests(TestCase):
         with self.assertRaisesRegex(HistoryImportError, "PostgreSQL"):
             import_history_snapshot(self.path, "unit")
         self.assert_empty()
+
+    @staticmethod
+    def _real_batch(records, *, sha256, declared_by, batch_id, statement="人工确认成功"):
+        for rec in records:
+            rec["source"]["system"] = "historical-consolidated-import"
+            rec["attributes"]["dataset_kind"] = "real"
+            rec["attributes"]["source_file_id"] = "src-real"
+            rec["attributes"]["source_file_sha256"] = sha256
+            rec["attributes"]["batch_id"] = batch_id
+            rec["attributes"]["success_basis"] = statement
+        return {
+            "schema_version": "p15.history.1",
+            "dataset": {
+                "dataset_id": "real-unit",
+                "synthetic": False,
+                "description": f"真实导入 {batch_id}",
+                "import_batch_id": batch_id,
+                "record_count": len(records),
+                "input_formats": ["consolidated"],
+                "identity_version": CONSOLIDATED_IDENTITY_VERSION,
+                "source_files": [{"source_id": "src-real", "filename": "history.xlsx", "sha256": sha256}],
+                "human_declaration": {
+                    "declaration_id": f"decl-{batch_id}",
+                    "declared_by": declared_by,
+                    "declared_at": "2026-11-18T10:00:00+00:00",
+                    "statement": statement,
+                    "scope_source_ids": ["src-real"],
+                },
+            },
+            "records": records,
+        }
+
+    def test_retained_changed_record_preserves_original_hash_row_and_declaration(self):
+        r1 = row("r1", anchor="a1", hs="7307210000")
+        r1["source"]["locator"] = "Sheet1!第2行；合同 C1"
+        r1["attributes"]["source_row"] = "2"
+        self.ingest(self._real_batch([r1], sha256="H1", declared_by="Jay", batch_id="batch-1"), require_real=True)
+
+        r1_revised = row("r1", anchor="a1", hs="7307990000")
+        r1_revised["source"]["locator"] = "Sheet1!第500行；合同 C1"
+        r1_revised["attributes"]["source_row"] = "500"
+        report = self.ingest(
+            self._real_batch([r1_revised], sha256="H2", declared_by="Reviewer2", batch_id="batch-2", statement="修正版声明"),
+            require_real=True,
+        )
+
+        self.assertEqual(report["status"], "partial")
+        self.assertEqual(report["changed_kept"], 1)
+        stored = HistoricalRecord.objects.get()
+        self.assertEqual(stored.historical_hs, "7307210000")
+        self.assertEqual(stored.source_locator, "Sheet1!第2行；合同 C1")
+        self.assertEqual(stored.payload["attributes"]["source_row"], "2")
+        self.assertEqual(stored.payload["attributes"]["source_file_sha256"], "H1")
+
+        dataset = HistoryDataset.objects.get()
+        self.assertEqual(dataset.metadata["source_files"][0]["sha256"], "H1")
+        self.assertEqual(dataset.metadata["human_declaration"]["declared_by"], "Jay")
+        self.assertEqual(dataset.metadata["import_batch_id"], "batch-1")
+
+        traced = HistoricalRecord.objects.get(
+            dataset=dataset,
+            payload__attributes__source_file_sha256="H1",
+            payload__attributes__source_row="2",
+        )
+        self.assertEqual(traced.record_id, "r1")
+        self.assertEqual(DatabaseHistoryStore("unit").load().records[0].historical_hs, "7307210000")
+
+        audit_batch = HistoryImportBatch.objects.get(dataset=dataset, revision=2)
+        self.assertEqual(audit_batch.report["input_dataset"]["source_files"][0]["sha256"], "H2")
+        self.assertEqual(audit_batch.report["input_dataset"]["human_declaration"]["declared_by"], "Reviewer2")
+
+    def test_mixed_retained_and_adopted_records_preserve_provenance_and_cleanup_on_replace(self):
+        r1 = row("r1", anchor="a1", hs="7307210000")
+        r1["source"]["locator"] = "Sheet1!第2行"
+        r1["attributes"]["source_row"] = "2"
+        r2 = row("r2", anchor="a2", hs="8501109990", material="铜")
+        r2["source"]["locator"] = "Sheet1!第3行"
+        r2["attributes"]["source_row"] = "3"
+        self.ingest(self._real_batch([r1, r2], sha256="H1", declared_by="Jay", batch_id="batch-1"), require_real=True)
+
+        r1_changed = row("r1", anchor="a1", hs="7307990000")
+        r1_changed["source"]["locator"] = "Sheet1!第20行"
+        r1_changed["attributes"]["source_row"] = "20"
+        r2_same = row("r2", anchor="a2", hs="8501109990", material="铜")
+        r2_same["source"]["locator"] = "Sheet1!第30行"
+        r2_same["attributes"]["source_row"] = "30"
+        r3_new = row("r3", anchor="a3", hs="8481804090", material="黄铜")
+        r3_new["source"]["locator"] = "Sheet1!第40行"
+        r3_new["attributes"]["source_row"] = "40"
+        report = self.ingest(
+            self._real_batch([r1_changed, r2_same, r3_new], sha256="H2", declared_by="Reviewer2", batch_id="batch-2"),
+            require_real=True,
+        )
+
+        self.assertEqual(report["changed_kept"], 1)
+        self.assertEqual(report["added"], 1)
+        dataset = HistoryDataset.objects.get()
+        self.assertEqual(dataset.metadata["source_files"][0]["sha256"], "H1")
+        self.assertEqual(dataset.metadata["human_declaration"]["declared_by"], "Jay")
+        self.assertEqual({item["sha256"] for item in dataset.metadata["active_source_files"]}, {"H1", "H2"})
+        self.assertEqual({item["declared_by"] for item in dataset.metadata["active_declarations"]}, {"Jay", "Reviewer2"})
+        self.assertEqual(HistoricalRecord.objects.get(record_id="r1").payload["attributes"]["source_file_sha256"], "H1")
+        self.assertEqual(HistoricalRecord.objects.get(record_id="r2").payload["attributes"]["source_file_sha256"], "H2")
+        self.assertEqual(HistoricalRecord.objects.get(record_id="r3").payload["attributes"]["source_file_sha256"], "H2")
+        self.assertEqual(len(DatabaseHistoryStore("unit").load().records), 3)
+
+        audit_batch = HistoryImportBatch.objects.get(dataset=dataset, revision=2)
+        self.assertEqual(audit_batch.report["input_dataset"]["human_declaration"]["declared_by"], "Reviewer2")
+
+        r1_v3 = copy.deepcopy(r1_changed)
+        r2_v3 = copy.deepcopy(r2_same)
+        r3_v3 = copy.deepcopy(r3_new)
+        self.ingest(
+            self._real_batch([r1_v3, r2_v3, r3_v3], sha256="H3", declared_by="Carol", batch_id="batch-3"),
+            replace_changed=True,
+            require_real=True,
+        )
+        dataset.refresh_from_db()
+        self.assertEqual(dataset.metadata["source_files"][0]["sha256"], "H3")
+        self.assertEqual(dataset.metadata["human_declaration"]["declared_by"], "Carol")
+        self.assertNotIn("active_source_files", dataset.metadata)
+        self.assertNotIn("active_declarations", dataset.metadata)

@@ -45,40 +45,124 @@ class PostgreSQLConcurrencyTests(TransactionTestCase):
         self.assertEqual(HistoryImportBatch.objects.count(), 2)
         self.assertEqual(HistoryDataset.objects.get().revision, 2)
 
-    def test_reader_waits_for_writer_and_reads_one_metadata_record_generation(self):
+    def test_concurrent_readers_do_not_wait_for_exclusive_locks(self):
+        import_history_snapshot(self.path, "race")
+        reader1_inside = Event()
+        release_reader1 = Event()
+        reader2_finished = Event()
+        seen_for_update = []
+
+        def read_paused():
+            def observe(execute, sql, params, many, context):
+                if "FOR UPDATE" in sql.upper():
+                    seen_for_update.append(sql)
+                if "history_reference_historicalrecord" in sql and "SELECT" in sql and not reader1_inside.is_set():
+                    reader1_inside.set()
+                    if not release_reader1.wait(10):
+                        raise RuntimeError("reader1 release timeout")
+                return execute(sql, params, many, context)
+
+            with connection.execute_wrapper(observe):
+                return DatabaseHistoryStore("race").load()
+
+        def read_concurrent():
+            if not reader1_inside.wait(10):
+                raise RuntimeError("reader1 did not start")
+            def observe(execute, sql, params, many, context):
+                if "FOR UPDATE" in sql.upper():
+                    seen_for_update.append(sql)
+                return execute(sql, params, many, context)
+
+            with connection.execute_wrapper(observe):
+                snapshot = DatabaseHistoryStore("race").load()
+            reader2_finished.set()
+            release_reader1.set()
+            return snapshot
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            f1 = pool.submit(self.in_connection, read_paused)
+            f2 = pool.submit(self.in_connection, read_concurrent)
+            s2 = f2.result(timeout=20)
+            s1 = f1.result(timeout=20)
+        self.assertTrue(reader2_finished.is_set())
+        self.assertEqual(seen_for_update, [])
+        self.assertEqual(s1.records[0].historical_hs, "7307210000")
+        self.assertEqual(s2.records[0].historical_hs, "7307210000")
+
+    def test_reader_does_not_block_on_uncommitted_writer_and_reads_consistent_generation(self):
         import_history_snapshot(self.path, "race")
         updated = payload([row(hs="7307990000")])
         updated["dataset"]["description"] = "new-generation"
         self.path.write_text(json.dumps(updated), encoding="utf-8")
         writer_inside = Event()
-        reader_started = Event()
         reader_finished = Event()
-        reader_lock_attempted = Event()
+        seen_for_update = []
         from django.db.models.query import QuerySet
         original = QuerySet.create
+
         def pausing_create(queryset, *args, **kwargs):
             result = original(queryset, *args, **kwargs)
             if queryset.model is HistoryImportBatch:
                 writer_inside.set()
-                if not reader_started.wait(10) or not reader_lock_attempted.wait(10):
-                    raise RuntimeError("reader never attempted snapshot lock")
-                self.assertFalse(reader_finished.is_set())
+                if not reader_finished.wait(10):
+                    raise RuntimeError("reader blocked on uncommitted writer")
             return result
+
         def read():
             if not writer_inside.wait(10):
-                raise RuntimeError("writer did not acquire dataset lock")
-            reader_started.set()
+                raise RuntimeError("writer did not enter batch write")
             def observe(execute, sql, params, many, context):
-                if "FOR UPDATE" in sql:
-                    reader_lock_attempted.set()
+                if "FOR UPDATE" in sql.upper():
+                    seen_for_update.append(sql)
                 return execute(sql, params, many, context)
+
             with connection.execute_wrapper(observe):
                 snapshot = DatabaseHistoryStore("race").load()
             reader_finished.set()
             return snapshot
+
         with patch.object(QuerySet, "create", pausing_create), ThreadPoolExecutor(max_workers=2) as pool:
             writer = pool.submit(self.in_connection, lambda: import_history_snapshot(self.path, "race", replace_changed=True))
             reader = pool.submit(self.in_connection, read)
+            snapshot = reader.result(timeout=20)
+            writer.result(timeout=20)
+        self.assertEqual(seen_for_update, [])
+        self.assertEqual(snapshot.dataset.description, "合成测试")
+        self.assertEqual(snapshot.records[0].historical_hs, "7307210000")
+        after = DatabaseHistoryStore("race").load()
+        self.assertEqual(after.dataset.description, "new-generation")
+        self.assertEqual(after.records[0].historical_hs, "7307990000")
+
+    def test_reader_retries_when_writer_commits_mid_read_so_metadata_and_records_match(self):
+        import_history_snapshot(self.path, "race")
+        updated = payload([row(hs="7307990000")])
+        updated["dataset"]["description"] = "new-generation"
+        self.path.write_text(json.dumps(updated), encoding="utf-8")
+        dataset_read_done = Event()
+        writer_committed = Event()
+        paused_once = []
+
+        def read_with_mid_commit():
+            def observe(execute, sql, params, many, context):
+                if "history_reference_historicalrecord" in sql and "SELECT" in sql and not paused_once:
+                    paused_once.append(True)
+                    dataset_read_done.set()
+                    if not writer_committed.wait(10):
+                        raise RuntimeError("writer never committed mid-read")
+                return execute(sql, params, many, context)
+
+            with connection.execute_wrapper(observe):
+                return DatabaseHistoryStore("race").load()
+
+        def write_after_dataset_read():
+            if not dataset_read_done.wait(10):
+                raise RuntimeError("reader never read initial dataset")
+            import_history_snapshot(self.path, "race", replace_changed=True)
+            writer_committed.set()
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            reader = pool.submit(self.in_connection, read_with_mid_commit)
+            writer = pool.submit(self.in_connection, write_after_dataset_read)
             writer.result(timeout=20)
             snapshot = reader.result(timeout=20)
         self.assertEqual(snapshot.dataset.description, "new-generation")
