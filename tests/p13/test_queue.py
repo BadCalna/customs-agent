@@ -90,6 +90,12 @@ class QueueTests(TestCase):
                        CUSTOMS_AI_API_KEY="test-only", CUSTOMS_AI_MODEL="test-model",
                        CUSTOMS_AI_TIMEOUT_SECONDS=3)
     def test_live_worker_persists_unverified_real_engine_result(self):
+        # Engine identity is fixed at creation, not retrofitted by a worker.
+        self.run.is_current = False
+        self.run.save(update_fields=["is_current"])
+        self.run = Run.objects.create(task=self.task, version=self.version, kind=Run.Kind.PRECHECK, is_current=True)
+        services.register_run(self.run)
+
         def response(*args, **kwargs):
             content = {"suggested_hs": "8544422900", "candidates": [{"hs": "8544422900"}], "gaps": []}
             return io.BytesIO(json.dumps({"choices": [{"message": {"content": json.dumps(content)}}]}).encode())

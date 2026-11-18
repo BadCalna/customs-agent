@@ -11,6 +11,7 @@ from django.db import models
 from django.utils import timezone
 
 from apps.model_guards import FixedInputModel, protect_from_direct_delete
+from .engine_config import current_engine_snapshot
 
 
 def _related_or_none(obj, name):
@@ -24,7 +25,7 @@ def _related_or_none(obj, name):
 
 
 class Run(FixedInputModel):
-    fixed_input_fields = ("task", "version", "kind", "submission", "parent_run")
+    fixed_input_fields = ("task", "version", "kind", "submission", "parent_run", "engine_snapshot")
 
     class Kind(models.TextChoices):
         PRECHECK = "precheck", "业务员预审"
@@ -47,6 +48,8 @@ class Run(FixedInputModel):
         related_name="runs", verbose_name="关联提交快照",
         help_text="专家核查绑定业务员提交快照；预审为空。",
     )
+    engine_snapshot = models.JSONField("固定引擎配置", default=current_engine_snapshot,
+        help_text="登记时固定模式、版本及非敏感配置摘要；未知历史配置不得自动恢复。")
     kind = models.CharField("执行类型", max_length=16, choices=Kind.choices)
     status = models.CharField("执行状态", max_length=16, choices=Status.choices, default=Status.QUEUED)
     is_current = models.BooleanField(
@@ -77,6 +80,8 @@ class Run(FixedInputModel):
         if parent and (parent.task_id != self.task_id or parent.version_id != self.version_id
                        or parent.kind != self.kind or parent.submission_id != self.submission_id):
             raise ValidationError("重试来源必须属于同任务、同版本、同类型和同提交。")
+        if parent and parent.engine_snapshot != self.engine_snapshot:
+            raise ValidationError("部分重试必须保留来源执行的固定引擎配置；变更配置须发起完整新轮。")
         version = _related_or_none(self, "version")
         if version is not None and self.task_id and version.task_id != self.task_id:
             raise ValidationError("分析执行的文件版本必须属于该任务，不能跨任务引用。")

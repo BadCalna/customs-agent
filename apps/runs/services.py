@@ -22,6 +22,7 @@ from apps.reviews.models import AuditEvent, FileVersion, Item, Submission, Task
 from apps.reviews.services import idempotency
 from . import inline
 from .models import Run, RunAttempt, RunItem, RunWork
+from .engine_config import engine_matches, result_matches, result_metadata, rows_match
 
 
 def _eligible(run, task):
@@ -42,7 +43,7 @@ def register_run(run):
         items = items.filter(submission_items__submission_id=run.submission_id)
     for item in items:
         RunItem.objects.get_or_create(run=run, item=item, defaults={
-            "result": {"result_mode": "mock" if settings.ENGINE_MODE == "mock" else "live"},
+            "result": result_metadata(run),
         })
     return work
 
@@ -131,8 +132,7 @@ def retry_capability(user, run):
         return []
     if run.status not in (Run.Status.SUCCEEDED, Run.Status.FAILED) or not run.is_current or not _eligible(run, run.task):
         return []
-    modes = {row.result.get("result_mode", "mock") for row in run.items.all()}
-    if modes != {"mock" if settings.ENGINE_MODE == "mock" else "live"}:
+    if not engine_matches(run) or not rows_match(run):
         return []
     return [str(v) for v in run.items.filter(status="failed").values_list("item_id", flat=True)]
 
@@ -151,8 +151,7 @@ def retry_run(user, run_id, item_ids, key=None):
     if replay is not None:
         return replay
     failed = set(str(v) for v in parent.items.filter(status="failed").values_list("item_id", flat=True))
-    modes = {row.result.get("result_mode", "mock") for row in parent.items.all()}
-    if modes != {"mock" if settings.ENGINE_MODE == "mock" else "live"}:
+    if not engine_matches(parent) or not rows_match(parent):
         raise ApiError(409, "engine_mode_changed", "引擎模式已变化，请重新发起完整预审或联系维护人员")
     if not item_ids or len(set(item_ids)) != len(item_ids) or not set(item_ids).issubset(failed):
         raise ApiError(422, "invalid_retry_items", "只能重试本轮执行中明确失败的商品行")
@@ -161,7 +160,8 @@ def retry_run(user, run_id, item_ids, key=None):
     parent.is_current = False
     parent.save(update_fields=["is_current"])
     run = Run.objects.create(task=task, version=parent.version, kind=parent.kind, submission=parent.submission,
-                             is_current=True, triggered_by=user, parent_run=parent)
+                             is_current=True, triggered_by=user, parent_run=parent,
+                             engine_snapshot=deepcopy(parent.engine_snapshot))
     for old in parent.items.all():
         copied = deepcopy(old.result)
         copied["origin_run_id"] = str(parent.pk)
@@ -170,8 +170,7 @@ def retry_run(user, run_id, item_ids, key=None):
             suggested_hs=None if str(old.item_id) in item_ids else old.suggested_hs,
             comparison_status="" if str(old.item_id) in item_ids else old.comparison_status,
             confidence=None if str(old.item_id) in item_ids else old.confidence,
-            result={"result_mode": "mock" if settings.ENGINE_MODE == "mock" else "live"}
-                   if str(old.item_id) in item_ids else copied,
+            result=result_metadata(run) if str(old.item_id) in item_ids else copied,
             error_message="" if str(old.item_id) in item_ids else old.error_message)
     task.revision += 1
     if run.kind == Run.Kind.PRECHECK:
@@ -194,6 +193,22 @@ def _supersede(run, work):
         status="superseded", finished_at=timezone.now())
 
 
+def _engine_consistent(run, work):
+    """Called under Task -> Run -> Work locks; invalidate the entire old round."""
+    if engine_matches(run) and rows_match(run):
+        return True
+    _supersede(run, work)
+    work.last_error = "engine_configuration_changed"
+    work.save(update_fields=["last_error", "updated_at"])
+    # An unparsed upload must not remain STAGED forever, blocking a new upload.
+    from apps.reviews.models import ImportJob
+    ImportJob.objects.filter(precheck=run, status=ImportJob.Status.STAGED).update(
+        status=ImportJob.Status.FAILED,
+        error={"code": "engine_configuration_changed",
+               "message": "执行引擎配置已变化，请重新上传以发起完整新轮"})
+    return False
+
+
 @transaction.atomic
 def claim_work(run_id):
     initial = _lookup(Run, run_id)
@@ -201,6 +216,8 @@ def claim_work(run_id):
     run = Run.objects.select_for_update(of=("self",)).select_related("version", "submission").get(pk=run_id)
     work = RunWork.objects.select_for_update().get(run=run)
     if work.state != "pending" or work.available_at > timezone.now():
+        return None
+    if not _engine_consistent(run, work):
         return None
     if not _eligible(run, task):
         _supersede(run, work)
@@ -222,6 +239,8 @@ def renew_lease(run_id, token):
     now = timezone.now()
     if work.state != "running" or str(work.token) != str(token) or not work.lease_until or work.lease_until <= now:
         return False
+    if not _engine_consistent(run, work):
+        return False
     work.lease_until = now + timedelta(seconds=settings.CUSTOMS_QUEUE_LEASE_SECONDS)
     work.save(update_fields=["lease_until", "updated_at"])
     return True
@@ -234,6 +253,8 @@ def begin_attempt(run_id, item_id, token):
     run = Run.objects.select_for_update().get(pk=run_id)
     work = RunWork.objects.select_for_update().get(run=run)
     if work.state != "running" or str(work.token) != token or work.lease_until <= timezone.now():
+        return None
+    if not _engine_consistent(run, work):
         return None
     if not _eligible(run, task):
         _supersede(run, work)
@@ -250,7 +271,7 @@ def begin_attempt(run_id, item_id, token):
                                        input_hash=_payload(run, row.item).context.input_hash)
     row.status = "running"
     row.result = {"attempts": count+1, "issues": [], "evidence": [],
-                  "result_mode": "mock" if settings.ENGINE_MODE == "mock" else "live"}
+                  **result_metadata(run)}
     row.save(update_fields=["status", "result", "updated_at"])
     run.status, run.is_current = "running", True
     run.started_at = run.started_at or timezone.now()
@@ -274,7 +295,10 @@ def _payload(run, item):
 
 def evaluate_row(run, item):
     """Pure engine boundary: call only outside Task/Run DB locks."""
-    engine, payload = get_engine(), _payload(run, item)
+    engine = get_engine()
+    if not engine_matches(run, engine):
+        raise RuntimeError("Run 引擎配置已变化，必须发起完整新轮")
+    payload = _payload(run, item)
     metadata = {k: getattr(payload.context, k) for k in ("engine_version", "prompt_version", "rules_version", "input_hash")}
     metadata["result_mode"] = payload.context.result_mode.value
     if payload.context.mock_scenario:
@@ -309,11 +333,14 @@ def finish_attempt(attempt_id, token, output=None, error=None):
         return False
     if work.state != "running" or str(work.token) != token or work.lease_until <= timezone.now():
         return False
+    if not _engine_consistent(run, work):
+        return False
     if not _eligible(run, task):
         _supersede(run, work)
         return False
     row = RunItem.objects.select_for_update().get(pk=attempt.row_id)
-    if attempt.input_hash != _payload(run, row.item).context.input_hash:
+    if (attempt.input_hash != _payload(run, row.item).context.input_hash
+            or (error is None and (not isinstance(output, dict) or not result_matches(run, output.get("result"))))):
         _supersede(run, work)
         return False
     attempt.finished_at = timezone.now()
@@ -322,7 +349,7 @@ def finish_attempt(attempt_id, token, output=None, error=None):
         row.status = "queued" if attempt.number < settings.CUSTOMS_ROW_MAX_ATTEMPTS else "failed"
         row.error_message = f"技术执行失败（{attempt.error_code}），已尝试 {attempt.number} 次"
         row.result = {"attempts": attempt.number, "issues": [], "evidence": [],
-                      "result_mode": "mock" if settings.ENGINE_MODE == "mock" else "live"}
+                      **result_metadata(run)}
     else:
         attempt.status, attempt.result = "succeeded", deepcopy(output)
         row.status, row.error_message = "succeeded", ""
@@ -341,6 +368,8 @@ def finish_pass(run_id, token):
     run = Run.objects.select_for_update().get(pk=run_id)
     work = RunWork.objects.select_for_update().get(run=run)
     if work.state != "running" or str(work.token) != token or work.lease_until <= timezone.now():
+        return
+    if not _engine_consistent(run, work):
         return
     if not _eligible(run, task):
         _supersede(run, work)

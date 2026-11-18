@@ -132,11 +132,19 @@ function activeRunId() {
   return currentHistoryVersion()?.runs.at(-1)?.run_id || null;
 }
 
+function runMatchesScope(run, taskId, versionId, runId) {
+  return !!run && run.task_id === taskId && run.version_id === versionId && run.run_id === runId;
+}
+
 async function openTask(taskId, versionId = null, itemId = null) {
   clearTimeout(state.timer);
   const generation = ++state.generation;
+  // Navigation invalidates retry immediately, even while getTask is still pending.
+  state.run = null;
+  renderRun();
   const task = await api.getTask(taskId);
   if (generation !== state.generation) return;
+  if (task.task_id !== taskId) throw new Error("任务响应归属不匹配，请刷新后重试");
   state.task = task;
   renderTaskList();
   await openVersion(versionId || task.current_version_id, itemId);
@@ -145,6 +153,9 @@ async function openTask(taskId, versionId = null, itemId = null) {
 async function openVersion(versionId, itemId = null) {
   clearTimeout(state.timer);
   const generation = ++state.generation;
+  const taskId = state.task?.task_id;
+  const isCurrent = () => generation === state.generation
+    && state.task?.task_id === taskId && state.versionId === versionId;
   state.versionId = versionId;
   state.items = [];
   state.run = null;
@@ -153,17 +164,22 @@ async function openVersion(versionId, itemId = null) {
   state.selectedItemId = null;
   renderDetail();
   if (!versionId) return;
+  if (!taskId || !state.task.versions.some(version => version.version_id === versionId))
+    throw new Error("版本不属于当前任务，请刷新后重试");
   const [items, history, importJob] = await Promise.all([
-    allItems(versionId), api.taskHistory(state.task.task_id),
+    allItems(versionId), api.taskHistory(taskId),
     api.getImport(versionId).catch(error => { if (error.status === 404) return null; throw error; }),
   ]);
-  if (generation !== state.generation) return;
+  if (!isCurrent()) return;
   state.items = items;
   state.history = history;
   state.importJob = importJob;
   const runId = activeRunId();
-  state.run = runId ? await api.getRun(runId) : null;
-  if (generation !== state.generation) return;
+  const run = runId ? await api.getRun(runId) : null;
+  if (!isCurrent()) return;
+  if (run && !runMatchesScope(run, taskId, versionId, runId))
+    throw new Error("运行结果归属不匹配，请刷新后重试");
+  state.run = run;
   renderDetail();
   if (itemId) await openItem(itemId);
   schedulePoll(generation);
@@ -185,11 +201,16 @@ function schedulePoll(generation) {
   state.timer = setTimeout(async () => {
     if (generation !== state.generation) return;
     try {
+      const taskId = state.task?.task_id;
+      const versionId = state.versionId;
+      const runId = state.run?.run_id;
       const [job, run] = await Promise.all([
-        state.importJob ? api.getImport(state.versionId) : null,
-        state.run ? api.getRun(state.run.run_id) : null,
+        state.importJob ? api.getImport(versionId) : null,
+        runId ? api.getRun(runId) : null,
       ]);
-      if (generation !== state.generation) return;
+      if (generation !== state.generation || state.task?.task_id !== taskId || state.versionId !== versionId) return;
+      if (run && !runMatchesScope(run, taskId, versionId, runId))
+        throw new Error("运行结果归属不匹配，请刷新后重试");
       const importFinished = state.importJob?.parse_status === "staged" && job?.parse_status !== "staged";
       const runFinished = ["queued", "running"].includes(state.run?.status)
         && run && !["queued", "running"].includes(run.status);
@@ -335,8 +356,8 @@ function renderHistory() {
 
 function renderDetail() { renderTask(); renderRun(); renderItems(); renderItem(); renderHistory(); }
 
-function actionKey(name, payload) {
-  const identity = `${state.task?.task_id || "new"}:${state.versionId || "none"}:${name}:${JSON.stringify(payload)}`;
+function actionKey(name, payload, resourceId = null) {
+  const identity = JSON.stringify([state.task?.task_id || "new", state.versionId || "none", name, resourceId, payload]);
   if (!state.actionKeys.has(identity)) state.actionKeys.set(identity, key());
   return state.actionKeys.get(identity);
 }
@@ -401,7 +422,8 @@ async function decide(form) {
     payload = {action: "return", return_to: fields.get("return_to"), reason: fields.get("reason"),
       issues: [{message: fields.get("issue")}]};
   }
-  await api.decideSubmission(submission.submission_id, payload, actionKey("decision", payload));
+  await api.decideSubmission(submission.submission_id, payload,
+    actionKey("decision", payload, submission.submission_id));
   state.decisionDrafts.delete(decisionScope(submission));
   state.renderedDecisionScope = null;
   notice(payload.action === "approve" ? "整批审核已通过。" : "已退回补料。");
@@ -475,9 +497,14 @@ document.addEventListener("click", event => {
       await openTask(state.task.task_id);
     } else if (target.dataset.action === "submit") await submitTask();
     else if (target.dataset.action === "retry") {
-      await api.retryRun(state.run.run_id, state.run.retry_item_ids,
-        actionKey("retry", {run: state.run.run_id, items: state.run.retry_item_ids}));
-      await openTask(state.task.task_id);
+      const run = state.run;
+      if (!runMatchesScope(run, state.task?.task_id, state.versionId, activeRunId())
+          || !run.retry_allowed || !run.retry_item_ids?.length)
+        throw new Error("当前运行不可重试，请刷新后重试");
+      const taskId = state.task.task_id;
+      await api.retryRun(run.run_id, run.retry_item_ids,
+        actionKey("retry", {run: run.run_id, items: run.retry_item_ids}));
+      await openTask(taskId);
     }
   });
 });

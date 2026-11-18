@@ -3,9 +3,10 @@
 进度按该执行内各商品的当前行状态计数；业务待确认不计入技术 failed。
 """
 from apps.api.schemas import EvidenceEntry, RunProgress
-from apps.reviews.serializers import iso, result_mode, source_location
+from apps.reviews.serializers import iso, source_location
 
 from .schemas import RunDetail, RunItemEntry
+from .engine_config import run_result_mode
 
 
 def run_progress(run) -> RunProgress:
@@ -53,13 +54,13 @@ def run_to_detail(run, user=None) -> RunDetail:
         parent_run_id=str(run.parent_run_id) if run.parent_run_id else None,
         retry_allowed=bool(retry_ids),
         retry_item_ids=retry_ids,
-        result_mode=result_mode(run.items.first().result if run.items.exists() else None),
+        result_mode=run_result_mode(run),
         progress=run_progress(run),
         items=items,
         evidence=list(evidence.values()),
-        engine_version=run.items.first().result.get("engine_version", "") if run.items.exists() else "",
-        prompt_version=run.items.first().result.get("prompt_version", "") if run.items.exists() else "",
-        rules_version=run.items.first().result.get("rules_version", "") if run.items.exists() else "",
+        engine_version=run.engine_snapshot.get("engine_version", ""),
+        prompt_version=run.engine_snapshot.get("prompt_version", ""),
+        rules_version=run.engine_snapshot.get("rules_version", ""),
         created_at=iso(run.created_at),
         started_at=iso(run.started_at),
         finished_at=iso(run.finished_at),

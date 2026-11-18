@@ -8,8 +8,6 @@
 - 专家终值取最新 ``DecisionItem``；
 - 任一阶段没有值就是 ``None``，不用其他阶段补位。
 """
-from django.conf import settings
-
 from apps.accounts.permissions import ROLE_ACTIONS
 from apps.api.schemas import (
     Action,
@@ -25,6 +23,7 @@ from apps.api.schemas import (
     StageValue,
 )
 from apps.runs.models import Run, RunItem
+from apps.runs.engine_config import run_result_mode
 
 from .models import Confirmation, DecisionItem, SubmissionItem
 from .schemas import ItemCard, ItemFacts, ItemListEntry, TaskDetail, TaskListEntry, VersionEntry
@@ -35,10 +34,8 @@ def iso(value):
 
 
 def result_mode(result=None) -> ResultMode:
-    if result is not None:
-        # Historical rows predate the persisted marker and were all mock.
-        return ResultMode(result.get("result_mode", "mock"))
-    return ResultMode.MOCK if settings.ENGINE_MODE == "mock" else ResultMode.LIVE
+    # Unknown/empty history must not inherit the current deployment mode.
+    return ResultMode.LIVE if result and result.get("result_mode") == "live" else ResultMode.MOCK
 
 
 def source_location(item) -> SourceLocation:
@@ -260,7 +257,6 @@ def task_to_entry(user, task) -> TaskListEntry:
     precheck = (Run.objects.filter(version=current_version, kind=Run.Kind.PRECHECK, is_current=True)
                 .order_by("-created_at").first()) if current_version else None
     mode_run = precheck or run
-    mode_row = mode_run.items.first() if mode_run else None
     return TaskListEntry(
         task_id=str(task.pk),
         title=task.title,
@@ -273,7 +269,7 @@ def task_to_entry(user, task) -> TaskListEntry:
         latest_run_kind=run.kind if run else None,
         latest_run_status=run.status if run else None,
         allowed_actions=allowed_actions(user),
-        result_mode=result_mode(mode_row.result if mode_row else None),
+        result_mode=run_result_mode(mode_run),
         created_at=iso(task.created_at),
         updated_at=iso(task.updated_at),
     )

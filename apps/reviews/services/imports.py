@@ -22,6 +22,7 @@ from apps.accounts.permissions import UPLOAD_VERSION, _require_authenticated, ge
 from apps.reviews.models import AuditEvent, FileVersion, ImportJob, Item, ItemImage, ItemMember, Submission, Task
 from apps.runs.inline import execute_precheck
 from apps.runs.models import Run, RunAttempt, RunWork
+from apps.runs.engine_config import engine_matches
 from . import files, idempotency
 from .claims import validate_key
 
@@ -232,6 +233,8 @@ def queue_import(job_id, *, replay=False):
     job = ImportJob.objects.select_for_update().select_related("version__task", "precheck").get(pk=job_id)
     if job.status == ImportJob.Status.SUPERSEDED:
         return import_response(job, replay=True)
+    if job.status != ImportJob.Status.SUCCEEDED and not engine_matches(job.precheck):
+        raise ApiError(409, "engine_mode_changed", "登记时的引擎配置已变化，请重新上传以发起完整新轮")
     work = register_run(job.precheck)
     work = RunWork.objects.select_for_update().get(pk=work.pk)
     if job.status != "succeeded" and job.version.task.versions.filter(number__gt=job.version.number).exists():
@@ -266,9 +269,8 @@ def finish_import(job_id, *, replay=False, mapping=None, defer_precheck=False, w
             if job.status == ImportJob.Status.SUPERSEDED:
                 return import_response(job, replay=True)
             if job.status != ImportJob.Status.SUCCEEDED:
-                if (job.report or {}).get("result_mode", "mock") != (
-                        "mock" if settings.ENGINE_MODE == "mock" else "live"):
-                    raise ApiError(409, "engine_mode_changed", "导入登记时的引擎模式已变化，请上传新版本")
+                if not engine_matches(job.precheck):
+                    raise ApiError(409, "engine_mode_changed", "登记时的引擎配置已变化，请重新上传以发起完整新轮")
                 if task.versions.filter(number__gt=job.version.number).exists():
                     raise ApiError(409, "stale_version", "旧版本导入不能覆盖当前版本")
                 if mapping is None:
@@ -320,6 +322,8 @@ def finish_import(job_id, *, replay=False, mapping=None, defer_precheck=False, w
                     run.save(update_fields=["is_current"])
                 else:
                     run = execute_precheck(version, triggered_by=version.uploaded_by, run=job.precheck)
+                if run.status == Run.Status.SUPERSEDED or not engine_matches(run):
+                    raise ApiError(409, "engine_mode_changed", "执行引擎配置已变化，请重新上传以发起完整新轮")
                 job.report = {**mapping.as_dict(), "result_mode": (job.report or {}).get("result_mode", "mock")}
                 job.error = {}
                 job.status = ImportJob.Status.SUCCEEDED
@@ -334,8 +338,9 @@ def finish_import(job_id, *, replay=False, mapping=None, defer_precheck=False, w
         raise
     except Exception as exc:
         logger.exception("P06 import failed: %s", job_id)
+        configuration_changed = isinstance(exc, ApiError) and exc.code == "engine_mode_changed"
         error = {"code": exc.code if isinstance(exc, ApiError) else "import_processing_failed",
-                 "message": "导入处理失败，请重试原请求或联系维护人员",
+                 "message": "引擎配置已变化，请重新上传以发起完整新轮" if configuration_changed else "导入处理失败，请重试原请求或联系维护人员",
                  "details": exc.details if isinstance(exc, ApiError) and exc.code == "parse_blocked" else {"exception_type": type(exc).__name__}}
         # 不把别的请求刚完成的成功状态回写为失败。
         with transaction.atomic():
@@ -355,7 +360,8 @@ def finish_import(job_id, *, replay=False, mapping=None, defer_precheck=False, w
             AuditEvent.objects.create(task_id=job.version.task_id, version_id=job.version_id,
                                       actor_id=job.version.uploaded_by_id, action="import.failed",
                                       details={"import_id": str(job_id), "code": error["code"]})
-        raise ApiError(500, "import_failed", "导入未完成，未标记解析成功；请用原幂等键重试", {
+        message = "引擎配置已变化，导入未完成；请重新上传以发起完整新轮" if configuration_changed else "导入未完成，未标记解析成功；请用原幂等键重试"
+        raise ApiError(500, "import_failed", message, {
             "import_id": str(job_id), "task_id": str(job.version.task_id), "version_id": str(job.version_id),
             "status": "failed", "cause": error}) from exc
     # 成功提交后再清理回执；崩溃时重试/恢复也会到这里。

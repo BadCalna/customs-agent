@@ -78,6 +78,9 @@ def recover_expired(*, limit=100):
             work = RunWork.objects.select_for_update().get(run=run)
             if work.state != "running" or work.lease_until > timezone.now():
                 continue
+            from .services import _engine_consistent
+            if not _engine_consistent(run, work):
+                continue
             for attempt in RunAttempt.objects.filter(Q(row__run=run) | Q(run=run), status="running"):
                 attempt.status, attempt.error_code, attempt.finished_at = "interrupted", "worker_lease_expired", timezone.now()
                 attempt.save(update_fields=["status", "error_code", "finished_at"])
