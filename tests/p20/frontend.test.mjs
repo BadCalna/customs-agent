@@ -73,3 +73,26 @@ test('same-version reload entering loading state cancels in-flight export downlo
  pending.resolve(attachment('A'));await active;
  assert.equal(downloads.length,0);assert.doesNotMatch(h.innerHTML,/已发起下载/);ui.destroy();
 });
+test('ensureCsrf re-reads cleared cookie and logout fetches CSRF when cookie is missing',async()=>{
+ const original=globalThis.fetch,doc=globalThis.document;
+ const calls=[];let cookie='';
+ globalThis.document={get cookie(){return cookie;}};
+ globalThis.fetch=async(url,options)=>{
+  calls.push({url:String(url),method:options.method,headers:options.headers||{}});
+  if(String(url).endsWith('/me')){cookie='csrftoken=fresh-token';return new Response(JSON.stringify({user:null}),{status:200,headers:{'Content-Type':'application/json'}});}
+  return new Response(JSON.stringify({ok:true}),{status:200,headers:{'Content-Type':'application/json'}});
+ };
+ try{
+  const client=createClient();
+  await client.logout();
+  assert.deepEqual(calls.map(c=>[c.method,c.url]),[['GET','/api/v1/me'],['POST','/api/v1/auth/logout']]);
+  assert.equal(calls[1].headers['X-CSRFToken'],'fresh-token');
+  cookie='csrftoken=second-token';
+  await client.claimTask('T1','k1');
+  assert.equal(calls[2].headers['X-CSRFToken'],'second-token');
+  cookie='';
+  await client.claimTask('T1','k2');
+  assert.equal(calls[3].url,'/api/v1/me');
+  assert.equal(calls[4].headers['X-CSRFToken'],'fresh-token');
+ }finally{globalThis.fetch=original;globalThis.document=doc;}
+});

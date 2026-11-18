@@ -49,6 +49,15 @@ def _xml(data: bytes, *, part: str = "部件") -> ET.Element:
                           f"原件中的 {part} 声明了不支持的编码，无法安全导出（{exc}）") from exc
 
 
+def _decode_utf8(data: bytes, *, part: str) -> str:
+    """把 XML 部件解码为 UTF-8；非 UTF-8 文本属于输入工作簿格式问题。"""
+    try:
+        return data.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ExportError("source_workbook_invalid",
+                          f"原件中的 {part} 不是有效 UTF-8 文本，无法安全导出（{exc}）") from exc
+
+
 @dataclass(frozen=True)
 class ExportLine:
     item_id: str
@@ -255,7 +264,7 @@ def _styles(raw: bytes, requested: set[tuple[int, str]]) -> tuple[bytes, dict]:
             appended["fills"].append(ET.tostring(fill, encoding="unicode"))
         result[(base, level)] = len(xfs) + len(appended["cellXfs"])
         appended["cellXfs"].append(ET.tostring(xf, encoding="unicode"))
-    value = raw.decode("utf-8")
+    value = _decode_utf8(raw, part="xl/styles.xml")
     for tag, old in (("fonts", fonts), ("fills", fills), ("cellXfs", xfs)):
         if appended[tag]:
             value = _append(value, tag, appended[tag], len(old) + len(appended[tag]))
@@ -273,7 +282,7 @@ def _cell(ref: str, segments: list[tuple[str, bool]], style: int, prefix: str) -
 
 
 def _fill_sheet(raw: bytes, writes: dict[str, str]) -> bytes:
-    value = raw.decode("utf-8")
+    value = _decode_utf8(raw, part="工作表")
     row_prefix = _prefix(value, "row")
     cell_prefix = _prefix(value, "c")
     grouped: dict[int, dict[str, str]] = {}
@@ -381,7 +390,7 @@ def normalize_export_views(source: bytes) -> tuple[bytes, dict]:
                                 "before": previous, "after": "normal"})
         if not changed:
             continue
-        value = raw.decode("utf-8")
+        value = _decode_utf8(raw, part=sheet.part)
         container_prefix = _prefix(value, "sheetViews")
         container = re.compile(rf'<{container_prefix}sheetViews\b[^>]*>.*?</{container_prefix}sheetViews>', re.S)
         match = container.search(value)
@@ -445,9 +454,11 @@ def export_precheck(source: bytes, selection: ExportSelection, *, excel2016_imag
     if root.find("s:sheetProtection", NS) is not None:
         raise ExportError("protected_sheet", "申报要素页受保护，不能写入")
     requested, cells = set(), {}
-    prefix = _prefix(book.media_bytes(sheet.part).decode("utf-8"), "worksheet")
+    prefix = _prefix(_decode_utf8(book.media_bytes(sheet.part), part=sheet.part), "worksheet")
     for line in selection.lines:
         for key in ("ai_hs", "precheck_conclusion"):
+            if key not in extracted.layout.columns:
+                raise ExportError("missing_result_columns", "工作表缺少必要的结果列，不能安全写入")
             ref = extracted.layout.columns[key] + str(line.row)
             column = col_number(extracted.layout.columns[key])
             if sheet.enclosing_merge(line.row, column):

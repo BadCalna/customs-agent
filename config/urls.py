@@ -61,6 +61,6 @@ urlpatterns = [
     # 正式工作台默认真实会话/API；样例仍只在 DEBUG 下显式访问。
     path("workbench/assets/<path:path>", workbench_asset, name="workbench-asset"),
     path("workbench/", workbench_index, name="workbench-index"),
-    # P08 任务列表、筛选与运行进度页面入口（与上面入口同样只在开发模式可用）。
+    # P08 独立只读任务列表与运行进度页面入口（仅在 DEBUG=True 开发模式可用；正式工作台为 /workbench/）。
     path("tasks/", tasks_index, name="p08-tasks"),
 ]

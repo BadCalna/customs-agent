@@ -367,7 +367,7 @@ class Workbook:
                     if info.file_size > MAX_PART_BYTES:
                         raise OoxmlError("part_too_large", f"部件过大：{info.filename}")
                     self._parts[info.filename] = archive.read(info.filename)
-        except BadZipFile as exc:
+        except (BadZipFile, NotImplementedError, RuntimeError) as exc:
             raise OoxmlError("unreadable_package", "不是可读的 XLSX/ZIP 包") from exc
 
         if "xl/workbook.xml" not in self._parts:

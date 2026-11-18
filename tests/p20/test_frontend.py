@@ -12,7 +12,7 @@ from django.test import SimpleTestCase
 
 NODE = shutil.which("node")
 HERE = Path(__file__).resolve().parent
-EXPECTED_FRONTEND_CASES = 8
+EXPECTED_FRONTEND_CASES = 9
 
 
 class ExportFrontendTests(SimpleTestCase):

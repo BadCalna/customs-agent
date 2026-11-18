@@ -12,9 +12,9 @@ NODE_TEST_FILES = (
     "tests/p08/workbench.test.mjs",
     "tests/p08/review-host.test.mjs",
 )
-#: 四个 Node 文件的用例数（components 29 + page 29 + workbench 11 + review-host 13）；改测试时必须同步，
+#: 四个 Node 文件的用例数（components 29 + page 30 + workbench 12 + review-host 14）；改测试时必须同步，
 #: 否则「文件被清空 / 用例全被跳过」会以 0 退出被当成通过。
-EXPECTED_CASES = 82
+EXPECTED_CASES = 85
 
 
 class JavascriptBehaviorTests(SimpleTestCase):

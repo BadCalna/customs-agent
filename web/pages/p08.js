@@ -148,10 +148,23 @@ export function mountP08Page({client, mode = MODE_LIVE, taskHost, runHost, ident
   const progress = createRunProgress(runHost, {client});
   const tasks = createTaskList(taskHost, {
     client, pageSize,
+    onSelectionStart: handleSelectionStart,
     onSelectTask: selectTask,
     onLoaded: reconcileSelection,
     onSelectionSettled: selectionSettled,
   });
+
+  function handleSelectionStart(taskId) {
+    if (!alive || taskId !== null) return;
+    pendingReconcile = false;
+    state.selectedId = null;
+    state.detail = null;
+    state.selectionNotice = "";
+    paintSummary();
+    paintNotice();
+    runHost.hidden = true;
+    latestProgress = progress.open(null);
+  }
 
   function paintNotice() {
     if (!noticeHost) return;
@@ -209,8 +222,17 @@ export function mountP08Page({client, mode = MODE_LIVE, taskHost, runHost, ident
    * 选中期间的刷新会记 pendingReconcile（此时重选会被组件防重复逻辑吞掉，
    * 或者会打断用户刚点的新任务）。这里在选中真正结束后再核对一次。
    */
-  async function selectionSettled() {
-    if (!alive || !pendingReconcile) return;
+  async function selectionSettled(settledId, info) {
+    if (!alive) return;
+    if (info && !info.ok && settledId && settledId === info.taskId) {
+      state.selectionNotice = noticeHtml({
+        kind: "error",
+        title: "任务详情刷新失败",
+        message: "列表已更新，但重新读取该任务详情失败；右侧可能仍为上次内容，请稍后重试。",
+      });
+      paintNotice();
+    }
+    if (!pendingReconcile) return;
     pendingReconcile = false;
     await reconcileSelection(tasks.getState().items);
   }

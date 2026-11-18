@@ -17,8 +17,8 @@ from zipfile import ZipFile
 
 from .mapping import RESULT_ALIASES, field_matches
 from .references import effective_formulas, shift_range, transform_formula
-from .workbook import (FidelityError, NS, Workbook, cell_position, col_label,
-                       col_number, resolve_part, sha256, xml)
+from .workbook import (CorruptPartError, FidelityError, NS, Workbook, cell_position, col_label,
+                       col_number, decode_xml_text, merge_bounds, parse_int_attr, resolve_part, sha256, xml)
 
 PREFIX = r"(?:[A-Za-z_][\w.-]*:)?"
 CELL = re.compile(rf"<{PREFIX}c\b[^>]*?(?:/>|>.*?</{PREFIX}c>)", re.S)
@@ -57,7 +57,7 @@ def ensure_result_rows(raw: str, numbers: list[int]) -> str:
     def change(match):
         body = match[2]
         entries = list(ROW_ELEMENT.finditer(body))
-        present = [int(attribute(entry[0].split('>', 1)[0] + '>', 'r')) for entry in entries]
+        present = [parse_int_attr(attribute(entry[0].split('>', 1)[0] + '>', 'r'), label='row/@r') for entry in entries]
         if len(present) != len(set(present)) or present != sorted(present):
             raise FidelityError('Duplicate or unordered worksheet rows')
         missing = iter(sorted(wanted - set(present)))
@@ -108,10 +108,11 @@ def check_supported(workbook: Workbook, target: dict, start: int, rows: list[int
         raise FidelityError("Protected target worksheet; do not bypass protection")
     if target["root"].find(".//s:filterColumn", NS) is not None:
         raise FidelityError("Active filter criteria require additional index handling")
-    if any(int(c.get("max")) > 16382 and not (
-        int(c.get("max")) == 16384 and int(c.get("min")) <= 16382
-    ) for c in target["root"].findall("s:cols/s:col", NS)):
-        raise FidelityError("Explicit styles in final XLSX columns cannot be preserved during insertion")
+    for c in target["root"].findall("s:cols/s:col", NS):
+        c_min = parse_int_attr(c.get("min"), label="col/@min")
+        c_max = parse_int_attr(c.get("max"), label="col/@max")
+        if c_max > 16382 and not (c_max == 16384 and c_min <= 16382):
+            raise FidelityError("Explicit styles in final XLSX columns cannot be preserved during insertion")
     for sheet in workbook.sheets:
         for cell in sheet["cells"].values():
             if cell["formula_attributes"].get("t") not in (None, "normal", "shared"):
@@ -124,16 +125,20 @@ def check_supported(workbook: Workbook, target: dict, start: int, rows: list[int
                     raise FidelityError("Extended validation/conditional formula requires additional handling")
                 transform_formula(node.text or "", sheet["name"], target["name"], start)
     for merge in target["root"].findall("s:mergeCells/s:mergeCell", NS):
-        first, last = merge.attrib["ref"].split(":")
-        c1, r1 = cell_position(first)
-        c2, r2 = cell_position(last)
+        (c1, r1), (c2, r2), _ = merge_bounds(merge)
         if c1 < start <= c2 and any(r1 <= r <= r2 for r in rows):
             raise FidelityError("Insertion intersects a merged result cell")
     drawing_owners = {}
     for sheet in workbook.sheets:
         for rel in workbook.relationships(sheet["part"]).values():
-            if rel["Type"].endswith(("/drawing", "/vmlDrawing", "/comments")):
-                part = resolve_part(sheet["part"], rel["Target"])
+            if rel.get("TargetMode") == "External":
+                continue
+            kind = rel.get("Type", "").rsplit("/", 1)[-1]
+            if kind in ("drawing", "vmlDrawing", "comments"):
+                target_ref = rel.get("Target")
+                if not target_ref:
+                    raise CorruptPartError(f"missing Target on {kind} relationship")
+                part = resolve_part(sheet["part"], target_ref)
                 drawing_owners.setdefault(part, []).append(sheet["name"])
     if any(len(owners) > 1 and target["name"] in owners for owners in drawing_owners.values()):
         raise FidelityError("A drawing/comment part is shared between worksheets")
@@ -182,7 +187,8 @@ def rewrite_columns(raw: str, start: int, prefix: str) -> str:
     columns = []
     for item in re.finditer(rf"<{PREFIX}col\b[^>]*/>", match[2]):
         text = item[0]
-        first, last = int(attribute(text, "min")), int(attribute(text, "max"))
+        first = parse_int_attr(attribute(text, "min"), label="col/@min")
+        last = parse_int_attr(attribute(text, "max"), label="col/@max")
         if last < start:
             columns.append((first, text))
         elif first >= start:
@@ -271,10 +277,18 @@ def rewrite_hyperlinks(raw: str, context: str, target: str, start: int) -> str:
     return re.sub(rf"<{PREFIX}hyperlink\b[^>]*>", change, raw)
 
 
+def _sheet_by_local_id(workbook: Workbook, local_id: str | None) -> str:
+    if local_id is None:
+        return ""
+    index = parse_int_attr(local_id, label="definedName/@localSheetId")
+    if not 0 <= index < len(workbook.sheets):
+        raise CorruptPartError(f"definedName localSheetId out of range: {index}")
+    return workbook.sheets[index]["name"]
+
+
 def rewrite_names(raw: str, workbook: Workbook, target: str, start: int) -> str:
     def change(match):
-        local_id = attribute(match[1], "localSheetId")
-        context = workbook.sheets[int(local_id)]["name"] if local_id is not None else ""
+        context = _sheet_by_local_id(workbook, attribute(match[1], "localSheetId"))
         formula = html.unescape(match[2])
         result = transform_formula(formula, context, target, start)
         return match[0] if result == formula else match[1] + escape(result) + match[3]
@@ -352,15 +366,22 @@ def audit(original: Workbook, output: Workbook, target: str, start: int, added_r
         failures.append("floating_object_mapping_changed")
     expected_workbook = copy.deepcopy(xml(original.parts["xl/workbook.xml"]))
     for name in expected_workbook.findall("s:definedNames/s:definedName", NS):
-        context = original.sheets[int(name.get("localSheetId"))]["name"] if name.get("localSheetId") is not None else ""
+        context = _sheet_by_local_id(original, name.get("localSheetId"))
         name.text = transform_formula(name.text or "", context, target, start)
     if canonical(expected_workbook) != canonical(xml(output.parts["xl/workbook.xml"])):
         failures.append("workbook_metadata_changed")
     for rel in original.relationships(original.sheet(target)["part"]).values():
-        kind = rel["Type"].rsplit("/", 1)[-1]
+        if rel.get("TargetMode") == "External":
+            continue
+        kind = rel.get("Type", "").rsplit("/", 1)[-1]
         if kind not in ("drawing", "comments", "vmlDrawing"):
             continue
-        part = resolve_part(original.sheet(target)["part"], rel["Target"])
+        target_ref = rel.get("Target")
+        if not target_ref:
+            raise CorruptPartError(f"missing Target on {kind} relationship")
+        part = resolve_part(original.sheet(target)["part"], target_ref)
+        if part not in original.parts:
+            raise CorruptPartError(f"missing related part: {part}")
         expected = copy.deepcopy(xml(original.parts[part]))
         if kind == "drawing":
             for anchor in expected:
@@ -368,18 +389,29 @@ def audit(original: Workbook, output: Workbook, target: str, start: int, added_r
                     if marker.tag.rsplit("}", 1)[-1] not in ("from", "to"):
                         continue
                     for coordinate in marker:
-                        if coordinate.tag.endswith("}col") and int(coordinate.text) >= start - 1:
-                            coordinate.text = str(int(coordinate.text) + 2)
+                        if coordinate.tag.endswith("}col"):
+                            col_val = parse_int_attr(coordinate.text, label="drawing col")
+                            if col_val >= start - 1:
+                                coordinate.text = str(col_val + 2)
         elif kind == "comments":
             for comment in expected.findall("s:commentList/s:comment", NS):
-                comment.set("ref", shift_range(comment.get("ref"), start))
+                comment_ref = comment.get("ref")
+                if not comment_ref:
+                    raise CorruptPartError("comment element is missing ref attribute")
+                comment.set("ref", shift_range(comment_ref, start))
         else:
             for node in expected.iter():
-                if node.tag.endswith("}Column") and int(node.text) >= start - 1:
-                    node.text = str(int(node.text) + 2)
+                if node.tag.endswith("}Column"):
+                    col_val = parse_int_attr(node.text, label="VML Column")
+                    if col_val >= start - 1:
+                        node.text = str(col_val + 2)
                 elif node.tag.endswith("}Anchor"):
-                    values = [int(x.strip()) for x in node.text.split(",")]
-                    for index in (0,4):
+                    if not node.text:
+                        raise CorruptPartError("VML Anchor element is empty")
+                    values = [parse_int_attr(x, label="VML Anchor") for x in node.text.split(",")]
+                    if len(values) != 8:
+                        raise FidelityError("Unsupported VML anchor")
+                    for index in (0, 4):
                         if values[index] >= start - 1:
                             values[index] += 2
                     node.text = ", ".join(map(str, values))
@@ -408,9 +440,10 @@ def audit_sheet_metadata(before, after, target, start, added_rows=()):
         data = expected.find('s:sheetData', NS)
         if data is not None:
             from xml.etree.ElementTree import Element
-            present = {int(row.get('r')) for row in data}
+            present = {parse_int_attr(row.get('r'), label='row/@r') for row in data}
             for number in sorted(set(added_rows) - present):
-                position = next((index for index, row in enumerate(data) if int(row.get('r')) > number), len(data))
+                position = next((index for index, row in enumerate(data)
+                                 if parse_int_attr(row.get('r'), label='row/@r') > number), len(data))
                 data.insert(position, Element('{' + NS['s'] + '}row', {'r': str(number)}))
     for root in (expected, actual):
         data = root.find("s:sheetData", NS)
@@ -441,7 +474,9 @@ def audit_sheet_metadata(before, after, target, start, added_rows=()):
             result = {}
             for node in root.findall("s:cols/s:col", NS):
                 properties = {k:v for k,v in node.attrib.items() if k not in ("min", "max")}
-                for number in range(int(node.get("min")), int(node.get("max")) + 1):
+                c_min = parse_int_attr(node.get("min"), label="col/@min")
+                c_max = parse_int_attr(node.get("max"), label="col/@max")
+                for number in range(c_min, c_max + 1):
                     result[number] = properties
             return result
         expected_columns, actual_columns = columns(expected), columns(actual)
@@ -476,7 +511,7 @@ def insert_columns(source: str | Path, destination: str | Path, layout: dict) ->
     parts = copy.copy(original.parts)
     allowed = {"xl/workbook.xml", *(s["part"] for s in original.sheets)}
     for sheet in original.sheets:
-        raw = parts[sheet["part"]].decode("utf-8")
+        raw = decode_xml_text(parts[sheet["part"]], sheet["part"])
         if sheet["name"] == target["name"]:
             raw = rewrite_target(raw, sheet, start, header_row, rows)
         else:
@@ -484,21 +519,32 @@ def insert_columns(source: str | Path, destination: str | Path, layout: dict) ->
             raw = rewrite_metadata_formulas(raw, sheet["name"], target["name"], start)
         raw = rewrite_hyperlinks(raw, sheet["name"], target["name"], start)
         parts[sheet["part"]] = raw.encode("utf-8")
-    parts["xl/workbook.xml"] = rewrite_names(parts["xl/workbook.xml"].decode("utf-8"), original, target["name"], start).encode("utf-8")
+    parts["xl/workbook.xml"] = rewrite_names(decode_xml_text(parts["xl/workbook.xml"], "xl/workbook.xml"), original, target["name"], start).encode("utf-8")
     for rel in original.relationships(target["part"]).values():
-        kind = rel["Type"].rsplit("/", 1)[-1]
+        if rel.get("TargetMode") == "External":
+            continue
+        kind = rel.get("Type", "").rsplit("/", 1)[-1]
         if kind not in ("drawing", "comments", "vmlDrawing"):
             continue
-        part = resolve_part(target["part"], rel["Target"])
+        target_ref = rel.get("Target")
+        if not target_ref:
+            raise CorruptPartError(f"missing Target on {kind} relationship")
+        part = resolve_part(target["part"], target_ref)
+        if part not in parts:
+            raise CorruptPartError(f"missing related part: {part}")
         allowed.add(part)
-        raw = parts[part].decode("utf-8")
+        raw = decode_xml_text(parts[part], part)
         if kind == "drawing":
             raw = rewrite_drawing(raw, start)
         elif kind == "vmlDrawing":
             raw = rewrite_vml(raw, start)
         else:
-            raw = re.sub(rf"<{PREFIX}comment\b[^>]*>",
-                         lambda m: set_attribute(m[0], "ref", shift_range(attribute(m[0], "ref"), start)), raw)
+            def _shift_comment(m):
+                ref = attribute(m[0], "ref")
+                if not ref:
+                    raise CorruptPartError("comment element is missing ref attribute")
+                return set_attribute(m[0], "ref", shift_range(ref, start))
+            raw = re.sub(rf"<{PREFIX}comment\b[^>]*>", _shift_comment, raw)
         parts[part] = raw.encode("utf-8")
     for part, data in parts.items():
         if data != original.parts[part] and part not in allowed:

@@ -815,3 +815,43 @@ test('真实入口装配：用 p08.html 的挂载点运行页面 bootstrap（DOM
     }
   }
 });
+
+test('阶段筛选切换清空旧详情并停止旧进度；刷新详情失败时显式提示', async () => {
+  let failSecondGet = false;
+  let listRows = [copy(mockTask)];
+  const v3 = 'version-p08-fail-v3';
+  const {client} = fakeClient({
+    tasks: listRows,
+    runs: dataset.runs,
+  });
+  client.listTasks = async (params = {}) => ({
+    items: (params.stage ? listRows.filter((t) => t.stage === params.stage) : listRows).map(copy),
+    next_cursor: null,
+  });
+  const baseGetTask = client.getTask;
+  client.getTask = async (id) => {
+    if (failSecondGet) throw {status: 500, message: '服务端暂时不可用'};
+    return baseGetTask(id);
+  };
+
+  const {page, runHost, summaryHost, noticeHost} = mount({client});
+  await page.ready;
+  await page.selectTask(mockTask.task_id);
+  assert.equal(runHost.hidden, false);
+  assert.match(summaryHost.textContent, /当前版本 V2/);
+
+  // 列表刷新发现新版本但重读详情失败：右侧通知栏必须明确提示刷新失败
+  listRows = [{...copy(mockTask), current_version_id: v3, current_version_number: 3, latest_run_id: 'run-v3'}];
+  failSecondGet = true;
+  await page.tasks.load();
+  assert.match(noticeHost.innerHTML, /任务详情刷新失败/);
+
+  // 切换阶段筛选（onSelectionStart(null)）：立即清掉旧任务详情、摘要、提示和进度
+  await page.tasks.setStage('submitted');
+  assert.equal(page.getState().selectedId, null);
+  assert.equal(page.getState().detail, null);
+  assert.equal(runHost.hidden, true);
+  assert.match(summaryHost.textContent, /尚未选择任务/);
+  assert.doesNotMatch(noticeHost.innerHTML, /任务详情刷新失败/);
+  page.destroy();
+});

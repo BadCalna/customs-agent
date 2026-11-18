@@ -9,13 +9,19 @@ import {renderCommodityCard} from './components/commodity-card.js';
 import {createReviewActions} from './components/review-actions.js';
 
 /** Bind P11 to immutable review scope; browsing a commodity never replaces an expert draft. */
-export function createWorkbenchReview({host, client, getContext, getUser, getSession}) {
+export function createWorkbenchReview({host, client, getContext, getUser, getSession, refreshTask}) {
   let panel=null, scopeKey='', dataKey='', bound=null;
   function clear() {panel?.destroy();panel=null;bound=null;scopeKey=dataKey='';host.hidden=false;if(host.dataset)delete host.dataset.reviewNotice;host.replaceChildren();}
   // Empty fields during openTask/openVersion are not evidence of a different submission.
   // Keep the instance (including P11's private drafts), but never expose stale write controls.
   function canRetain(s, role) {
-    if (!panel || role!=='expert' || role!==bound.role || getSession()!==bound.ticket || getContext()!==bound.ctx || s.taskId!==bound.taskId) return false;
+    if (!panel || role!==bound.role || getSession()!==bound.ticket || getContext()!==bound.ctx || s.taskId!==bound.taskId) return false;
+    if (role==='operator') {
+      if (s.error || (s.versionId && s.versionId!==bound.versionId)) return false;
+      if (s.itemId && s.itemId!==bound.itemId) return false;
+      return !!(s.loading || (s.itemId===bound.itemId && !s.card));
+    }
+    if (role!=='expert') return false;
     if ((s.task && s.task.current_version_id!==bound.versionId) || (s.versionId && s.versionId!==bound.versionId)) return false;
     if (!s.task || !s.history || !s.versionId) return true;
     if (s.kind && s.kind!=='expert_check') return false;
@@ -46,7 +52,7 @@ export function createWorkbenchReview({host, client, getContext, getUser, getSes
       items=[s.card];
     }
     const scope=role==='expert' ? [role,s.taskId,s.versionId,submission.submission_id]
-      : [role,s.taskId,s.versionId,s.card.item_id,s.card.revision,s.task.revision,s.runId];
+      : [role,s.taskId,s.versionId,s.card.item_id];
     return {scope:JSON.stringify(scope),submissionId:submission?.submission_id,itemId:role==='operator'?s.card.item_id:null,
       data:{task:{...s.task,allowed_actions:(s.task.allowed_actions || []).filter(a=>role==='operator'?a!=='submission.create':true)},
         version,items,submission,expert_check:s.run?{run_id:s.run.run_id,status:s.run.status}:null}};
@@ -79,11 +85,32 @@ export function createWorkbenchReview({host, client, getContext, getUser, getSes
         const signature=JSON.stringify(payload);if(decisionAttempt?.signature!==signature)decisionAttempt={signature,key:crypto.randomUUID()};
         return client.decideSubmission(owner.submissionId,payload,decisionAttempt.key);
       }},onChanged:()=>{
-        // A write already in flight may finish while the same task is refreshing.
-        // Start a post-write read even when suspended; its epoch supersedes stale reads.
-        if(bound===owner && getSession()===owner.ticket && getContext()===owner.ctx && owner.ctx.store.get().taskId===owner.taskId) void owner.ctx.openTask(owner.taskId);
+        if (getSession()!==owner.ticket || getContext()!==owner.ctx) return;
+        const current=owner.ctx.store.get();
+        if (current.taskId!==owner.taskId) return;
+        const preserve = owner.role==='operator' ? {preserveItem:true, preserveVersionId:owner.versionId, preserveItemId:owner.itemId} : {};
+        const reload = () => (typeof refreshTask==='function' ? refreshTask(owner.taskId, preserve) : owner.ctx.openTask(owner.taskId, preserve));
+        if (bound===owner) {
+          void reload();
+          return;
+        }
+        // An in-flight operator confirm may settle after a concurrent list reconcile cleared s.card;
+        // still trigger a post-write read unless the operator switched to another item or version.
+        if (owner.role==='operator' && !panel && (!current.versionId || current.versionId===owner.versionId) && !current.itemId) {
+          void reload();
+        }
       },
-      onConflict:()=>{if(stillCurrent())return owner.ctx.openTask(owner.taskId);}});
+      onConflict:()=>{
+        if (getSession()!==owner.ticket || getContext()!==owner.ctx) return;
+        const current=owner.ctx.store.get();
+        if (current.taskId!==owner.taskId) return;
+        const preserve = owner.role==='operator' ? {preserveItem:true, preserveVersionId:owner.versionId, preserveItemId:owner.itemId} : {};
+        const reload = () => (typeof refreshTask==='function' ? refreshTask(owner.taskId, preserve) : owner.ctx.openTask(owner.taskId, preserve));
+        if (stillCurrent()) return reload();
+        if (owner.role==='operator' && (bound===owner || (!panel && (!current.versionId || current.versionId===owner.versionId) && !current.itemId))) {
+          return reload();
+        }
+      }});
     panel.mount(host);
   }
   return {render,clear,destroy:clear};
@@ -92,11 +119,11 @@ export function createWorkbenchReview({host, client, getContext, getUser, getSes
 export async function mountWorkbench(root) {
   const api = createClient({mode:'live'});
   let user = null, context = null, tasks = null, progress = null, exports = null, review = null;
-  let unsubscribe = null, alive = true, session = 0, runKey = '', cardKey = undefined, submitIntent = null, submitting = false, pendingReconcile = false;
+  let unsubscribe = null, alive = true, session = 0, runKey = '', cardKey = undefined, submitIntent = null, submitting = false, pendingReconcile = false, selectionIntent = null, refreshTask = null;
   const $ = selector => root.querySelector(selector);
   function reset() {
     session++; unsubscribe?.(); tasks?.destroy(); progress?.destroy(); exports?.destroy(); context?.destroy(); review?.destroy();
-    context=tasks=progress=exports=review=null;unsubscribe=null;runKey='';cardKey=undefined;submitIntent=null;submitting=false;pendingReconcile=false;
+    context=tasks=progress=exports=review=null;unsubscribe=null;runKey='';cardKey=undefined;submitIntent=null;submitting=false;pendingReconcile=false;selectionIntent=null;refreshTask=null;
   }
   function gate(error = null) {
     reset(); user=null;
@@ -139,7 +166,7 @@ export async function mountWorkbench(root) {
     $('#wb-kind')?.addEventListener('change',e=>context.chooseKind(e.target.value));
     $('#wb-run')?.addEventListener('change',e=>context.chooseRun(e.target.value));
     $('#wb-decision')?.addEventListener('change',e=>context.chooseDecision(e.target.value));
-    $('#wb-refresh')?.addEventListener('click',()=>void context.openTask(s.taskId));
+    $('#wb-refresh')?.addEventListener('click',()=>void refreshTask?.(s.taskId,{preserveItem:user.role==='operator'}));
     $('#wb-summary').textContent=s.versionId?`V${version?.number ?? '?'} · ${s.loading?'正在读取商品…':s.items.length+' 件商品'} · ${s.versionId===s.task?.current_version_id?'当前版本':'历史版本，只读'}。商品卡片展示该版本阶段有效结果；运行明细及导出严格使用上方所选 Run。`:'';
     exports.update(s,user.role);
     renderCommodityList($('#wb-items'),{items:s.items,selectedItemId:s.itemId,onSelectItem:id=>void context.selectItem(id),emptyTitle:s.loading?'正在读取商品':'本版本暂无商品',emptyHint:'上传完成后刷新任务。'});
@@ -154,7 +181,7 @@ export async function mountWorkbench(root) {
     $('#wb-submit').hidden=user.role!=='operator';
     $('#wb-submit').disabled=submitting||s.loading||!!s.error||!s.items.length||s.versionId!==s.task?.current_version_id||!s.task.allowed_actions?.includes('submission.create');
     review.render(s);
-    if ($('#wb-review').hidden) $('#wb-summary').textContent=[$('#wb-summary').textContent,`专家草稿已保留，暂不可提交。${$('#wb-review').dataset.reviewNotice}`].filter(Boolean).join(' ');
+    if ($('#wb-review').hidden) $('#wb-summary').textContent=[$('#wb-summary').textContent,`${user.role==='expert'?'专家':''}草稿已保留，暂不可提交。${$('#wb-review').dataset.reviewNotice}`].filter(Boolean).join(' ');
   }
   async function submitBatch() {
     if(submitting||!context)return;
@@ -169,7 +196,7 @@ export async function mountWorkbench(root) {
       const payload={version_id:s.versionId,revision:s.task.revision,items:cards.map(c=>({item_id:c.item_id,confirmation_id:c.business_confirmed_hs.source_id}))};
       const signature=JSON.stringify([s.taskId,payload]);if(submitIntent?.signature!==signature)submitIntent={signature,key:crypto.randomUUID()};
       await client.submitTask(s.taskId,payload,submitIntent.key);
-      if(matches()){submitIntent=null;$('#wb-write-note').textContent='服务端已接收本批次提交，正在刷新。';await context.openTask(s.taskId);}
+      if(matches()){submitIntent=null;$('#wb-write-note').textContent='服务端已接收本批次提交，正在刷新。';await (refreshTask ? refreshTask(s.taskId) : context.openTask(s.taskId));}
     }catch(error){if(matches())$('#wb-write-note').textContent=error.message;}
     finally{if(alive&&ticket===session&&context){submitting=false;render(context.store.get());}}
   }
@@ -182,12 +209,22 @@ export async function mountWorkbench(root) {
       <div class="wb-goods"><section aria-label="本版本商品" id="wb-items"></section><section id="wb-card" tabindex="-1" aria-label="商品卡片"></section></div><p id="wb-source"></p>
       <button class="btn primary" id="wb-submit" hidden>提交本批次专家审核</button><p id="wb-write-note" role="status"></p><div id="wb-review"></div></section></main>`;
     context=createWorkbenchContext(client);
-    review=createWorkbenchReview({host:$('#wb-review'),client,getContext:()=>context,getUser:()=>user,getSession:()=>session});
+    review=createWorkbenchReview({host:$('#wb-review'),client,getContext:()=>context,getUser:()=>user,getSession:()=>session,refreshTask:(id,opts)=>refreshCurrentTask(id,opts)});
     exports=createExportActions($('#wb-exports'),{client});
     progress=createRunProgress($('#wb-progress'),{client,onStateChange:p=>context?.acceptProgress(p),onSelectItem:async identity=>{
       const ctx=context;await ctx.selectItem(identity.item_id,identity);
       if(context===ctx&&ctx.store.get().card?.item_id===identity.item_id){$('#wb-card').scrollIntoView({block:'start',behavior:'smooth'});$('#wb-card').focus();}
     }});
+    async function refreshCurrentTask(id, opts) {
+      if (!alive || !context || ticket !== session) return;
+      await context.openTask(id, opts);
+      if (!alive || !context || ticket !== session) return;
+      if (pendingReconcile) {
+        pendingReconcile = false;
+        await reconcileSelection(tasks.getState().items);
+      }
+    }
+    refreshTask = refreshCurrentTask;
     async function reconcileSelection(items) {
       if (!alive || !tasks || !context || ticket !== session) return;
       const listState = tasks.getState();
@@ -198,31 +235,34 @@ export async function mountWorkbench(root) {
       if (s.task && s.task.task_id !== listState.selectedId) { pendingReconcile = true; return; }
       const entry = (Array.isArray(items) ? items : []).find(row => row && row.task_id === listState.selectedId);
       if (!entry) return;
-      if (s.task && s.history) {
+      if (s.task && s.history && !s.error) {
         const versionChanged = (entry.current_version_id || null) !== (s.task.current_version_id || null);
         const runChanged = (entry.latest_run_id || null) !== (s.task.latest_run_id || null);
         const stageChanged = (entry.stage || null) !== (s.task.stage || null);
         if (!versionChanged && !runChanged && !stageChanged) return;
       }
+      selectionIntent = (user.role === 'operator' && s.taskId === listState.selectedId && s.versionId && s.itemId)
+        ? {taskId: s.taskId, versionId: s.versionId, itemId: s.itemId} : null;
       await tasks.selectTask(listState.selectedId);
     }
     tasks=createTaskList($('#wb-tasks'),{
       client,
-      onSelectionStart:id=>{$('#wb-write-note').textContent='';context.beginTask(id);},
-      onSelectTask:t=>context.acceptTask(t),
+      onSelectionStart:id=>{
+        if (!selectionIntent || selectionIntent.taskId !== id) selectionIntent = null;
+        $('#wb-write-note').textContent='';context.beginTask(id);
+      },
+      onSelectTask:t=>{
+        const keep = selectionIntent && selectionIntent.taskId === t.task_id ? selectionIntent : null;
+        selectionIntent = null;
+        return context.acceptTask(t, keep ? {preserveVersionId: keep.versionId, preserveItemId: keep.itemId} : {});
+      },
       onLoaded:items=>reconcileSelection(items),
       onSelectionSettled:async(settledId,{taskId,ok,error})=>{
+        selectionIntent = null;
         if (!alive || !context || ticket !== session) return;
         if (!ok) {
           pendingReconcile = false;
-          if (settledId && settledId !== taskId) {
-            await context.openTask(settledId);
-            if (!alive || !context || ticket !== session) return;
-            if (pendingReconcile) {
-              pendingReconcile = false;
-              await reconcileSelection(tasks.getState().items);
-            }
-          }
+          if (settledId && settledId !== taskId) await refreshCurrentTask(settledId);
           else if (!settledId) context.beginTask(null);
           else context.failTask(taskId, error);
           return;

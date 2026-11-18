@@ -24,7 +24,7 @@ export function createWorkbenchContext(client) {
     epoch++; cardTicket++;
     store.set({...blank, taskId: taskId || null, error: error || new Error('任务读取失败'), loading: false});
   }
-  async function acceptTask(task) {
+  async function acceptTask(task, {preserveItemId = null, preserveVersionId = null} = {}) {
     if (!alive || store.get().taskId !== task.task_id) return;
     const n = epoch;
     store.set({task});
@@ -38,19 +38,24 @@ export function createWorkbenchContext(client) {
             || !history?.versions?.some(v => v.version_id === task.current_version_id)) {
           throw new Error('任务历史缺少当前版本记录');
         }
-        await openVersion(task.current_version_id);
+        const keepItem = preserveVersionId && preserveVersionId === task.current_version_id ? preserveItemId : null;
+        await openVersion(task.current_version_id, {preserveItemId: keepItem});
       } else {
         store.set({loading: false});
       }
     } catch (error) { if (active(n)) store.set({error, loading: false}); }
   }
-  async function openTask(id) {
+  async function openTask(id, {preserveItem = false, preserveVersionId = null, preserveItemId = null} = {}) {
+    const prev = preserveItem ? store.get() : null;
+    const keepVersionId = preserveVersionId || (prev && prev.taskId === id ? prev.versionId : null);
+    const keepItemId = preserveItemId || (prev && prev.taskId === id ? prev.itemId : null);
     beginTask(id); const n = epoch;
     try { const task = await client.getTask(id); if (active(n)) {
-      if (task.task_id !== id) throw new Error('任务身份不匹配'); await acceptTask(task);
+      if (task.task_id !== id) throw new Error('任务身份不匹配');
+      await acceptTask(task, {preserveVersionId: keepVersionId, preserveItemId: keepItemId});
     }} catch (error) { if (active(n)) store.set({error, loading: false}); }
   }
-  async function openVersion(versionId) {
+  async function openVersion(versionId, {preserveItemId = null} = {}) {
     const {task, history, kind} = store.get();
     if (!alive || !task?.versions?.some(v => v.version_id === versionId) || !history?.versions?.some(v => v.version_id === versionId)) return;
     const n = ++epoch; cardTicket++;
@@ -67,7 +72,9 @@ export function createWorkbenchContext(client) {
         cursors.add(cursor);
       } while (cursor);
       if (new Set(items.map(i => i.item_id)).size !== items.length) throw new Error('商品列表重复');
-      store.set({items, loading: false});
+      const keepItem = preserveItemId && items.some(i => i.item_id === preserveItemId) ? preserveItemId : null;
+      store.set({items, itemId: keepItem, loading: false});
+      if (keepItem) await selectItem(keepItem);
     } catch (error) { if (active(n)) store.set({error, loading: false}); }
   }
   function chooseRun(runId, kind = store.get().kind) {

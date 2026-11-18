@@ -139,6 +139,7 @@ function createLiveAdapter(baseUrl) {
   }
 
   async function ensureCsrf() {
+    csrf = readCookie("csrftoken");
     if (csrf) return csrf;
     try {
       await raw("GET", "/me");
@@ -233,7 +234,7 @@ function createLiveAdapter(baseUrl) {
     },
 
     async logout() {
-      csrf = readCookie("csrftoken");
+      csrf = readCookie("csrftoken") || await ensureCsrf();
       await raw("POST", "/auth/logout", { headers: { "X-CSRFToken": csrf } });
       csrf = readCookie("csrftoken");
     },

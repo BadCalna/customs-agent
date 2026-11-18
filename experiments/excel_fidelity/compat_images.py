@@ -19,8 +19,8 @@ from zipfile import ZipFile
 
 from .insert import CELL, FORMULA, PREFIX, attribute, canonical, sheet_prefix
 from .references import effective_formulas
-from .workbook import (FidelityError, NS, P, R, S, Workbook, cell_position,
-                       relationship_part, resolve_part, sha256, xml)
+from .workbook import (CorruptPartError, FidelityError, NS, P, R, S, Workbook, cell_position,
+                       decode_xml_text, merge_bounds, parse_int_attr, relationship_part, resolve_part, sha256, xml)
 
 XDR = 'http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing'
 A = 'http://schemas.openxmlformats.org/drawingml/2006/main'
@@ -74,18 +74,18 @@ def _unused(prefix, used):
 def _geometry(sheet, cell, size):
     column, row_number = cell_position(cell)
     for merge in sheet['root'].findall('s:mergeCells/s:mergeCell', NS):
-        first, last = [cell_position(ref) for ref in merge.get('ref').split(':')]
+        first, last, _ = merge_bounds(merge)
         if first[0] <= column <= last[0] and first[1] <= row_number <= last[1]:
             raise FidelityError(f'Merged image position requires manual review: {cell}')
     fmt = sheet['root'].find('s:sheetFormatPr', NS)
     defaults = fmt.attrib if fmt is not None else {}
     columns = [c.attrib for c in sheet['root'].findall('s:cols/s:col', NS)
-               if int(c.get('min')) <= column <= int(c.get('max'))]
+               if parse_int_attr(c.get('min'), label='col/@min') <= column <= parse_int_attr(c.get('max'), label='col/@max')]
     if len(columns) > 1:
         raise FidelityError('Overlapping column dimensions')
     column_info = columns[0] if columns else {}
     row = next((r for r in sheet['root'].findall('s:sheetData/s:row', NS)
-                if int(r.get('r')) == row_number), None)
+                if parse_int_attr(r.get('r'), label='row/@r') == row_number), None)
     row_info = row.attrib if row is not None else {}
     if (column_info.get('hidden') in ('1', 'true') or row_info.get('hidden') in ('1', 'true')
             or defaults.get('zeroHeight') in ('1', 'true') and not row_info.get('ht')):
@@ -256,12 +256,16 @@ def export_excel2016_images(source, destination, layout):
               'images': [], 'new_drawing_links': [], 'added_relationships': {}, 'added_content_types': []}
 
     def add_relationship(part, attrs):
-        raw = parts.get(part, f'<Relationships xmlns="{P}"/>'.encode()).decode()
+        raw_bytes = parts.get(part, f'<Relationships xmlns="{P}"/>'.encode())
+        raw = decode_xml_text(raw_bytes, part)
         fragment = '<Relationship xmlns="' + P + '" ' + ' '.join(f'{k}="{_attr(v)}"' for k, v in attrs.items()) + '/>'
         parts[part] = _append(raw, 'Relationships', fragment).encode()
         report['added_relationships'].setdefault(part, []).append(attrs)
 
     def ensure_content(kind, key, value, content_type):
+        if '[Content_Types].xml' not in parts:
+            raise CorruptPartError('missing [Content_Types].xml')
+        raw_ct = decode_xml_text(parts['[Content_Types].xml'], '[Content_Types].xml')
         root = xml(parts['[Content_Types].xml'])
         existing = [e for e in root if e.tag == f'{{{CT}}}{kind}' and e.get(key, '').lower() == value.lower()]
         if existing:
@@ -270,7 +274,7 @@ def export_excel2016_images(source, destination, layout):
             return
         attrs = {key: value, 'ContentType': content_type}
         fragment = f'<{kind} xmlns="{CT}" ' + ' '.join(f'{k}="{_attr(v)}"' for k, v in attrs.items()) + '/>'
-        parts['[Content_Types].xml'] = _append(parts['[Content_Types].xml'].decode(), 'Types', fragment).encode()
+        parts['[Content_Types].xml'] = _append(raw_ct, 'Types', fragment).encode()
         report['added_content_types'].append({'kind': kind, 'attributes': attrs})
 
     nodes = target['root'].findall('s:drawing', NS)
@@ -280,9 +284,21 @@ def export_excel2016_images(source, destination, layout):
         relation = book.relationships(target['part']).get(nodes[0].get(f'{{{R}}}id'), {})
         if relation.get('Type') != R + '/drawing' or relation.get('TargetMode') == 'External':
             raise FidelityError('Unsupported worksheet drawing relationship')
-        drawing = resolve_part(target['part'], relation['Target'])
-        if sum(resolve_part(s['part'], r['Target']) == drawing for s in book.sheets
-               for r in book.relationships(s['part']).values() if r.get('Type') == R + '/drawing') != 1:
+        target_ref = relation.get('Target')
+        if not target_ref:
+            raise CorruptPartError('Worksheet drawing relationship is missing Target')
+        drawing = resolve_part(target['part'], target_ref)
+        if drawing not in parts:
+            raise CorruptPartError(f'Missing worksheet drawing part: {drawing}')
+        drawing_count = 0
+        for s in book.sheets:
+            for r in book.relationships(s['part']).values():
+                if r.get('Type') == R + '/drawing' and r.get('TargetMode') != 'External':
+                    if not r.get('Target'):
+                        raise CorruptPartError(f'Drawing relationship in {s["part"]} is missing Target')
+                    if resolve_part(s['part'], r['Target']) == drawing:
+                        drawing_count += 1
+        if drawing_count != 1:
             raise FidelityError('Shared worksheet drawing requires manual review')
     else:
         drawing = _unused('xl/drawings/drawingP03Compatibility', {p.removesuffix('.xml') for p in parts}) + '.xml'
@@ -290,14 +306,14 @@ def export_excel2016_images(source, destination, layout):
         rid = _unused('rIdP03Drawing', set(book.relationships(target['part'])))
         add_relationship(relationship_part(target['part']), {'Id': rid, 'Type': R + '/drawing',
                          'Target': posixpath.relpath(drawing, posixpath.dirname(target['part']))})
-        parts[target['part']] = _add_sheet_drawing(parts[target['part']].decode(), target['root'], rid).encode()
+        parts[target['part']] = _add_sheet_drawing(decode_xml_text(parts[target['part']], target['part']), target['root'], rid).encode()
         report['new_drawing_links'].append({'sheet': target['name'], 'relationship_id': rid})
     if xml(parts[drawing]).tag != f'{{{XDR}}}wsDr':
         raise FidelityError('Unsupported drawing namespace')
     ensure_content('Override', 'PartName', '/' + drawing, DRAWING_TYPE)
     drawing_rels = relationship_part(drawing)
     used_ids = {e.get('Id') for e in xml(parts.get(drawing_rels, f'<Relationships xmlns="{P}"/>'.encode()))}
-    picture_id = max((int(n.get('id')) for n in xml(parts[drawing]).iter() if n.tag.endswith('}cNvPr')), default=0)
+    picture_id = max((parse_int_attr(n.get('id'), label='cNvPr/@id') for n in xml(parts[drawing]).iter() if n.tag.endswith('}cNvPr')), default=0)
     for record in records:
         media, size, transformed = _display_image(book, record)
         display_part = record['media_part']
@@ -318,7 +334,7 @@ def export_excel2016_images(source, destination, layout):
                  'original_effective_formula': formulas[record['cell']]}
         add_relationship(drawing_rels, {'Id': rid, 'Type': R + '/image',
                          'Target': posixpath.relpath(display_part, posixpath.dirname(drawing))})
-        parts[drawing] = _append(parts[drawing].decode(), 'wsDr', _anchor(entry)).encode()
+        parts[drawing] = _append(decode_xml_text(parts[drawing], drawing), 'wsDr', _anchor(entry)).encode()
         report['images'].append(entry)
     converted = {record['cell'] for record in records}
     def clear_formula(match):
@@ -328,7 +344,7 @@ def export_excel2016_images(source, destination, layout):
         raw = FORMULA.sub('', raw)
         raw = re.sub(rf'<{PREFIX}v\b[^>]*?(?:/>|>.*?</{PREFIX}v>)', '', raw, flags=re.S)
         return re.sub(r'\st="[^"]*"', '', raw, count=1)
-    parts[target['part']] = CELL.sub(clear_formula, parts[target['part']].decode()).encode()
+    parts[target['part']] = CELL.sub(clear_formula, decode_xml_text(parts[target['part']], target['part'])).encode()
     report['changed_parts'] = [p for p in book.parts if parts[p] != book.parts[p]]
     report['added_parts'] = sorted(set(parts) - set(book.parts))
     report['converted_images'] = len(records)

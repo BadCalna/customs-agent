@@ -2,7 +2,7 @@
 
 版本：`1.1.0`（`apps.api.schemas.CONTRACT_VERSION`）
 发布：2026-11-14，任务包 P02（分支 `feature/P02-contracts-mock`）。
-状态：只读查询、P09/P10 写动作与历史记录 DTO 已发布；其余写动作端点仍为显式 501，见下表。
+状态：只读查询、P06 上传/认领、P09/P10 审批写入、P20 结果导出与历史记录 DTO 已发布；仍为显式 501 的端点仅剩 P13 重试/重跑与 P19 站内消息，见下表。
 
 本目录是 D3《接口与页面约定》、D4《Agent 输入输出与证据约定》的可校验发布物。
 **唯一的字段来源是 Python schema**，本目录文件全部由命令生成，不要手工编辑。
@@ -31,7 +31,7 @@ make seed-contracts    # 契约演示任务、V1/V2、商品与 mock 执行（�
 make contracts         # 重新生成 schemas、openapi；有演示数据时同时刷新 fixtures 与 DEMO-SET
 make demo-components   # seed-contracts + contracts + 启动服务，打开 /demo/ 看组件
 make test-contracts    # schema 漂移、OpenAPI 漂移、枚举对齐、样例校验、端点行为
-make test TASK=P02     # 与上一条同入口，58 项
+make test TASK=P02     # 与上一条同入口，59 项
 ```
 
 修改任何 schema、枚举或端点后必须重新执行 `make contracts` 并提交差异；

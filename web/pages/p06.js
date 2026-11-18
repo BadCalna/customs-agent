@@ -5,7 +5,7 @@ const esc = (v) => String(v ?? "").replace(/[&<>"']/g, x => ({"&":"&amp;","<":"&
 let me=null, task=null, version=null, epoch=0, requestSequence=0, detailSeq=0, attempt=null, busy=false;
 let taskCursor=null, claimCursor=null;
 let uploadContext=0, duplicateIntent=null;
-let latestReport=null, exporting=false;
+let latestReport=null, exporting=false, exportTicket=0;
 const claimKeys=new Map();
 //: 只有这两个导出种类在契约里存在；种类、执行与版本必须同时明确才发请求。
 const EXPORTS=[["precheck","导出预审结论（xlsx）"],["issues","导出补料清单（xlsx）"]];
@@ -28,7 +28,7 @@ function exportAvailability(report){
   if(report.precheck_status!=="succeeded")return {ready:false,reason:`预审尚未完成（${String(report.precheck_status)}），结果集不可导出`};
   return {ready:true,reason:""};
 }
-function hideExports(){latestReport=null;const box=$("#exports");if(!box)return;box.innerHTML="";box.hidden=true;}
+function hideExports(){latestReport=null;exporting=false;exportTicket++;const box=$("#exports");if(!box)return;box.innerHTML="";box.hidden=true;}
 function renderExports(report){
   const box=$("#exports");if(!box)return;
   latestReport=report||null;
@@ -39,7 +39,7 @@ function renderExports(report){
     :state.reason;
   box.hidden=false;
   box.innerHTML=`<h2>结果导出</h2>
-    <p class="muted">V${report.version_number} · 执行 ${esc(report.precheck_run_id||"（缺少执行编号）")} · 预审 ${esc(report.precheck_status)} · 结果来源 ${source}</p>
+    <p class="muted">V${esc(report.version_number)} · 执行 ${esc(report.precheck_run_id||"（缺少执行编号）")} · 预审 ${esc(report.precheck_status)} · 结果来源 ${esc(source)}</p>
     <div class="heading" style="justify-content:flex-start">${EXPORTS.map(([kind,label])=>
       `<button data-export="${kind}" ${state.ready&&!exporting?"":"disabled"} title="${esc(state.ready?"":"导出不可用："+state.reason)}">${label}</button>`).join("")}</div>
     <p class="muted">${esc(note)}</p>`;
@@ -51,6 +51,7 @@ async function exportResult(kind){
   const report=latestReport,state=exportAvailability(report);
   if(!state.ready){notice(state.reason,true);return;}
   if(exporting)return;
+  const exportRun=++exportTicket;
   exporting=true;setExportButtonsDisabled(true);
   const versionId=report.version_id,runId=report.precheck_run_id;
   // 导出是跨 await 的动作：记下发起时的登录身份代次与详情版本。
@@ -79,8 +80,10 @@ async function exportResult(kind){
     if(!isCurrentExport())return;
     fail(error);
   }finally{
-    exporting=false;
-    setExportButtonsDisabled(!exportAvailability(latestReport).ready);
+    if(exportRun===exportTicket){
+      exporting=false;
+      setExportButtonsDisabled(!exportAvailability(latestReport).ready);
+    }
     // 上下文已变时不要留下「正在生成…」这种会一直挂着的进行中提示。
     if(!isCurrentExport()&&$("#notice").textContent===pendingText)$("#notice").textContent="";
   }

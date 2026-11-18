@@ -10,7 +10,8 @@ from zipfile import ZipFile
 from .insert import (ROW, PREFIX, attribute, canonical, check_supported,
                      ensure_result_rows, extended_dimension, set_attribute, sheet_prefix)
 from .mapping import RESULT_ALIASES, field_matches
-from .workbook import FidelityError, NS, Workbook, cell_position, col_label, xml
+from .workbook import (CorruptPartError, FidelityError, NS, Workbook, cell_position, col_label,
+                       decode_xml_text, merge_bounds, parse_int_attr, xml)
 
 
 def append_precheck_column(source: str | Path, destination: str | Path, layout: dict) -> dict:
@@ -28,13 +29,17 @@ def append_precheck_column(source: str | Path, destination: str | Path, layout: 
         raise FidelityError('Precheck conclusion column already present')
     columns = [cell_position(ref)[0] for ref in target['cells']]
     for merge in target['root'].findall('s:mergeCells/s:mergeCell', NS):
-        columns.extend(cell_position(endpoint)[0] for endpoint in merge.get('ref').split(':'))
+        p1, p2, _ = merge_bounds(merge)
+        columns.extend((p1[0], p2[0]))
     dimension = target['root'].find('s:dimension', NS)
-    if dimension is not None:
-        columns.extend(cell_position(endpoint)[0] for endpoint in dimension.get('ref').split(':'))
+    dim_ref = dimension.get('ref') if dimension is not None else None
+    if dimension is not None and not dim_ref:
+        raise CorruptPartError('dimension element is missing ref attribute')
+    if dim_ref:
+        columns.extend(cell_position(endpoint)[0] for endpoint in dim_ref.split(':'))
     for obj in original.floating_records():
         if obj['sheet'] == target['name']:
-            columns.extend(marker['col'] + 1 for marker in obj['markers'].values())
+            columns.extend(marker['col'] + 1 for marker in obj['markers'].values() if 'col' in marker)
     column = max(columns, default=0) + 1
     label = col_label(column)  # Refuse exhaustion of the XLSX column limit.
     # Appending cells leaves original references untouched. Retain the same
@@ -52,18 +57,20 @@ def append_precheck_column(source: str | Path, destination: str | Path, layout: 
                         raise FidelityError('Unbounded validation/format range requires native editor') from None
                     if first[0] <= column <= last[0] and any(first[1] <= row <= last[1] for row in rows):
                         raise FidelityError('New conclusion cells intersect existing validation/format rules')
-    raw = original.parts[target['part']].decode('utf-8')
+    raw = decode_xml_text(original.parts[target['part']], target['part'])
     prefix = sheet_prefix(raw)
-    if dimension is None:
+    if not dim_ref:
         raise FidelityError('Missing dimension requires additional append handling')
-    new_dimension = extended_dimension(dimension.get('ref'), column, max(rows))
+    new_dimension = extended_dimension(dim_ref, column, max(rows))
     raw = ensure_result_rows(raw, rows)
     raw = re.sub(rf'<{PREFIX}dimension\b[^>]*/>',
                  lambda match: set_attribute(match[0], 'ref', new_dimension), raw, count=1)
     old_columns = target['root'].findall('s:cols/s:col', NS)
     properties = {}
     for node in old_columns:
-        if int(node.get('min')) <= column <= int(node.get('max')):
+        c_min = parse_int_attr(node.get('min'), label='col/@min')
+        c_max = parse_int_attr(node.get('max'), label='col/@max')
+        if c_min <= column <= c_max:
             properties = {key: value for key, value in node.attrib.items() if key not in ('min', 'max', 'hidden')}
     properties.update(width='50', customWidth='1')
     new_col = f'<{prefix}col min="{column}" max="{column}"/>'
@@ -73,7 +80,8 @@ def append_precheck_column(source: str | Path, destination: str | Path, layout: 
         def replace_columns(match):
             entries = []
             for item in re.finditer(rf'<{PREFIX}col\b[^>]*/>', match[2]):
-                first, last = int(attribute(item[0], 'min')), int(attribute(item[0], 'max'))
+                first = parse_int_attr(attribute(item[0], 'min'), label='col/@min')
+                last = parse_int_attr(attribute(item[0], 'max'), label='col/@max')
                 if not first <= column <= last:
                     entries.append((first, item[0]))
                 else:
@@ -89,7 +97,7 @@ def append_precheck_column(source: str | Path, destination: str | Path, layout: 
     selected_rows = set(rows)
 
     def append_cell(match):
-        number = int(attribute(match[1], 'r'))
+        number = parse_int_attr(attribute(match[1], 'r'), label='row/@r')
         if number not in selected_rows:
             return match[0]
         opening = match[1]
@@ -134,7 +142,7 @@ def append_precheck_column(source: str | Path, destination: str | Path, layout: 
             for child in list(row):
                 if child.get('r') in added_refs:
                     row.remove(child)
-            if int(row.get('r')) in selected_rows:
+            if parse_int_attr(row.get('r'), label='row/@r') in selected_rows:
                 previous = expected_rows.get(row.get('r'))
                 if previous is None:
                     if len(row) or row.attrib != {'r': row.get('r')}:
@@ -146,14 +154,17 @@ def append_precheck_column(source: str | Path, destination: str | Path, layout: 
                         failures.append('invalid_row_span')
                     row.set('spans', previous.get('spans'))
         actual_dimension = actual.find('s:dimension', NS)
-        if actual_dimension.get('ref') != new_dimension:
+        if actual_dimension is None or actual_dimension.get('ref') != new_dimension:
             failures.append('invalid_dimension')
-        actual_dimension.set('ref', dimension.get('ref'))
+        if actual_dimension is not None:
+            actual_dimension.set('ref', dim_ref)
         def column_properties(root):
             result = {}
             for node in root.findall('s:cols/s:col', NS):
                 attributes = {key: value for key, value in node.attrib.items() if key not in ('min', 'max')}
-                for index in range(int(node.get('min')), int(node.get('max')) + 1):
+                c_min = parse_int_attr(node.get('min'), label='col/@min')
+                c_max = parse_int_attr(node.get('max'), label='col/@max')
+                for index in range(c_min, c_max + 1):
                     if index in result:
                         failures.append('overlapping_column_definitions')
                     result[index] = attributes

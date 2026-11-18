@@ -163,3 +163,66 @@ test('task, version and login-session changes create a fresh review scope',()=>{
     h.render(next);assert.notEqual(h.node.child,old,kind);assert.doesNotMatch(h.node.child.innerHTML,/9999999999|旧作用域/);h.view.destroy();
   }
 });
+
+test('operator confirmation draft survives 409 conflict reload and concurrent refresh races',async()=>{
+  let revision=1, conflictNext=true, confirmCalls=[];
+  const base=expertState();
+  base.history.task_id='T';
+  base.task.allowed_actions=['read','confirmation.write'];
+  const items=[{task_id:'T',version_id:'V',item_id:'first',name:'合成甲',revision:1,source_location:{sheet_name:'申报要素',row_number:8,cells:'A8:J8'},facts:{name:'合成甲'}}];
+  const client={
+    getTask:async()=>base.task,
+    getHistory:async()=>base.history,
+    listItems:async()=>({items:items.map(i=>({...i,revision})),next_cursor:null}),
+    getItem:async(v,id)=>({...items.find(i=>i.item_id===id),revision}),
+    confirmItem:async(v,id,payload)=>{
+      confirmCalls.push(payload);
+      if(conflictNext){const err=new Error('revision conflict');err.status=409;err.code='conflict';throw err;}
+      return {revision:revision+1,status:'confirmed'};
+    },
+    decideSubmission:async()=>({}),
+  };
+  const node=host(), ctx=createWorkbenchContext(client);
+  const view=createWorkbenchReview({host:node,client,getContext:()=>ctx,getUser:()=>({role:'operator'}),getSession:()=>1});
+  const off=ctx.store.subscribe(s=>view.render(s));
+  await ctx.openTask('T');
+  await ctx.selectItem('first');
+  const root=node.child;
+  field(root,'confirm-hs','8501109900','first');
+  field(root,'confirm-reason','业务员冲突测试','first');
+
+  // Server moved to revision 2; 409 reloads card preserving item & draft
+  revision=2;
+  click(root,'confirm','first');
+  await flush();
+  assert.equal(confirmCalls[0].expected_revision,1);
+  assert.equal(node.child,root);
+  assert.equal(node.hidden,false);
+  assert.equal(ctx.store.get().card.revision,2);
+
+  // Retry succeeds using bumped revision and preserved draft
+  conflictNext=false;
+  click(root,'confirm','first');
+  await flush();
+  assert.equal(confirmCalls[1].expected_revision,2);
+  assert.equal(confirmCalls[1].confirmed_hs,'8501109900');
+  assert.equal(confirmCalls[1].reason,'业务员冲突测试');
+
+  // Simulate an in-flight confirm settling after a concurrent refresh cleared s.card/panel
+  let releaseLate;
+  const gate=new Promise(r=>{releaseLate=r;});
+  client.confirmItem=async()=>{await gate;const err=new Error('late conflict');err.status=409;throw err;};
+  field(root,'confirm-hs','8501109901','first');
+  field(root,'confirm-reason','并发刷新测试','first');
+  click(root,'confirm','first');
+  await flush();
+  await ctx.openTask('T'); // Clears itemId/card because preserveItem wasn't passed
+  assert.equal(ctx.store.get().itemId,null);
+  assert.equal(node.child,null);
+  releaseLate();
+  await flush();
+  assert.equal(ctx.store.get().itemId,'first');
+  assert.equal(ctx.store.get().card.revision,2);
+
+  off();view.destroy();ctx.destroy();
+});

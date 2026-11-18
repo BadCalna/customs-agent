@@ -4,7 +4,7 @@ import re
 import unicodedata
 from collections import defaultdict
 
-from .workbook import FidelityError, NS, cell_position, col_label, col_number
+from .workbook import FidelityError, NS, cell_position, col_label, col_number, merge_bounds
 
 ALIASES = {
     "contract": ("采购合同号", "合同号", "合同编号"),
@@ -89,8 +89,7 @@ def detect_layout(workbook, role: str) -> dict:
     warnings.extend(f"missing_column:{field}" for field in optional if field not in fields)
     merges = []
     for merge in sheet["root"].findall("s:mergeCells/s:mergeCell", NS):
-        start, end = merge.attrib["ref"].split(":")
-        merges.append((cell_position(start), cell_position(end), start))
+        merges.append(merge_bounds(merge))
 
     def value_at(column, row_number):
         ref = f"{column}{row_number}"
