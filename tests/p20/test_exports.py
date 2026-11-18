@@ -353,11 +353,15 @@ class ExportTests(unittest.TestCase):
                                      suggested_hs="0000000003") for r in extracted.records)
         img_book = Workbook(base_images)
         drawing_raw = img_book.media_bytes("xl/drawings/drawing1.xml").decode()
+        img_sheet_part = img_book.find_sheet("申报要素").part
+        img_sheet_raw = img_book.media_bytes(img_sheet_part).decode()
         bad_drawing_id = drawing_raw.replace(' id="1"', "", 1).encode()
         bad_drawing_col = drawing_raw.replace("<xdr:col>5</xdr:col>", "<xdr:col/>", 1).encode()
+        bad_row_ht = img_sheet_raw.replace('<row r="2"', '<row r="2" ht="1e308"', 1).encode()
         for changes in (
             {"xl/drawings/drawing1.xml": bad_drawing_id},
             {"xl/drawings/drawing1.xml": bad_drawing_col},
+            {img_sheet_part: bad_row_ht},
         ):
             mutated = _zip_replace(base_images, changes)
             chosen = replace(selection(mutated), lines=img_lines)

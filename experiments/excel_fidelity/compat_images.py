@@ -92,11 +92,12 @@ def _geometry(sheet, cell, size):
         raise FidelityError(f'Hidden image position requires manual review: {cell}')
     width = float(column_info.get('width', defaults.get('defaultColWidth', '8.43')))
     height = float(row_info.get('ht', defaults.get('defaultRowHeight', '15')))
-    if not all(math.isfinite(v) and v > 0 for v in (width, height)):
+    scaled_width, scaled_height = width * 7, height * 12700
+    if not all(math.isfinite(v) and v > 0 for v in (width, height, scaled_width, scaled_height)):
         raise FidelityError('Invalid image cell dimensions')
     # Width uses an approximate 7px maximum digit width; generous inner padding
     # leaves room for font metrics. Row point heights convert exactly to EMU.
-    cell_width, cell_height = math.floor(width * 7) * 9525, round(height * 12700)
+    cell_width, cell_height = math.floor(scaled_width) * 9525, round(scaled_height)
     padding = 2 * 9525
     if min(cell_width, cell_height) <= padding * 2:
         raise FidelityError('Image cell too small for a visible fallback')

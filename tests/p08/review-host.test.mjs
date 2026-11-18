@@ -250,3 +250,33 @@ test('operator confirmation draft survives 409 conflict reload and concurrent re
 
   off();view.destroy();ctx.destroy();
 });
+
+test('expert 409 onConflict reloads even while panel is transiently hidden during loading',async()=>{
+  const s=expertState(),node=host(),refreshes=[];
+  let current=s;
+  const ctx={store:{get:()=>current},openTask:async id=>{refreshes.push(id);}};
+  const client={confirmItem:async()=>({}),decideSubmission:async()=>{const e=new Error('conflict');e.status=409;throw e;}};
+  const view=createWorkbenchReview({host:node,client,getContext:()=>ctx,getUser:()=>({role:'expert'}),getSession:()=>1});
+  current=s;view.render(current);
+  const root=node.child;
+  field(root,'final-hs','9999999999','first');
+  field(root,'change-reason','专家409并发保留','first');
+  current={...s,loading:true};
+  view.render(current);
+  assert.equal(node.hidden,true);
+  // Restore non-loading only after triggering decide? Wait: decide checks !host.hidden when clicking,
+  // whereas an in-flight decide settling 409 after loading starts hits onConflict while host.hidden === true!
+  current=s;view.render(current);
+  let rejectDecide;
+  client.decideSubmission=()=>new Promise((_,rej)=>{rejectDecide=rej;});
+  click(root,'decide');
+  await flush();
+  current={...s,loading:true};
+  view.render(current);
+  assert.equal(node.hidden,true);
+  const err=new Error('conflict');err.status=409;
+  rejectDecide(err);
+  await flush();
+  assert.deepEqual(refreshes,['T']);
+  view.destroy();
+});

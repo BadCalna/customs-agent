@@ -109,7 +109,7 @@ async function refresh(append=false,claimsAppend=false){
 async function openTask(id,preferred){
   resetDetail();const seq=requestSequence,token=epoch;const data=await api.getTask(id);
   if(seq!==requestSequence||token!==epoch)return;task=data;$("#task-title").textContent=data.title;
-  $("#versions").innerHTML=data.versions.map(v=>`<button data-version="${esc(v.version_id)}">V${v.number} ${esc(v.original_filename)}</button>`).join("");
+  $("#versions").innerHTML=data.versions.map(v=>`<button data-version="${esc(v.version_id)}">V${esc(v.number)} ${esc(v.original_filename)}</button>`).join("");
   if(data.current_version_id)await openVersion(preferred||data.current_version_id);
 }
 async function openVersion(id){
@@ -122,7 +122,7 @@ async function openVersion(id){
   let report=null;try{report=await api.getImport(id);}catch(e){if(e.status!==404)throw e;}
   if(seq!==requestSequence||token!==epoch||version!==id)return;
   const v=task.versions.find(x=>x.version_id===id);
-  $("#summary").innerHTML=report?`<b>V${report.version_number} · ${report.assignment_status==="unclaimed"?"待认领":"已认领"} · 解析 ${esc(report.parse_status)}</b><br>商品 ${report.item_count} 条 / 装箱成员 ${report.member_count} 条 / 图片 available ${report.image_counts.available} · absent ${report.image_counts.absent} · read_failed ${report.image_counts.read_failed}<br><a href="${esc(report.original_download_url)}">下载 V${report.version_number} 原件</a> · <b>MOCK</b> 预审：${esc(report.precheck_status)}`:`V${v?.number} · 旧演示版本无真实上传记录`;
+  $("#summary").innerHTML=report?`<b>V${esc(report.version_number)} · ${report.assignment_status==="unclaimed"?"待认领":"已认领"} · 解析 ${esc(report.parse_status)}</b><br>商品 ${esc(report.item_count)} 条 / 装箱成员 ${esc(report.member_count)} 条 / 图片 available ${esc(report.image_counts.available)} · absent ${esc(report.image_counts.absent)} · read_failed ${esc(report.image_counts.read_failed)}<br><a href="${esc(report.original_download_url)}">下载 V${esc(report.version_number)} 原件</a> · <b>MOCK</b> 预审：${esc(report.precheck_status)}`:`V${esc(v?.number)} · 旧演示版本无真实上传记录`;
   if(report){const issues=[...(report.report.issues||[]),...(report.report.links||[]).flatMap(l=>[...(l.issues||[]),...(l.record?.issues||[])])];$("#report").innerHTML=`${Object.keys(report.error).length?`<pre class="error">${esc(JSON.stringify(report.error,null,2))}</pre>`:""}<details><summary>解析问题与来源（${issues.length}）</summary><pre>${esc(JSON.stringify(issues,null,2))}</pre></details><details><summary>查看本版本完整解析及装箱关联报告</summary><pre>${esc(JSON.stringify(report.report,null,2))}</pre></details>`;}
   renderExports(report);
   $("#items").innerHTML=pages.length?`<table><thead><tr><th>来源</th><th>品名</th><th>供应商原 HS</th><th>图片</th><th>mock 建议</th></tr></thead><tbody>${pages.map(i=>`<tr data-item="${esc(i.item_id)}"><td>${esc(i.source_location.sheet_name)} ${i.source_location.row_number}</td><td>${esc(i.name)}</td><td>${esc(i.supplier_hs_raw)}</td><td>${esc(i.image_status)}</td><td>${esc(i.precheck_suggested_hs||"未给出")}</td></tr>`).join("")}</tbody></table>`:'<p class="muted">本版本暂无商品，检查导入状态和错误。</p>';

@@ -106,8 +106,8 @@ export function createWorkbenchReview({host, client, getContext, getUser, getSes
         if (current.taskId!==owner.taskId) return;
         const preserve = owner.role==='operator' ? {preserveItem:true, preserveVersionId:owner.versionId, preserveItemId:owner.itemId} : {};
         const reload = () => (typeof refreshTask==='function' ? refreshTask(owner.taskId, preserve) : owner.ctx.openTask(owner.taskId, preserve));
-        if (stillCurrent()) return reload();
-        if (owner.role==='operator' && (bound===owner || (!panel && (!current.versionId || current.versionId===owner.versionId) && !current.itemId))) {
+        if (stillCurrent() || bound===owner) return reload();
+        if (owner.role==='operator' && !panel && (!current.versionId || current.versionId===owner.versionId) && !current.itemId) {
           return reload();
         }
       }});
@@ -247,7 +247,7 @@ export async function mountWorkbench(root) {
       if (!listState.selectedId) return;
       if (listState.selecting) { pendingReconcile = true; return; }
       const s = context.store.get();
-      if (!s.task && s.loading) { pendingReconcile = true; return; }
+      if (s.loading && (!s.task || !s.history)) { pendingReconcile = true; return; }
       if (s.task && s.task.task_id !== listState.selectedId) { pendingReconcile = true; return; }
       const entry = (Array.isArray(items) ? items : []).find(row => row && row.task_id === listState.selectedId);
       if (!entry) return;
@@ -301,7 +301,7 @@ export async function mountWorkbench(root) {
     const requested=new URLSearchParams(location.search).get('task');
     if(requested){
       if(tasks.getState().items.some(t=>t.task_id===requested)) await tasks.selectTask(requested);
-      else await context.openTask(requested);
+      else await refreshCurrentTask(requested);
     }
   }
   const hostWin = typeof window !== 'undefined' ? window : globalThis;

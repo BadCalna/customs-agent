@@ -306,3 +306,83 @@ test('mountWorkbench preserves operator selected item and P11 draft across recon
     Object.assign(globalThis,original);
   }
 });
+
+test('concurrent list refresh during in-flight getHistory defers reconcileSelection instead of aborting preserveItem',async()=>{
+  const {mountWorkbench}=await import('../../web/workbench-live.js');
+  const original={fetch:globalThis.fetch,document:globalThis.document,location:globalThis.location,addEventListener:globalThis.addEventListener};
+  const elements=new Map();
+  const makeEl=id=>{
+    const listeners=new Map();
+    return {
+      id,hidden:false,disabled:false,_html:'',_text:'',value:'',dataset:{},children:[],listeners,
+      set innerHTML(v){this._html=v;if(id==='wb-toolbar')for(const m of v.matchAll(/id="([^"]+)"/g))elements.set(m[1],makeEl(m[1]));},get innerHTML(){return this._html;},
+      set textContent(v){this._text=v;},get textContent(){return this._text;},
+      addEventListener(k,v){listeners.set(k,v);},
+      removeEventListener(k){listeners.delete(k);},
+      contains:()=>true,replaceChildren(...items){this.children=items;},focus(){},scrollIntoView(){},
+      querySelector:()=>null,querySelectorAll:()=>[],remove(){},
+    };
+  };
+  const root={
+    _html:'',listeners:new Map(),
+    set innerHTML(v){this._html=v;elements.clear();for(const m of v.matchAll(/id="([^"]+)"/g))elements.set(m[1],makeEl(m[1]));},
+    get innerHTML(){return this._html;},
+    querySelector(sel){return sel.startsWith('#')?elements.get(sel.slice(1))||null:null;},
+  };
+  const jsonResp=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:{'Content-Type':'application/json'}});
+  let holdHistory=null,stage='awaiting_confirmation',historyCalls=0;
+  const makeRun=()=>({run_id:'A-pre2',task_id:'A',version_id:'A2',kind:'precheck',status:'succeeded',is_current:true,
+    progress:{total:1,queued:0,running:0,succeeded:1,failed:0},items:[{item_id:'A2i',status:'succeeded',source_location:{sheet_name:'S',row_number:2},attempts:1}]});
+  const makeTaskA=()=>({task_id:'A',title:'任务甲',stage,current_version_id:'A2',current_version_number:2,
+    latest_run_id:'A-pre2',latest_run_kind:'precheck',latest_run_status:'succeeded',revision:1,allowed_actions:['read','confirmation.write'],
+    versions:[{version_id:'A2',number:2,original_filename:'v2.xlsx',is_current:true}]});
+  const makeItem=()=>({item_id:'A2i',task_id:'A',version_id:'A2',name:'甲V2',supplier_hs_raw:'1',image_status:'absent',revision:1,source_location:{sheet_name:'S',row_number:2},facts:{name:'甲V2'}});
+  globalThis.document={cookie:'csrftoken=testtoken',createElement:()=>makeEl('dyn'),activeElement:null,getElementById:()=>null};
+  globalThis.location={search:''};
+  globalThis.addEventListener=()=>{};
+  globalThis.fetch=async(url)=>{
+    const u=String(url);
+    if(u.endsWith('/me'))return jsonResp({username:'op',display_name:'业务员',role:'operator',role_label:'业务员'});
+    if(u.includes('/tasks?'))return jsonResp({items:[makeTaskA()],next_cursor:null});
+    if(u.endsWith('/tasks/A'))return jsonResp(makeTaskA());
+    if(u.endsWith('/tasks/A/history')){
+      historyCalls++;
+      if(holdHistory){await holdHistory;}
+      return jsonResp({task_id:'A',versions:[{version_id:'A2',runs:[makeRun()],submissions:[]}]});
+    }
+    if(u.includes('/versions/A2/items?'))return jsonResp({items:[makeItem()],next_cursor:null});
+    if(u.endsWith('/versions/A2/items/A2i'))return jsonResp(makeItem());
+    if(u.endsWith('/runs/A-pre2'))return jsonResp(makeRun());
+    return jsonResp({error:{code:'not_found',message:'not found'}},404);
+  };
+  try{
+    const wb=await mountWorkbench(root);
+    const until=async(pred,label)=>{for(let i=0;i<60;i++){if(pred())return;await new Promise(r=>setImmediate(r));}assert.fail('timeout: '+label);};
+    await until(()=>/任务甲/.test(elements.get('wb-tasks')?.innerHTML||''),'initial list');
+    elements.get('wb-tasks').listeners.get('click')({target:{closest:()=>({dataset:{task:'A'},disabled:false})}});
+    await until(()=>/V2 · 1 件商品/.test(elements.get('wb-summary')?.textContent||''),'A loaded');
+    elements.get('wb-items').listeners.get('click')({target:{closest:sel=>sel==='[data-item-id]'?{dataset:{itemId:'A2i'}}:null}});
+    await until(()=>elements.get('wb-review').children.length===1,'item mounted');
+    const reviewRoot=elements.get('wb-review').children[0];
+    const hsInput={dataset:{raField:'confirm-hs',item:'A2i'},value:'8501109900'};
+    reviewRoot.listeners.get('input')({target:{closest:sel=>sel==='[data-ra-field]'?hsInput:null}});
+
+    // Start #wb-refresh while holding getHistory in flight (s.task is set, s.history is null)
+    let releaseHistory;
+    holdHistory=new Promise(r=>{releaseHistory=r;});
+    elements.get('wb-refresh').listeners.get('click')();
+    await until(()=>historyCalls===2,'history in flight during refresh');
+    // Concurrent list refresh with unchanged stage must defer instead of calling selectTask(A) and aborting openTask
+    elements.get('wb-tasks').listeners.get('click')({target:{closest:()=>({dataset:{action:'refresh'},disabled:false})}});
+    await new Promise(r=>setImmediate(r));
+    assert.equal(historyCalls,2);
+    holdHistory=null;
+    releaseHistory();
+    await until(()=>!elements.get('wb-review').hidden && /expected_revision=1/.test(reviewRoot.innerHTML),'refresh finished preserving item and draft');
+    assert.equal(elements.get('wb-review').children[0],reviewRoot);
+    assert.equal(historyCalls,2);
+    wb.destroy();
+  }finally{
+    Object.assign(globalThis,original);
+  }
+});
