@@ -29,6 +29,10 @@ logger = logging.getLogger(__name__)
 ACTION = "file.import"
 
 
+class ImportWorkerFenced(RuntimeError):
+    """The worker lost its lease before publishing an import result."""
+
+
 def authorize(user, task_id=None):
     _require_authenticated(user)
     if task_id is not None:
@@ -115,7 +119,10 @@ def upload(user, *, filename, data, key, task_id=None, expected_current_version_
                         raise ApiError(409, "no_current_version", "该任务没有已上传版本，请使用首次上传入口")
                     if not expected_current_version_id or str(latest.pk) != expected_current_version_id:
                         raise ApiError(409, "stale_version", "当前版本已变化，请刷新后上传")
-                    if ImportJob.objects.filter(version__task=task).exclude(status=ImportJob.Status.SUCCEEDED).exists():
+                    # A failed import is a durable, replaceable version. Only an
+                    # active staged import blocks a new version; corrected files
+                    # can be uploaded with a new idempotency key.
+                    if ImportJob.objects.filter(version__task=task, status=ImportJob.Status.STAGED).exists():
                         raise ApiError(409, "import_incomplete", "已有未完成导入，请先重试原请求或恢复该导入")
                     duplicate = ImportJob.objects.filter(version__task=task, sha256=digest).order_by("-version__number").first()
                     if duplicate and not confirm_duplicate:
@@ -175,13 +182,19 @@ def queue_import(job_id, *, replay=False):
     return import_response(job, replay=replay)
 
 
-def finish_import(job_id, *, replay=False, mapping=None, defer_precheck=False):
-    """系统入口。调用方负责授权；CLI 仅供本机恢复。锁序 Task -> ImportJob -> Run。"""
+def finish_import(job_id, *, replay=False, mapping=None, defer_precheck=False, worker_token=None):
+    """系统入口。调用方负责授权；CLI 仅供本机恢复。锁序 Task -> ImportJob -> RunWork。"""
     job = ImportJob.objects.select_related("version__task", "precheck").get(pk=job_id)
     try:
         with transaction.atomic():
             task = Task.objects.select_for_update().get(pk=job.version.task_id)
             job = ImportJob.objects.select_for_update().select_related("version", "precheck").get(pk=job.pk)
+            if worker_token is not None:
+                from apps.runs.models import RunWork
+                work = RunWork.objects.select_for_update().get(run_id=job.precheck_id)
+                if (work.state != "running" or str(work.token) != str(worker_token)
+                        or not work.lease_until or work.lease_until <= timezone.now()):
+                    raise ImportWorkerFenced("import worker lease is no longer current")
             if job.status != ImportJob.Status.SUCCEEDED:
                 if task.versions.filter(number__gt=job.version.number).exists():
                     raise ApiError(409, "stale_version", "旧版本导入不能覆盖当前版本")
@@ -242,6 +255,8 @@ def finish_import(job_id, *, replay=False, mapping=None, defer_precheck=False):
                 task.save(update_fields=["stage", "updated_at"])
                 AuditEvent.objects.create(task=task, version=version, actor=version.uploaded_by, action="import.succeeded",
                                           details={"import_id": str(job.pk), "precheck_id": str(run.pk), "result_mode": "mock"})
+    except ImportWorkerFenced:
+        raise
     except Exception as exc:
         logger.exception("P06 import failed: %s", job_id)
         error = {"code": exc.code if isinstance(exc, ApiError) else "import_processing_failed",
@@ -251,6 +266,12 @@ def finish_import(job_id, *, replay=False, mapping=None, defer_precheck=False):
         with transaction.atomic():
             Task.objects.select_for_update().get(pk=job.version.task_id)
             current = ImportJob.objects.select_for_update().get(pk=job_id)
+            if worker_token is not None:
+                from apps.runs.models import RunWork
+                work = RunWork.objects.select_for_update().get(run_id=current.precheck_id)
+                if (work.state != "running" or str(work.token) != str(worker_token)
+                        or not work.lease_until or work.lease_until <= timezone.now()):
+                    raise ImportWorkerFenced("import worker lease is no longer current") from exc
             if current.status == ImportJob.Status.SUCCEEDED:
                 return import_response(current, replay=True)
             current.status, current.error = ImportJob.Status.FAILED, error

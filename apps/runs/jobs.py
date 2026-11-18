@@ -22,7 +22,7 @@ def perform_work(run_id):
         run = Run.objects.select_related("version", "submission").get(pk=run_id)
         job = ImportJob.objects.filter(precheck=run).first()
         if job and job.status != "succeeded":
-            from apps.reviews.services.imports import finish_import
+            from apps.reviews.services.imports import ImportWorkerFenced, finish_import
             with transaction.atomic():
                 Task.objects.select_for_update().get(pk=run.task_id)
                 work = RunWork.objects.select_for_update().get(run=run)
@@ -35,13 +35,12 @@ def perform_work(run_id):
                         input_hash=job.sha256,
                     )
             if exhausted:
-                ImportJob.objects.filter(pk=job.pk).update(status="failed", error={"code": "import_attempts_exhausted",
-                    "message": "文件解析中断次数达到上限，请重试原请求或联系维护人员"})
-                Run.objects.filter(pk=run.pk).update(status="failed", is_current=False, finished_at=timezone.now())
-                _import_failed(run, token, "import_attempts_exhausted")
+                _import_exhausted_if_owner(run, token, job)
                 return
             try:
-                finish_import(str(job.pk), defer_precheck=True)
+                finish_import(str(job.pk), defer_precheck=True, worker_token=token)
+            except ImportWorkerFenced:
+                return
             except Exception as exc:
                 cause = getattr(exc, "details", {}).get("cause", {})
                 error_code = cause.get("code", type(exc).__name__)
@@ -89,3 +88,32 @@ def _import_failed(run, token, error_code):
     work.available_at = timezone.now() + timedelta(seconds=settings.CUSTOMS_RETRY_BACKOFF_SECONDS)
     work.last_error = error_code[:200]
     work.save()
+
+
+@transaction.atomic
+def _import_exhausted_if_owner(run, token, job):
+    """Fence the terminal import failure before changing durable state."""
+    Task.objects.select_for_update().get(pk=run.task_id)
+    locked_run = Run.objects.select_for_update().get(pk=run.pk)
+    locked_job = ImportJob.objects.select_for_update().get(pk=job.pk)
+    work = RunWork.objects.select_for_update().get(run=locked_run)
+    if (work.state != "running" or str(work.token) != str(token)
+            or not work.lease_until or work.lease_until <= timezone.now()):
+        return False
+    if locked_job.status == ImportJob.Status.SUCCEEDED:
+        return False
+    locked_job.status = ImportJob.Status.FAILED
+    locked_job.error = {
+        "code": "import_attempts_exhausted",
+        "message": "文件解析中断次数达到上限，请重试原请求或联系维护人员",
+    }
+    locked_job.save(update_fields=["status", "error", "updated_at"])
+    locked_run.status = Run.Status.FAILED
+    locked_run.is_current = False
+    locked_run.finished_at = timezone.now()
+    locked_run.save(update_fields=["status", "is_current", "finished_at"])
+    work.state = "done"
+    work.token, work.lease_until, work.dispatched_at = None, None, None
+    work.last_error = "import_attempts_exhausted"
+    work.save(update_fields=["state", "token", "lease_until", "dispatched_at", "last_error", "updated_at"])
+    return True

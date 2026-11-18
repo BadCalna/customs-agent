@@ -93,6 +93,10 @@ def _recommend_attributes(attributes) -> dict[str, str]:
 
 def _build_recommend_input(run, item, scenario) -> RecommendInput:
     context = _context(run, item, scenario)
+    # Item.revision tracks appended human confirmations. Workbook facts are
+    # immutable within a FileVersion, so precheck input survives confirmation
+    # made while a worker is processing the run.
+    context.input_revision = run.version.number
     payload = RecommendInput(
         context=context,
         name=item.name,

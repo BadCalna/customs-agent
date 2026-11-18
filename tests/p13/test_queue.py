@@ -1,5 +1,6 @@
 import json
 import tempfile
+import uuid
 from datetime import timedelta
 from pathlib import Path
 from unittest.mock import patch
@@ -155,6 +156,80 @@ class QueueTests(TestCase):
             self.assertEqual(RunWork.objects.get(run=run).state, "done")
             self.assertEqual(ImportJob.objects.get(precheck=run).error["code"], "import_attempts_exhausted")
             self.assertFalse(RunAttempt.objects.filter(run=run).exists())
+
+    def test_failed_import_allows_corrected_new_version(self):
+        with tempfile.TemporaryDirectory() as root, override_settings(CUSTOMS_FILE_ROOT=Path(root)):
+            failed = imports.upload(self.supplier, filename="bad.xlsx", data=sample(missing_sheet=True), key="bad-upload")
+            failed_run = Run.objects.get(pk=failed["precheck_run_id"])
+            self.drain(failed_run)
+            self.assertEqual(ImportJob.objects.get(precheck=failed_run).status, ImportJob.Status.FAILED)
+
+            corrected = imports.upload(
+                self.supplier,
+                filename="corrected.xlsx",
+                data=sample(),
+                key="corrected-upload",
+                task_id=failed["task_id"],
+                expected_current_version_id=failed["version_id"],
+            )
+            self.assertEqual(corrected["version_number"], 2)
+            corrected_run = Run.objects.get(pk=corrected["precheck_run_id"])
+            self.drain(corrected_run)
+            self.assertEqual(ImportJob.objects.get(precheck=corrected_run).status, ImportJob.Status.SUCCEEDED)
+            self.assertEqual(corrected_run.status, Run.Status.SUCCEEDED)
+
+    def test_confirmation_during_precheck_does_not_fence_run(self):
+        original = services.evaluate_row
+        confirmed = False
+
+        def confirm_then_evaluate(run, item):
+            nonlocal confirmed
+            if not confirmed:
+                from apps.reviews.schemas import ConfirmationIn
+                from apps.reviews.services.confirmations import write_confirmation
+
+                write_confirmation(
+                    self.operator,
+                    str(self.version.pk),
+                    str(item.pk),
+                    ConfirmationIn(
+                        confirmed_hs="8544421900",
+                        reason="预审期间确认",
+                        expected_revision=item.revision,
+                    ),
+                )
+                confirmed = True
+            return original(run, item)
+
+        with patch.object(services, "evaluate_row", side_effect=confirm_then_evaluate):
+            self.drain()
+        self.run.refresh_from_db()
+        self.assertTrue(confirmed)
+        self.assertEqual(self.run.status, Run.Status.SUCCEEDED)
+        self.assertEqual(self.run.items.filter(status=RunItem.Status.SUCCEEDED).count(), 2)
+        self.assertFalse(self.run.items.filter(status=RunItem.Status.QUEUED).exists())
+
+    def test_stale_exhausted_import_cannot_overwrite_current_worker(self):
+        with tempfile.TemporaryDirectory() as root, override_settings(CUSTOMS_FILE_ROOT=Path(root)):
+            result = imports.upload(self.supplier, filename="synthetic.xlsx", data=sample(), key="stale-exhausted")
+            run = Run.objects.get(pk=result["precheck_run_id"])
+            job = ImportJob.objects.get(precheck=run)
+            old_token, current_token = uuid.uuid4(), uuid.uuid4()
+            RunWork.objects.filter(run=run).update(
+                state="running",
+                token=current_token,
+                lease_until=timezone.now() + timedelta(minutes=5),
+                import_attempts=3,
+            )
+            from apps.runs import jobs
+            with patch.object(services, "claim_work", return_value=str(old_token)):
+                jobs.perform_work(str(run.pk))
+            job.refresh_from_db()
+            run.refresh_from_db()
+            work = RunWork.objects.get(run=run)
+            self.assertEqual(job.status, ImportJob.Status.STAGED)
+            self.assertEqual(run.status, Run.Status.QUEUED)
+            self.assertEqual(work.token, current_token)
 
     def test_publish_rollback_receipt_allows_same_import_retry(self):
         from apps.accounts.errors import ApiError
