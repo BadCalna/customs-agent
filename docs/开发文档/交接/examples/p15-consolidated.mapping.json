@@ -1,0 +1,21 @@
+{
+  "sheet": "Sheet1",
+  "header_row": 1,
+  "fields": {
+    "supplier": ["供应商"],
+    "purchase_contract_no": ["采购合同号\n（请注意与合同一致）", "采购合同号"],
+    "tax_classification_code": ["税收分类代码"],
+    "english_name": ["英文品名"],
+    "name": ["中文品名"],
+    "hs": ["HS 编码"],
+    "input_tax_rate": ["进项税率"],
+    "elements": ["申报要素"],
+    "contract_no": ["合同号"],
+    "shipment_status": ["采购合同出货情况"],
+    "container_no": ["箱号"],
+    "bill_of_lading_no": ["提单号"],
+    "declaration_no": ["报关单号"],
+    "remark": ["备注"],
+    "customs_release_status": ["放行情况"]
+  }
+}
