@@ -331,3 +331,15 @@ class ReviewFixTests(unittest.TestCase):
                         self.assertIn(8, layout['data_rows'])
                         self.assertEqual(next(record for record in layout['records']
                                               if record['row'] == 8)['status'], 'requires_review')
+
+    def test_malformed_merge_or_col_or_drawing_raises_corrupt_part_error(self):
+        from experiments.excel_fidelity.compat_images import export_excel2016_images
+        from experiments.excel_fidelity.workbook import CorruptPartError
+
+        make_fixture(self.source)
+        layout = self.layout()
+        self.edit('xl/worksheets/sheet2.xml', lambda text:
+                  text.replace('</worksheet>', '<mergeCells><mergeCell/></mergeCells></worksheet>', 1))
+        for fn in (insert_columns, append_precheck_column, export_excel2016_images):
+            with self.subTest(fn=fn.__name__), self.assertRaises(CorruptPartError):
+                fn(self.source, self.root / f'out-{fn.__name__}.xlsx', layout)

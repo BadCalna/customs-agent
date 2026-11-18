@@ -31,6 +31,65 @@ export class ApiError extends Error {
   }
 }
 
+/** 安全下载名：只允许常规 .xlsx 文件名字符，拒绝路径分隔符、上跳与控制字符。 */
+function safeFilename(name) {
+  const value = String(name || "").trim();
+  if (!value) return "";
+  // 浏览器会把分隔符收敛成下划线，但这里不接受可疑名字，避免把错误页/路径当文件名展示。
+  if (/[\u0000-\u001f\u007f/\\]/.test(value) || value.includes("..")) return "";
+  if (value.length > 120) return "";
+  return /^[A-Za-z0-9_\u4e00-\u9fa5][A-Za-z0-9_\u4e00-\u9fa5 .()（）-]*\.xlsx$/i.test(value) ? value : "";
+}
+
+function filenameOf(disposition) {
+  if (!disposition) return "";
+  const parts = String(disposition).split(";");
+  if (parts[0].trim().toLowerCase() !== "attachment") return "";
+  for (const part of parts.slice(1)) {
+    const index = part.indexOf("=");
+    if (index < 0) continue;
+    const key = part.slice(0, index).trim().toLowerCase();
+    const rawValue = part.slice(index + 1).trim();
+    const value = rawValue.startsWith('"') && rawValue.endsWith('"')
+      ? rawValue.slice(1, -1).replace(/\\(.)/g, "$1")
+      : rawValue.replace(/^"|"$/g, "");
+    if (key === "filename*") {
+      const encoded = value.includes("''") ? value.split("''").pop() : value;
+      let decoded;
+      try {
+        decoded = decodeURIComponent(encoded);
+      } catch {
+        // 非法百分号编码：不当成可下载名，交给调用方报错，而不是原样保存。
+        return "";
+      }
+      const safe = safeFilename(decoded);
+      if (safe) return safe;
+      continue;
+    }
+    if (key === "filename") {
+      const safe = safeFilename(value);
+      if (safe) return safe;
+    }
+  }
+  return "";
+}
+
+/**
+ * Content-Disposition → 安全 XLSX 附件文件名。
+ * 拒绝非 attachment 响应、非法编码、路径穿越（../、/、\）及非 .xlsx 后缀。
+ */
+export function attachmentFilename(disposition) {
+  const name = filenameOf(disposition);
+  if (!name) {
+    throw new ApiError(
+      502,
+      "missing_export_filename",
+      "导出响应缺少可用的 XLSX 文件名（或文件名含非法字符），无法确认下载内容",
+    );
+  }
+  return name;
+}
+
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
 function readCookie(name) {
@@ -80,6 +139,7 @@ function createLiveAdapter(baseUrl) {
   }
 
   async function ensureCsrf() {
+    csrf = readCookie("csrftoken");
     if (csrf) return csrf;
     try {
       await raw("GET", "/me");
@@ -90,8 +150,69 @@ function createLiveAdapter(baseUrl) {
     return csrf;
   }
 
+  async function write(method, path, body, key) {
+    csrf = readCookie("csrftoken") || await ensureCsrf();
+    return raw(method, path, {body, headers: {"X-CSRFToken": csrf, ...(key ? {"Idempotency-Key": key} : {})}});
+  }
+
+  /**
+   * 导出审核结果 / 独立补料清单（POST /versions/{id}/exports）。
+   *
+   * 统一供 createExport（/uploads/）与 exportFile（/workbench/）调用：
+   * 校验网络异常、HTTP 状态与 XLSX MIME、附件文件名、非空与 4 字节 ZIP 头，
+   * 绝不把 JSON/HTML 错误页或敌意文件名当成文件保存。
+   */
+  async function requestExport(versionId, payload = {}) {
+    csrf = readCookie("csrftoken") || await ensureCsrf();
+    let response;
+    try {
+      response = await fetch(baseUrl + `/versions/${encodeURIComponent(versionId)}/exports`, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { ...JSON_HEADERS, "X-CSRFToken": csrf },
+        body: JSON.stringify(payload),
+      });
+    } catch (error) {
+      throw new ApiError(0, "network_error", error?.message || "网络连接失败");
+    }
+    const contentType = response.headers.get("Content-Type") || "";
+    const mime = contentType.split(";")[0].trim().toLowerCase();
+    if (!response.ok || mime !== "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") {
+      const parsed = await readPayload(response);
+      const error = (parsed && parsed.error) || {};
+      throw new ApiError(
+        response.ok ? 502 : response.status,
+        error.code || "unexpected_export_type",
+        error.message || "未返回有效的审核附件",
+        error.details,
+        parsed && parsed.request_id,
+      );
+    }
+    const filename = attachmentFilename(response.headers.get("Content-Disposition"));
+    const blob = await response.blob();
+    if (!blob.size) {
+      throw new ApiError(502, "empty_export_body", "导出响应内容为空，未保存文件");
+    }
+    const head = new Uint8Array(await blob.slice(0, 4).arrayBuffer());
+    if (head.length < 4 || head[0] !== 0x50 || head[1] !== 0x4b || head[2] !== 0x03 || head[3] !== 0x04) {
+      throw new ApiError(502, "unexpected_export_type", "导出响应不是 xlsx 文件（缺少 ZIP 头），未保存文件");
+    }
+    return {
+      blob,
+      filename,
+      runId: response.headers.get("X-Export-Run") || "",
+      resultMode: (response.headers.get("X-Result-Mode") || "").toLowerCase(),
+      contentType,
+    };
+  }
+
   return {
     mode: "live",
+    getHistory(taskId) { return raw("GET", `/tasks/${encodeURIComponent(taskId)}/history`); },
+    confirmItem(versionId, itemId, body) { return write("PATCH", `/versions/${encodeURIComponent(versionId)}/items/${encodeURIComponent(itemId)}/confirmation`, body); },
+    submitTask(taskId, body, key) { return write("POST", `/tasks/${encodeURIComponent(taskId)}/submissions`, body, key); },
+    decideSubmission(submissionId, body, key) { return write("POST", `/submissions/${encodeURIComponent(submissionId)}/decisions`, body, key); },
+    exportFile(versionId, payload = {}) { return requestExport(versionId, payload); },
 
     async me() {
       try {
@@ -113,7 +234,7 @@ function createLiveAdapter(baseUrl) {
     },
 
     async logout() {
-      csrf = readCookie("csrftoken");
+      csrf = readCookie("csrftoken") || await ensureCsrf();
       await raw("POST", "/auth/logout", { headers: { "X-CSRFToken": csrf } });
       csrf = readCookie("csrftoken");
     },
@@ -130,6 +251,7 @@ function createLiveAdapter(baseUrl) {
         body, headers: { "X-CSRFToken": csrf, "Idempotency-Key": key },
       });
     },
+    createExport(versionId, payload = {}) { return requestExport(versionId, payload); },
     listClaimable(params = {}) { return raw("GET", `/tasks/claimable${query(params)}`); },
     async claimTask(taskId, key) {
       csrf = readCookie("csrftoken") || await ensureCsrf();
@@ -209,12 +331,19 @@ function createFixtureAdapter(url) {
 
   return {
     mode: "fixture",
+    async getHistory() { throw new ApiError(501, "live_required", "任务历史接线仅支持 live API"); },
+    async confirmItem() { throw new ApiError(501, "live_required", "真实确认仅支持 live API"); },
+    async submitTask() { throw new ApiError(501, "live_required", "真实提交仅支持 live API"); },
+    async decideSubmission() { throw new ApiError(501, "live_required", "真实决定仅支持 live API"); },
+    async exportFile() { throw new ApiError(501, "live_required", "真实导出仅支持 live API"); },
     async uploadFile() { throw new ApiError(501, "live_required", "真实上传仅支持 live API"); },
     async listClaimable() { throw new ApiError(501, "live_required", "认领仅支持 live API"); },
     async claimTask() { throw new ApiError(501, "live_required", "认领仅支持 live API"); },
     async getImport() { throw new ApiError(501, "live_required", "解析报告仅支持 live API"); },
     async startPrecheck() { throw new ApiError(501, "live_required", "后台重新预审仅支持 live API"); },
     async retryRun() { throw new ApiError(501, "live_required", "真实失败行重试仅支持 live API"); },
+    // 样例数据没有真实存储与执行引用；绝不在浏览器里拼一个假 xlsx 冒充导出结果。
+    async createExport() { throw new ApiError(501, "live_required", "真实导出仅支持 live API，样例模式不生成文件"); },
 
     // fixture 模式没有真实身份，明确返回演示身份；页面必须显示"不校验权限"标记。
     async me() {
@@ -261,7 +390,7 @@ function createFixtureAdapter(url) {
 
 /**
  * @param {{mode?: "live"|"fixture", baseUrl?: string, fixtureUrl?: string}} options
- * @returns 统一的只读 client；两种模式的返回值形状完全一致。
+ * @returns 统一 client；fixture 写动作明确拒绝，live 使用真实会话和服务端守卫。
  */
 export function createClient({ mode = "live", baseUrl = "/api/v1", fixtureUrl = "/demo/fixtures/DEMO-SET.json" } = {}) {
   return mode === "fixture" ? createFixtureAdapter(fixtureUrl) : createLiveAdapter(baseUrl);

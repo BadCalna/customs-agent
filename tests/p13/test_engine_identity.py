@@ -245,7 +245,8 @@ class EngineIdentityTests(TestCase):
 
     def test_inline_import_does_not_publish_success_when_executor_supersedes(self):
         with tempfile.TemporaryDirectory() as root, override_settings(CUSTOMS_FILE_ROOT=Path(root)):
-            result = imports.upload(self.supplier, filename="late.xlsx", data=sample(), key="late-config")
+            original = sample()
+            result = imports.upload(self.supplier, filename="late.xlsx", data=original, key="late-config")
             def invalidate(version, **kwargs):
                 run = kwargs["run"]
                 run.status, run.is_current = "superseded", False
@@ -260,7 +261,7 @@ class EngineIdentityTests(TestCase):
             # Publication precedes DB rollback: incoming bytes have moved, but
             # the durable receipt still binds this token to the intact original.
             from apps.reviews.services import files
-            self.assertEqual(files.read_staged_version_original(job.stage_token), sample())
+            self.assertEqual(files.read_staged_version_original(job.stage_token), original)
             self.assertFalse(job.version.items.exists())
             # A new upload must also be able to preserve the failed predecessor
             # through that same receipt, not merely leave readable orphan bytes.
@@ -271,7 +272,7 @@ class EngineIdentityTests(TestCase):
             job.refresh_from_db()
             self.assertEqual(job.status, "superseded")
             self.assertTrue(job.version.storage_path)
-            self.assertEqual(files.read_version_original(self.supplier, str(job.version_id)).content, sample())
+            self.assertEqual(files.read_version_original(self.supplier, str(job.version_id)).content, original)
 
     def test_completed_import_replay_is_not_rejected_after_configuration_change(self):
         with tempfile.TemporaryDirectory() as root, override_settings(CUSTOMS_FILE_ROOT=Path(root)):

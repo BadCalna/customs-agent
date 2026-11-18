@@ -15,7 +15,6 @@ from ninja import Router
 from apps.accounts.auth import session_auth
 from apps.accounts.errors import ApiError
 from apps.accounts.permissions import READ, get_visible_task, require_action, visible_tasks
-from apps.api.not_implemented import pending_view
 from apps.api.pagination import decode_cursor, encode_cursor, normalize_limit
 
 from ..models import FileVersion, Item, Task

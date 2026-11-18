@@ -109,3 +109,47 @@ class ExportApiTests(TestCase):
         self.assertIn("attachment", response["Content-Disposition"])
         self.assertEqual(response["X-Result-Mode"], "mock")
         self.assertEqual(response["Cache-Control"], "private, no-store")
+
+    def test_malformed_source_workbook_returns_422_instead_of_500(self):
+        import io
+        from zipfile import ZipFile
+        from adapters.files.export_workbook import _zip_replace
+        from adapters.files.ooxml import Workbook
+        from tests.p20.test_exports import sample
+
+        base = sample(headers=("采购合同号", "合同项号", "品名", "海关编码", "申报要素"))
+        sheet_part = Workbook(base).find_sheet("申报要素").part
+        sheet_raw = Workbook(base).media_bytes(sheet_part).decode()
+        out = io.BytesIO()
+        with ZipFile(io.BytesIO(base)) as src, ZipFile(out, "w") as dst:
+            for info in src.infolist():
+                dst.writestr(info, src.read(info.filename))
+            dst.writestr(
+                "xl/worksheets/_rels/sheet1.xml.rels",
+                b'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+                b'<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing"/>'
+                b'</Relationships>',
+            )
+        bad_cases = (
+            (_zip_replace(base, {sheet_part: sheet_raw.replace("</worksheet>", "<mergeCells><mergeCell/></mergeCells></worksheet>", 1).encode()}),
+             "invalid_cell_reference"),
+            (out.getvalue(), "source_workbook_invalid"),
+        )
+        self.client.force_login(self.operator)
+        for bad_bytes, expected_code in bad_cases:
+            self.loader.return_value = SimpleNamespace(
+                content=bad_bytes, sha256=hashlib.sha256(bad_bytes).hexdigest(),
+            )
+            response = self.client.post(
+                f"/api/v1/versions/{self.version.pk}/exports",
+                data={"kind": "precheck", "run_id": str(self.run.pk)},
+                content_type="application/json",
+            )
+            self.assertEqual(response.status_code, 422)
+            self.assertEqual(response.json()["error"]["code"], expected_code)
+
+    def test_null_issues_in_run_item_result_does_not_raise_500(self):
+        self.row.result = {"issues": None, "comparison_reason": None, "mock_scenario": "normal"}
+        self.row.save()
+        artifact = build_export(self.operator, str(self.version.pk), self.payload())
+        self.assertTrue(artifact.content.startswith(b"PK"))

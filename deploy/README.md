@@ -1,7 +1,7 @@
 # Docker Compose 部署与验收
 
 > **状态（2026-11-18）**：真实 AI 的 OpenAI 兼容接入层、三角色正式页面及队列 Compose 配置已加入代码；尚缺实际模型服务参数、Linux 容器构建、真实单证端到端演练和备份恢复演练。**这些验收通过前，不得开放真实业务流量。**
-> 正式入口为 `/`；`/demo/`、`/uploads/`、`/workbench/` 在 `DEBUG=0` 下关闭。正式页面只调用 live API，模型建议不等于人工审核决定，税则依据未连接可核验来源时始终标为待核。
+> 正式入口为 `/`；`/workbench/` 与 `/uploads/` 也提供正式静态白名单。`/demo/`、`/tasks/` 和显式样例模式在 `DEBUG=0` 下关闭。正式页面只调用 live API，模型建议不等于人工审核决定，税则依据未连接可核验来源时始终标为待核。
 > 宿主机须具备 Python >=3.12（运维编排器使用标准库）；优先使用项目 venv，也可设置 `OPERATIONS_PYTHON`。
 > 本机没有 Docker，**容器相关步骤没有在本机实跑过**；实际跑过的部分见
 > [交接/P22.md](../docs/开发文档/交接/P22.md) 的“已验证/未验证”两栏。
@@ -19,10 +19,11 @@
 | 迁移、静态资源、健康检查 | 配置已提供、容器未验证 | 一次性 `migrate` 服务 + `/api/health` |
 | 后台任务（Redis + worker + dispatcher） | 配置已接入、容器未验证 | Compose 默认启动三项服务，需在 Linux 上做实际队列和恢复演练 |
 | 上传 / 认领 / 正式页面 | 代码已接通、浏览器实机待验收 | `/` 覆盖供应商上传、业务员确认提交和专家人工裁决 |
-| 演示壳 `/demo/`、工作台 `/workbench/` | **按设计 404** | 两者只在 `DEBUG=1` 时可用，云端必须 `DEBUG=0` |
+| 演示壳 `/demo/`、任务页 `/tasks/` | **按设计 404** | 两者只在 `DEBUG=1` 时可用，云端必须 `DEBUG=0` |
+| 正式 `/workbench/`、`/uploads/` | 页面 200，数据须登录 | 保留已上线静态白名单与导出链路；API 校验会话、CSRF 与对象权限，未部署验收 |
 | AI 引擎 | OpenAI 兼容适配器已实现、真实服务待验收 | `CUSTOMS_ENGINE_MODE=openai`；没有可核验证据来源时不生成已核实结论 |
 
-**当前可验证的范围**：`/`、`/admin/`、`/api/v1/` 及队列配置。生产上线的剩余验收见 [正式上线清单](PRODUCTION.md)。
+**当前可验证的范围**：`/`、`/workbench/`、`/uploads/`、`/admin/`、`/api/v1/` 及队列配置。生产上线的剩余验收见 [正式上线清单](PRODUCTION.md)。
 
 以下第 1 至 15 节保留 P22 试用环境的历史操作说明。正式部署以 [正式上线清单](PRODUCTION.md) 和 `deploy/.env.example` 为准；其中关于“只需三项配置”“HTTP 公网测试端口”和“mock 唯一引擎”的旧描述不适用于正式环境。
 
@@ -168,9 +169,11 @@ curl -sS -o /dev/null -w '%{http_code}\n' "$BASE/api/v1/docs"    # 期望 200
 curl -sS -o /dev/null -w '%{http_code}\n' "$BASE/admin/login/"   # 期望 200
 # 5.4 静态资源（nginx 提供，验证 collectstatic 生效）
 curl -sS -o /dev/null -w '%{http_code}\n' "$BASE/static/admin/css/base.css"   # 期望 200
-# 5.5 确认 DEBUG 确实是关的：这两个入口应返回 404
+# 5.5 确认 DEBUG 确实是关的：开发入口应返回 404，正式工作台/上传页返回 200
 curl -sS -o /dev/null -w '%{http_code}\n' "$BASE/demo/"           # 期望 404
-curl -sS -o /dev/null -w '%{http_code}\n' "$BASE/workbench/"      # 期望 404
+curl -sS -o /dev/null -w '%{http_code}\n' "$BASE/tasks/"          # 期望 404（P08 独立开发页只在 DEBUG=1 可用）
+curl -sS -o /dev/null -w '%{http_code}\n' "$BASE/workbench/"      # 期望 200，数据仍需登录
+curl -sS -o /dev/null -w '%{http_code}\n' "$BASE/uploads/"        # 期望 200，数据仍需登录
 # 5.6 从你自己电脑（公网）验证一次
 #     浏览器打开 http://<服务器公网IP>:8080/admin/login/
 ```
@@ -433,7 +436,7 @@ docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --no-de
 | 浏览器 400 `Bad Request (400)` | `deploy/.env` | 访问用的 Host 不在 `CUSTOMS_ALLOWED_HOSTS` 里 |
 | 登录成功但马上变匿名 / 提交 403 | `deploy/.env` | `CUSTOMS_HTTPS=1` 但实际走 HTTP（Secure cookie 不发送）；或 CSRF 来源不匹配 |
 | `/static/...` 404 | `logs migrate`、`logs web` | 没跑 collectstatic / static 卷没挂 |
-| `/demo/`、`/workbench/` 404 | —— | **预期行为**：`DEBUG=0` 时演示壳按设计关闭 |
+| `/demo/`、`/tasks/` 404 | —— | **预期行为**：`DEBUG=0` 时开发验收入口按设计关闭；正式 `/workbench/`、`/uploads/` 应为 200 |
 | `db` 一直 `unhealthy` | `logs db` | 数据卷权限、磁盘满、`pg_isready` 用户名/库名不一致 |
 | `migrate` 退出码非 0 | `logs migrate` | 迁移冲突、数据库连不上、旧库结构不一致（先备份再处理） |
 | 磁盘满 | `df -h`、`docker system df` | 旧镜像堆积：`docker image prune`（确认无回退需求） |

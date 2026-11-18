@@ -270,3 +270,17 @@ test('P13 explicit server grant connects the real retry callback',async()=>{
   await controller.open(context(value));controller.selectFailed(value.retry_item_ids);await controller.retry();
   assert.equal(writes,1);controller.destroy();
 });
+
+test('queued current-version execution is polled before activation; state callback follows server snapshot',async()=>{
+  const node=host(),clock=scheduler(),value=activeRun({status:'queued',is_current:false});const seen=[];
+  const controller=createRunProgress(node,{client:{getRun:async()=>value},scheduler:clock,onStateChange:s=>seen.push(s)});
+  await controller.open(context(value));assert.equal(clock.pending.size,1);assert.equal(seen.at(-1).run,value);
+  controller.destroy();assert.equal(clock.pending.size,0);
+});
+
+
+test('host stage constraint rejects a wrong-kind run before rendering its results',async()=>{
+  const value=run(),node=host(),controller=createRunProgress(node,{client:{getRun:async()=>value}});
+  await controller.open({...context(value),kind:'expert_check'});
+  assert.equal(controller.getState().run,null);assert.ok(controller.getState().error);controller.destroy();
+});

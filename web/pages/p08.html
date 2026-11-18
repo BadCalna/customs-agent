@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>审核任务与执行进度 · 关务工作台</title>
+  <!-- 组件样式复用 P08 自带的 tasks.css；styles.css 只提供设计 token 与骨架类。 -->
+  <link rel="stylesheet" href="/demo/assets/styles.css">
+  <link rel="stylesheet" href="/demo/assets/styles/tasks.css">
+  <style>
+    /* 仅本页骨架样式；任务列表与执行进度的外观全部来自 web/styles/tasks.css。 */
+    .p08-page-bar { display: flex; align-items: center; gap: 14px; padding: 14px 22px; background: var(--surface); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+    .p08-page-brand { display: flex; align-items: center; gap: 12px; }
+    .p08-page-mark { font: 600 11px/1 var(--mono); letter-spacing: .14em; color: var(--teal); background: var(--teal-bg); border: 1px solid var(--teal-line); border-radius: 999px; padding: 6px 9px; }
+    .p08-page-brand h1 { font: 500 20px/1.3 var(--serif); color: var(--teal); }
+    .p08-page-brand p { margin-top: 2px; font-size: 11.5px; color: var(--ink-3); }
+    .p08-page-spacer { flex: 1 1 auto; }
+    .p08-page-identity { font-size: 12px; color: var(--ink-2); }
+    .p08-page-notice { display: grid; gap: 10px; max-width: 1520px; margin: 16px auto 0; padding: 0 22px; }
+    .p08-page-main { display: grid; grid-template-columns: minmax(300px, 360px) minmax(0, 1fr); gap: 18px; align-items: start; max-width: 1520px; margin: 16px auto 0; padding: 0 22px 24px; }
+    .p08-page-side { display: grid; gap: 14px; min-width: 0; }
+    .p08-page-summary { padding: 14px 16px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; font-size: 12.5px; color: var(--ink-2); overflow-wrap: anywhere; }
+    .p08-page-summary b { color: var(--teal); }
+    .p08-page-limits { padding: 14px 16px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; font-size: 11.5px; color: var(--ink-3); }
+    .p08-page-limits h2 { margin-bottom: 6px; font: 600 13px var(--serif); color: var(--teal); }
+    .p08-page-limits li { margin-top: 5px; line-height: 1.65; }
+    .p08-page-limits code, .p08-page-foot code { font-family: var(--mono); font-size: 10.5px; }
+    .p08-page-foot { max-width: 1520px; margin: 0 auto; padding: 0 22px 30px; font-size: 11px; color: var(--ink-3); }
+    .p08-notice { padding: 12px 14px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; font-size: 12px; color: var(--ink-2); overflow-wrap: anywhere; }
+    .p08-notice strong { display: block; color: var(--teal); font-size: 12.5px; }
+    .p08-notice p { margin-top: 4px; }
+    .p08-notice.is-empty { background: var(--idle-bg); border-color: var(--idle-line); }
+    .p08-notice.is-empty strong { color: var(--ink-2); }
+    .p08-notice.is-invalid, .p08-notice.is-error { background: var(--cinnabar-bg); border-color: var(--cinnabar-line); }
+    .p08-notice.is-invalid strong, .p08-notice.is-error strong { color: var(--cinnabar); }
+    @media (max-width: 980px) { .p08-page-main { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <header class="p08-page-bar">
+    <div class="p08-page-brand">
+      <span class="p08-page-mark">P08</span>
+      <div>
+        <h1>审核任务与执行进度</h1>
+        <p>任务列表 · 阶段筛选 · 执行进度（只读）</p>
+      </div>
+    </div>
+    <span class="p08-page-spacer"></span>
+    <span id="p08-mode" class="badge">LIVE API</span>
+    <span id="p08-identity" class="p08-page-identity">正在读取身份…</span>
+  </header>
+
+  <div id="p08-notice" class="p08-page-notice" role="status" aria-live="polite"></div>
+
+  <main class="p08-page-main">
+    <!-- #p08-tasks / #p08-run 由 web/pages/p08.js 挂载 createTaskList / createRunProgress。 -->
+    <section id="p08-tasks" aria-label="任务列表"></section>
+    <div class="p08-page-side">
+      <p id="p08-summary" class="p08-page-summary" aria-live="polite"><b>尚未选择任务</b> · 选择左侧任务后读取执行进度</p>
+      <section id="p08-run" aria-label="执行进度"></section>
+      <aside class="p08-page-limits">
+        <h2>只读边界与已知限制</h2>
+        <ul>
+          <li>只经 <code>web/api.js</code> 的只读方法读取（listTasks / getTask / getRun）；不调用上传、认领、确认、提交、决定、导出等写端点，页面没有写动作按钮。</li>
+          <li>执行进度只显示所选任务<strong>当前版本</strong>的最新一轮执行；逐商品详情与历史轮次由商品卡片与审核历史页面提供。任务详情不提供轮次列表，因此本页不推断其他轮次。</li>
+          <li>技术失败与业务待补分开统计：待补资料不计入技术失败；“执行完成”只表示分析结束，是否通过以人工审核决定为准。</li>
+          <li>没有执行记录显示为“尚无执行记录”（空态），不是失败；服务端未给出或无法识别的状态按原值标为“未知状态”，不猜成某个业务状态。</li>
+          <li>结果标为 <code>result_mode=mock</code> 的部分会显示“合成样例”，不是真实 AI 审核结论，不构成申报依据。</li>
+        </ul>
+      </aside>
+    </div>
+  </main>
+
+  <footer class="p08-page-foot">
+    页面入口 <code>/tasks/</code>（仅 Django DEBUG=True 时可用）· 模式 <code>?mode=live</code>（默认，读 /api/v1）或 <code>?mode=fixture</code>（读 contracts/fixtures/DEMO-SET.json 演示样例）。
+  </footer>
+
+  <script type="module" src="/demo/assets/pages/p08.js"></script>
+</body>
+</html>

@@ -6,6 +6,16 @@ import subprocess
 from django.conf import settings
 from django.test import SimpleTestCase, override_settings
 
+NODE_TEST_FILES = (
+    "tests/p08/components.test.mjs",
+    "tests/p08/page.test.mjs",
+    "tests/p08/workbench.test.mjs",
+    "tests/p08/review-host.test.mjs",
+)
+#: 四个 Node 文件的用例数（components 32 + page 30 + workbench 13 + review-host 15）；改测试时必须同步，
+#: 否则「文件被清空 / 用例全被跳过」会以 0 退出被当成通过。
+EXPECTED_CASES = 90
+
 
 class JavascriptBehaviorTests(SimpleTestCase):
     def test_component_behaviors(self):
@@ -13,10 +23,15 @@ class JavascriptBehaviorTests(SimpleTestCase):
         if not node:
             self.fail("Node is required for P08 behavior tests; set P08_NODE to its executable")
         result = subprocess.run(
-            [node, "--test", "tests/p08/components.test.mjs"],
-            cwd=settings.BASE_DIR, capture_output=True, text=True, encoding="utf-8", timeout=45,
+            [node, "--test", *NODE_TEST_FILES],
+            cwd=settings.BASE_DIR, capture_output=True, text=True, encoding="utf-8", timeout=60,
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        output = result.stdout + result.stderr
+        self.assertIn(f"# tests {EXPECTED_CASES}", output, output)
+        self.assertIn(f"# pass {EXPECTED_CASES}", output, output)
+        self.assertRegex(output, r"# fail 0\b")
+        self.assertRegex(output, r"# skipped 0\b")
 
 
 @override_settings(DEBUG=True)

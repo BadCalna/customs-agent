@@ -1,11 +1,11 @@
 <!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Excel 上传与认领 · 关务工作台</title>
-<link rel="stylesheet" href="/demo/assets/styles/p06.css"><link rel="stylesheet" href="/demo/assets/styles/tasks.css"></head>
-<body><header><div><small>CUSTOMS / P06 + P13</small><h1>Excel 上传与认领</h1></div><span class="badge">LIVE API · MOCK 预审</span><span id="identity">正在读取身份</span><button id="logout" hidden>退出</button></header>
-<main><p class="intro">上传现有多页签模板，检查真实解析、装箱关联与图片。预审为固定模拟结果，需由业务人员核查。</p>
-<form id="login"><label>账号<input name="username" value="supplier_a" autocomplete="username" required></label><label>密码<input name="password" type="password" autocomplete="current-password" required></label><button>登录</button><small>本地账号由 make seed-demo 创建。</small></form>
+<link rel="stylesheet" href="/workbench/assets/styles/p06.css"><link rel="stylesheet" href="/workbench/assets/styles/tasks.css"></head>
+<body><header><div><small>CUSTOMS / P06 + P13</small><h1>Excel 上传与认领</h1></div><span class="badge">LIVE API · MOCK 预审</span><a href="/workbench/">审核工作台</a><span id="identity">正在读取身份</span><button id="logout" hidden>退出</button></header>
+<main><p class="intro">上传现有多页签模板，检查真实解析、装箱关联与图片。预审为固定模拟结果，需由业务人员核查。预审完成后可在本页导出预审结论与独立补料清单（xlsx，文件内标注测试结果）。</p>
+<form id="login"><label>账号<input name="username" autocomplete="username" required></label><label>密码<input name="password" type="password" autocomplete="current-password" required></label><button>登录</button><small>使用已分配的业务账号。</small></form>
 <div id="notice" role="status" aria-live="polite"></div>
 <section id="upload-panel" hidden><h2>供应商上传</h2><form id="upload"><label>上传入口<select id="upload-target"><option value="new">首次上传，新建任务</option><option value="current">当前任务补料，新增版本</option></select></label><label>Excel 原件<input id="file" type="file" accept=".xlsx,.xlsm,.xltx" required></label><button id="upload-submit">上传并解析</button></form><div id="duplicate" hidden><p>文件与已有版本相同。确认后将整表重新解析，并创建独立的 mock 预审。</p><button id="confirm-duplicate">确认创建新版本</button><button id="cancel-duplicate">取消</button></div></section>
 <div class="layout"><aside><section><div class="heading"><h2>我的任务</h2><button id="refresh">刷新</button></div><div id="tasks"></div><button id="more-tasks" hidden>加载更多任务</button></section><section id="claim-panel" hidden><h2>待认领</h2><p class="muted">认领前仅显示任务编号和上传时间。</p><div id="claimable"></div><button id="more-claimable" hidden>加载更多待认领</button></section></aside>
-<section><h2 id="task-title">选择一个任务</h2><div id="versions"></div><button id="rerun" hidden>重新预审当前版本</button><div id="summary"></div><div id="progress"></div><div id="report"></div><div id="items"></div><div id="card"></div></section></div></main>
-<script type="module" src="/demo/assets/pages/p06.js"></script></body></html>
+<section><h2 id="task-title">选择一个任务</h2><div id="versions"></div><button id="rerun" hidden>重新预审当前版本</button><div id="summary"></div><div id="progress"></div><div id="report"></div><div id="exports" hidden></div><div id="items"></div><div id="card"></div></section></div></main>
+<script type="module" src="/workbench/assets/pages/p06.js"></script></body></html>

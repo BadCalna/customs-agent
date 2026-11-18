@@ -15,7 +15,7 @@ from adapters.files.export_workbook import (
     ExportError, ExportLine, ExportSelection, _zip_replace, audit_fill, export_precheck, normalize_export_views,
 )
 from adapters.files.export_issues import HEADERS, STYLES, export_issues
-from adapters.files.ooxml import NS, S, Workbook
+from adapters.files.ooxml import NS, OoxmlError, S, Workbook
 from experiments.excel_fidelity.workbook import FidelityError
 from tests.p03.fixtures import make_fixture
 from tests.p04.builders import build_package
@@ -253,3 +253,130 @@ class ExportTests(unittest.TestCase):
         artifact = export_issues(self.source, self.selection)
         self.assertEqual(artifact.manifest["issue_count"], 0)
         self.assertIn("不表示", Workbook(artifact.content).sheet("补料清单").cell("A5").value)
+
+    def test_negative_and_out_of_range_style_or_font_indices_rejected(self):
+        book = Workbook(self.source)
+        sheet_part = book.find_sheet("申报要素").part
+        sheet_raw = book.media_bytes(sheet_part).decode()
+        styles_xml = ET.fromstring(book.media_bytes("xl/styles.xml"))
+        xfs_count = len(styles_xml.find("s:cellXfs", NS))
+        fonts_count = len(styles_xml.find("s:fonts", NS))
+
+        for bad_style in ("-1", "-999999", str(xfs_count), "bad", ""):
+            mutated = sheet_raw.replace('<c r="F2" t="inlineStr">', f'<c r="F2" s="{bad_style}" t="inlineStr">', 1)
+            source = _zip_replace(self.source, {sheet_part: mutated.encode()})
+            with self.subTest(bad_style=bad_style), self.assertRaises(ExportError) as caught:
+                export_precheck(source, selection(source))
+            self.assertEqual(caught.exception.code, "invalid_style")
+
+        for bad_font in ("-1", "-999999", str(fonts_count), "bad"):
+            styles_mutated = re.sub(r'fontId="[0-9]+"', f'fontId="{bad_font}"', book.media_bytes("xl/styles.xml").decode())
+            source = _zip_replace(self.source, {"xl/styles.xml": styles_mutated.encode()})
+            for level in ("低", "中"):
+                with self.subTest(bad_font=bad_font, level=level), self.assertRaises(ExportError) as caught:
+                    export_precheck(source, selection(source, confidence_label=level))
+                self.assertEqual(caught.exception.code, "invalid_style")
+
+    def test_negative_shared_string_index_rejected_in_ooxml(self):
+        book = Workbook(self.source)
+        sheet_part = book.find_sheet("申报要素").part
+        sheet_raw = book.media_bytes(sheet_part).decode()
+        mutated = re.sub(r'<c r="A2"[^>]*>.*?</c>', '<c r="A2" t="s"><v>-1</v></c>', sheet_raw, count=1)
+        source = _zip_replace(self.source, {sheet_part: mutated.encode()})
+        with self.assertRaises(OoxmlError) as caught:
+            Workbook(source)
+        self.assertEqual(caught.exception.code, "broken_shared_string")
+
+    def test_malformed_ooxml_attributes_raise_structured_error_instead_of_type_or_key_error(self):
+        def zip_with(source_bytes, updates):
+            out = io.BytesIO()
+            with ZipFile(io.BytesIO(source_bytes)) as src, ZipFile(out, "w") as dst:
+                existing = {info.filename for info in src.infolist()}
+                for info in src.infolist():
+                    dst.writestr(info, updates.get(info.filename, src.read(info.filename)))
+                for name, data in updates.items():
+                    if name not in existing:
+                        dst.writestr(name, data)
+            return out.getvalue()
+
+        base_insert = sample(headers=("采购合同号", "合同项号", "品名", "海关编码", "申报要素"))
+        sheet_part = Workbook(base_insert).find_sheet("申报要素").part
+        sheet_raw = Workbook(base_insert).media_bytes(sheet_part).decode()
+        cases_insert = (
+            {sheet_part: sheet_raw.replace("<sheetData>", "<cols><col width=\"10\"/></cols><sheetData>", 1).encode()},
+            {sheet_part: sheet_raw.replace('<row r="1">', "<row>", 1).encode()},
+            {sheet_part: sheet_raw.replace("</worksheet>", "<mergeCells><mergeCell/></mergeCells></worksheet>", 1).encode()},
+            {sheet_part: sheet_raw.encode("utf-16")},
+            {sheet_part: sheet_raw.replace(
+                "<sheetData>",
+                '<sheetViews><sheetView workbookViewId="0"><pane xSplit="inf" ySplit="1" topLeftCell="C2" state="frozen"/></sheetView></sheetViews><sheetData>',
+                1,
+            ).encode()},
+            {"xl/workbook.xml": Workbook(base_insert).media_bytes("xl/workbook.xml").replace(
+                b"</workbook>", b'<definedNames><definedName name="N" localSheetId="99">A1</definedName></definedNames></workbook>', 1)},
+            {"xl/worksheets/_rels/sheet1.xml.rels": (
+                b'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+                b'<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing"/>'
+                b'</Relationships>'
+            )},
+        )
+        for changes in cases_insert:
+            mutated = zip_with(base_insert, changes)
+            with self.subTest(path="insert", keys=list(changes)), self.assertRaises((FidelityError, OoxmlError)):
+                export_precheck(mutated, selection(mutated))
+
+        # Relationship missing Type does not raise KeyError; unrelated relationships are ignored.
+        no_type_rel = zip_with(base_insert, {"xl/worksheets/_rels/sheet1.xml.rels": (
+            b'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            b'<Relationship Id="rId1"/></Relationships>'
+        )})
+        self.assertTrue(export_precheck(no_type_rel, selection(no_type_rel)).content.startswith(b"PK"))
+
+        base_append = sample(headers=("采购合同号", "合同项号", "品名", "海关编码", "申报要素", "AI推荐HScode"))
+        append_sheet_raw = Workbook(base_append).media_bytes(sheet_part).decode()
+        for bad_sheet in (
+            re.sub(r"<dimension\b[^>]*/>", "<dimension/>", append_sheet_raw, count=1),
+            append_sheet_raw.replace("</worksheet>", "<mergeCells><mergeCell/></mergeCells></worksheet>", 1),
+            append_sheet_raw.replace("<sheetData>", '<cols><col max="5"/></cols><sheetData>', 1),
+        ):
+            mutated = _zip_replace(base_append, {sheet_part: bad_sheet.encode()})
+            with self.subTest(path="append"), self.assertRaises((FidelityError, OoxmlError)):
+                export_precheck(mutated, selection(mutated))
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "images.xlsx"
+            make_fixture(path, {"xl/styles.xml": STYLES})
+            base_images = path.read_bytes()
+        from adapters.files.declarations import extract_declarations
+        extracted = extract_declarations(Workbook(base_images))
+        img_lines = tuple(ExportLine(f"item-{r.row}", "version-1", "run-1", r.sheet, r.row,
+                                     suggested_hs="0000000003") for r in extracted.records)
+        img_book = Workbook(base_images)
+        drawing_raw = img_book.media_bytes("xl/drawings/drawing1.xml").decode()
+        img_sheet_part = img_book.find_sheet("申报要素").part
+        img_sheet_raw = img_book.media_bytes(img_sheet_part).decode()
+        bad_drawing_id = drawing_raw.replace(' id="1"', "", 1).encode()
+        bad_drawing_col = drawing_raw.replace("<xdr:col>5</xdr:col>", "<xdr:col/>", 1).encode()
+        bad_row_ht = img_sheet_raw.replace('<row r="2"', '<row r="2" ht="1e308"', 1).encode()
+        bad_col_width = img_sheet_raw.replace('width="20"', 'width="2e307"', 1).encode()
+        for changes in (
+            {"xl/drawings/drawing1.xml": bad_drawing_id},
+            {"xl/drawings/drawing1.xml": bad_drawing_col},
+            {img_sheet_part: bad_row_ht},
+            {img_sheet_part: bad_col_width},
+        ):
+            mutated = _zip_replace(base_images, changes)
+            chosen = replace(selection(mutated), lines=img_lines)
+            with self.subTest(path="images", keys=list(changes)), self.assertRaises(FidelityError):
+                export_precheck(mutated, chosen)
+
+        with ZipFile(io.BytesIO(base_images)) as src_zip:
+            no_ct_buf = io.BytesIO()
+            with ZipFile(no_ct_buf, "w") as dst_zip:
+                for info in src_zip.infolist():
+                    if info.filename != "[Content_Types].xml":
+                        dst_zip.writestr(info, src_zip.read(info.filename))
+        no_ct = no_ct_buf.getvalue()
+        chosen = replace(selection(no_ct), lines=img_lines)
+        with self.assertRaises(FidelityError):
+            export_precheck(no_ct, chosen)

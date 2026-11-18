@@ -6,7 +6,9 @@
 from __future__ import annotations
 
 import io
+import xml.etree.ElementTree as ET
 from typing import Literal
+from zipfile import BadZipFile
 
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.http import FileResponse, Http404
@@ -98,14 +100,19 @@ def build_export(user, version_id: str, payload: ExportIn):
                                ("confidence", row.confidence)):
                 if key in data and data[key] != value:
                     raise ExportError("result_value_conflict", "执行摘要与完整结果中的编码、结论或置信度冲突")
+            raw_issues = data.get("issues")
+            if raw_issues is None:
+                raw_issues = []
+            elif not isinstance(raw_issues, list):
+                raise ExportError("invalid_result", "执行完整结果中的 issues 必须是数组")
             lines.append(ExportLine(
                 item_id=str(item.pk), version_id=str(version.pk), run_id=str(run.pk),
                 sheet=item.source_sheet, row=item.source_row, suggested_hs=row.suggested_hs,
-                comparison_status=row.comparison_status or None, reason=data.get("comparison_reason", ""),
-                confidence=row.confidence, confidence_label=data.get("confidence_label", ""),
-                confidence_note=data.get("confidence_note", ""), status=row.status,
+                comparison_status=row.comparison_status or None, reason=data.get("comparison_reason") or "",
+                confidence=row.confidence, confidence_label=data.get("confidence_label") or "",
+                confidence_note=data.get("confidence_note") or "", status=row.status,
                 error_message=row.error_message,
-                issues=tuple(IssueEntry.model_validate(issue) for issue in data.get("issues", [])),
+                issues=tuple(IssueEntry.model_validate(issue) for issue in raw_issues),
             ))
         original = _read_original(user, version.pk)
         selection = ExportSelection(
@@ -121,7 +128,16 @@ def build_export(user, version_id: str, payload: ExportIn):
     except (ExportError, OoxmlError, FidelityError, ValidationError, ValueError) as exc:
         if isinstance(exc, ApiError):
             raise
-        raise ApiError(422, getattr(exc, "code", "export_validation_failed"), str(exc)) from exc
+        code = getattr(exc, "code", "export_validation_failed")
+        message = str(exc)
+        if code == "source_workbook_invalid":
+            # 解析层的异常文本可能是英文/带库细节，面向用户统一成同一句中文说明。
+            message = "原件工作簿中有无法解析的 XML 或 ZIP 部件，不能作为导出依据"
+        raise ApiError(422, code, message) from exc
+    except (ET.ParseError, BadZipFile) as exc:
+        # 兜底：原件里的 XML/ZIP 部件损坏是输入问题，不能变成 500（开发模式还会带堆栈）。
+        raise ApiError(422, "source_workbook_invalid",
+                       "原件工作簿中有无法解析的 XML 或 ZIP 部件，不能作为导出依据") from exc
 
 
 @router.post("/versions/{version_id}/exports", auth=session_auth)

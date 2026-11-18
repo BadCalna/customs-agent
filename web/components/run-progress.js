@@ -22,7 +22,7 @@ export function progressView(run) {
     (i.issues?.length || run.kind === "precheck" && i.comparison_status !== "consistent"));
   return {counts: {...p}, completed, percent: p.total ? Math.floor(completed * 100 / p.total) : null,
     failureIds, businessRows: businessRows.length,
-    active: run.is_current === true && ["queued", "running"].includes(run.status)};
+    active: ["queued", "running"].includes(run.status)};
 }
 
 function rowHtml(item, selected, retryEnabled, kind) {
@@ -76,7 +76,7 @@ export function renderRunProgress(host, state, {retryConnected = false} = {}) {
       ${view.counts.failed ? `<div class="p08-retry"><strong>技术失败 ${view.counts.failed} 项</strong><p>仅重试已返回的失败行，保留成功行及原失败记录。</p>
         <button class="p08-button" data-action="select-failed" ${canRetry ? "" : "disabled"}>选择可重试失败行</button>
         <button class="p08-button p08-primary" data-action="retry" ${canRetry && state.selected.length ? "" : "disabled"}>${state.retrying ? "正在提交重试…" : `重试所选 ${state.selected.length} 项`}</button>
-        ${!retryConnected ? '<p>重试入口待后台接通，当前未发送重试请求。</p>' : !state.retryAllowed ? '<p>当前未获得重试授权。</p>' : historical ? '<p>历史执行不能从这里重试。</p>' : view.active ? '<p>本轮仍在执行，结束后可重试失败行。</p>' : ""}</div>` : ""}
+        ${!retryConnected ? '<p>重试入口待后台接通：P13 重试接口与服务端授权能力尚未发布，当前未发送重试请求。</p>' : !state.retryAllowed ? '<p>当前未获得重试授权。</p>' : historical ? '<p>历史执行不能从这里重试。</p>' : view.active ? '<p>本轮仍在执行，结束后可重试失败行。</p>' : ""}</div>` : ""}
       ${state.retryError ? errorHtml(state.retryError) : ""}
       <ul class="p08-run-rows">${run.items.map(i => rowHtml(i, state.selected, canRetry, run.kind)).join("")}</ul>
       ${run.items.length < view.counts.total ? '<p class="p08-list-note">当前逐行明细未全部返回，计数仍以服务端汇总为准。</p>' : ""}` : ""}</section>`;
@@ -84,16 +84,16 @@ export function renderRunProgress(host, state, {retryConnected = false} = {}) {
 
 /** Context is mandatory; a parent version switch must call open() (even with no run). */
 export function createRunProgress(host, {client, onRetry = null, retryAllowed = false,
-  onSelectItem = () => {}, intervalMs = 2500, scheduler = globalThis} = {}) {
+  onSelectItem = () => {}, onStateChange = () => {}, intervalMs = 2500, scheduler = globalThis} = {}) {
   if (!host || !client?.getRun) throw new TypeError("需要容器和统一执行client");
   let state = {context: null, run: null, loading: false, error: null, retryError: null,
     retrying: false, retryAllowed: !!retryAllowed, selected: []};
   let alive = true, epoch = 0, request = 0, timer = null, retryIntent = null;
   const connected = typeof onRetry === "function";
-  const draw = () => { if (alive) renderRunProgress(host, state, {retryConnected: connected}); };
+  const draw = () => { if (alive) { renderRunProgress(host, state, {retryConnected: connected}); onStateChange({...state}); } };
   function clearTimer() { if (timer !== null) scheduler.clearTimeout(timer); timer = null; }
   function matches(run, context) {
-    return run?.run_id === context.runId && run.task_id === context.taskId && run.version_id === context.versionId;
+    return run?.run_id === context.runId && run.task_id === context.taskId && run.version_id === context.versionId && (!context.kind || run.kind === context.kind);
   }
   async function refresh() {
     if (!alive || !state.context?.runId || state.loading || state.retrying) return;
