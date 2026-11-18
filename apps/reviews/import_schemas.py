@@ -9,7 +9,7 @@ class ImportOut(Schema):
     task_id: str
     version_id: str
     version_number: int
-    parse_status: Literal["staged", "succeeded", "failed"]
+    parse_status: Literal["staged", "succeeded", "failed", "superseded"]
     sha256: str
     item_count: int
     member_count: int

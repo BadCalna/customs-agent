@@ -84,6 +84,7 @@ scripts/operations/drill.sh
 
 - 备份目录默认 `deploy/backups/<UTC时间戳>-<标签>/`，已被 Git 忽略；**不要**提交进仓库。
 - `incoming/` 暂存区不进备份：那是“上传已落暂存、事务未提交”的半成品。
+- 完整备份清单逐个核对 `ImportJob` 原件的正式存储路径和 SHA256；仍只在 `incoming/` 的导入会使备份保持 `INCOMPLETE`。失败旧版本在成功新版本导入时终结为 `superseded`，原件发布后仍纳入备份。
 - 恢复**不覆盖**正在用的库或文件目录；要回到旧数据请用“换指向”的方式（见 deploy/README.md 第 8.2 节）。
 - 任何脚本都不做降级迁移；结构回退靠备份 + 换库，不靠 `migrate --fake`。
 - macOS 自带 bash 3.2：脚本里变量紧跟中文时必须写 `${VAR}`，否则变量名会被认成包含中文字节。

@@ -245,6 +245,20 @@ def file_inventory(root: Path):
     return entries
 
 
+def validate_import_originals(files):
+    """A COMPLETE backup must contain every registered import original."""
+    from apps.reviews.models import ImportJob
+
+    archived = {entry["path"].replace("\\", "/"): entry["sha256"] for entry in files}
+    for job in ImportJob.objects.select_related("version").iterator():
+        path = job.version.storage_path
+        if not path or archived.get(path) != job.sha256:
+            raise ValueError(
+                f"导入原件未保全或哈希不符，拒绝标记完整备份: "
+                f"import_id={job.pk}, version_id={job.version_id}, status={job.status}"
+            )
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--files-root")
@@ -263,6 +277,7 @@ def main(argv=None):
         if root != Path(settings.CUSTOMS_FILE_ROOT).resolve():
             raise ValueError("实际 Django 文件根与请求目标不一致")
         files = file_inventory(root)
+        validate_import_originals(files)
         stat = root.stat()
         payload.update(file_root=str(root), file_identity={"path": str(root), "device": stat.st_dev, "inode": stat.st_ino},
                        files=files, file_count=len(files), file_bytes=sum(f["size"] for f in files))

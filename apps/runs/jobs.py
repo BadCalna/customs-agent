@@ -26,6 +26,13 @@ def perform_work(run_id):
             with transaction.atomic():
                 Task.objects.select_for_update().get(pk=run.task_id)
                 work = RunWork.objects.select_for_update().get(run=run)
+                # The lease can change after claim_work returns: a stalled
+                # worker may resume after recovery has handed the run to a
+                # newer worker.  Do not consume an attempt for that stale
+                # owner, or leave a running attempt with a dead token.
+                if (work.state != "running" or str(work.token) != str(token)
+                        or not work.lease_until or work.lease_until <= timezone.now()):
+                    return
                 exhausted = work.import_attempts >= settings.CUSTOMS_ROW_MAX_ATTEMPTS
                 if not exhausted:
                     work.import_attempts += 1
@@ -81,7 +88,8 @@ def perform_work(run_id):
 def _import_failed(run, token, error_code):
     Task.objects.select_for_update().get(pk=run.task_id)
     work = RunWork.objects.select_for_update().get(run=run)
-    if work.state != "running" or str(work.token) != token:
+    if (work.state != "running" or str(work.token) != token
+            or not work.lease_until or work.lease_until <= timezone.now()):
         return
     work.state = "pending" if work.import_attempts < settings.CUSTOMS_ROW_MAX_ATTEMPTS else "done"
     work.token, work.lease_until, work.dispatched_at = None, None, None
@@ -100,7 +108,7 @@ def _import_exhausted_if_owner(run, token, job):
     if (work.state != "running" or str(work.token) != str(token)
             or not work.lease_until or work.lease_until <= timezone.now()):
         return False
-    if locked_job.status == ImportJob.Status.SUCCEEDED:
+    if locked_job.status in (ImportJob.Status.SUCCEEDED, ImportJob.Status.SUPERSEDED):
         return False
     locked_job.status = ImportJob.Status.FAILED
     locked_job.error = {

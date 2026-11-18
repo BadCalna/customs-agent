@@ -159,22 +159,66 @@ class QueueTests(TestCase):
 
     def test_failed_import_allows_corrected_new_version(self):
         with tempfile.TemporaryDirectory() as root, override_settings(CUSTOMS_FILE_ROOT=Path(root)):
-            failed = imports.upload(self.supplier, filename="bad.xlsx", data=sample(missing_sheet=True), key="bad-upload")
+            first = imports.upload(self.supplier, filename="first.xlsx", data=sample(), key="first-upload")
+            self.drain(Run.objects.get(pk=first["precheck_run_id"]))
+            bad_data = sample(missing_sheet=True)
+            failed = imports.upload(
+                self.supplier, filename="bad.xlsx", data=bad_data, key="bad-upload",
+                task_id=first["task_id"], expected_current_version_id=first["version_id"],
+            )
             failed_run = Run.objects.get(pk=failed["precheck_run_id"])
             self.drain(failed_run)
-            self.assertEqual(ImportJob.objects.get(precheck=failed_run).status, ImportJob.Status.FAILED)
+            failed_job = ImportJob.objects.get(precheck=failed_run)
+            failed_version = FileVersion.objects.get(pk=failed["version_id"])
+            self.assertEqual(failed_job.status, ImportJob.Status.FAILED)
+            self.assertFalse(failed_version.storage_path)
+            from scripts.operations.table_counts import file_inventory, validate_import_originals
+            with self.assertRaisesRegex(ValueError, "导入原件未保全"):
+                validate_import_originals(file_inventory(Path(root)))
 
             corrected = imports.upload(
                 self.supplier,
                 filename="corrected.xlsx",
-                data=sample(),
+                data=sample(order=(3, 2, 1)),
                 key="corrected-upload",
                 task_id=failed["task_id"],
                 expected_current_version_id=failed["version_id"],
             )
-            self.assertEqual(corrected["version_number"], 2)
+            self.assertEqual(corrected["version_number"], 3)
             corrected_run = Run.objects.get(pk=corrected["precheck_run_id"])
             self.drain(corrected_run)
+            failed_job.refresh_from_db()
+            failed_version.refresh_from_db()
+            failed_run.refresh_from_db()
+            self.assertEqual(failed_job.status, ImportJob.Status.SUPERSEDED)
+            self.assertEqual(failed_job.error["code"], "superseded_version")
+            self.assertEqual(failed_job.error["replaced_by_version_id"], corrected["version_id"])
+            self.assertTrue(failed_version.storage_path)
+            self.assertTrue(Path(root, failed_version.storage_path).is_file())
+            self.assertFalse(Path(root, "incoming", f"{failed_job.stage_token}.xlsx").exists())
+            self.assertIn(failed_version.storage_path,
+                          {entry["path"].replace("\\", "/") for entry in file_inventory(Path(root))})
+            validate_import_originals(file_inventory(Path(root)))
+            altered_inventory = [entry.copy() for entry in file_inventory(Path(root))]
+            for entry in altered_inventory:
+                if entry["path"].replace("\\", "/") == failed_version.storage_path:
+                    entry["sha256"] = "0" * 64
+            with self.assertRaisesRegex(ValueError, "哈希不符"):
+                validate_import_originals(altered_inventory)
+            self.assertEqual(failed_run.status, Run.Status.SUPERSEDED)
+            self.assertFalse(RunAttempt.objects.filter(run=failed_run, status="running").exists())
+            replay = imports.upload(
+                self.supplier, filename="bad.xlsx", data=bad_data, key="bad-upload",
+                task_id=first["task_id"], expected_current_version_id=first["version_id"],
+            )
+            self.assertEqual(replay["parse_status"], ImportJob.Status.SUPERSEDED)
+            self.client.force_login(self.supplier)
+            detail = self.client.get(f"/api/v1/versions/{failed_version.pk}/import")
+            self.assertEqual(detail.status_code, 200)
+            self.assertEqual(detail.json()["parse_status"], ImportJob.Status.SUPERSEDED)
+            download = self.client.get(f"/api/v1/files/{failed_version.pk}")
+            self.assertEqual(download.status_code, 200)
+            self.assertEqual(download.content, bad_data)
             self.assertEqual(ImportJob.objects.get(precheck=corrected_run).status, ImportJob.Status.SUCCEEDED)
             self.assertEqual(corrected_run.status, Run.Status.SUCCEEDED)
 
@@ -219,8 +263,13 @@ class QueueTests(TestCase):
                 state="running",
                 token=current_token,
                 lease_until=timezone.now() + timedelta(minutes=5),
-                import_attempts=3,
+                import_attempts=2,
             )
+            for number in (1, 2):
+                RunAttempt.objects.create(
+                    run=run, number=number, token=uuid.uuid4(), input_hash=job.sha256,
+                    status="failed", error_code="parse_blocked", finished_at=timezone.now(),
+                )
             from apps.runs import jobs
             with patch.object(services, "claim_work", return_value=str(old_token)):
                 jobs.perform_work(str(run.pk))
@@ -230,6 +279,37 @@ class QueueTests(TestCase):
             self.assertEqual(job.status, ImportJob.Status.STAGED)
             self.assertEqual(run.status, Run.Status.QUEUED)
             self.assertEqual(work.token, current_token)
+            self.assertEqual(work.import_attempts, 2)
+            self.assertEqual(RunAttempt.objects.filter(run=run).count(), 2)
+            self.assertFalse(RunAttempt.objects.filter(run=run, status="running").exists())
+            RunWork.objects.filter(run=run).update(state="pending", token=None, lease_until=None)
+            jobs.perform_work(str(run.pk))
+            job.refresh_from_db()
+            work.refresh_from_db()
+            self.assertEqual(job.status, ImportJob.Status.SUCCEEDED)
+            self.assertEqual(work.import_attempts, 3)
+            self.assertEqual(RunAttempt.objects.filter(run=run).count(), 3)
+            self.assertEqual(RunAttempt.objects.filter(run=run, status="succeeded").count(), 1)
+            self.assertFalse(RunAttempt.objects.filter(run=run, status="running").exists())
+
+    def test_expired_import_lease_cannot_consume_last_attempt(self):
+        with tempfile.TemporaryDirectory() as root, override_settings(CUSTOMS_FILE_ROOT=Path(root)):
+            result = imports.upload(self.supplier, filename="synthetic.xlsx", data=sample(), key="expired-last")
+            run = Run.objects.get(pk=result["precheck_run_id"])
+            token = uuid.uuid4()
+            RunWork.objects.filter(run=run).update(
+                state="running", token=token, import_attempts=2,
+                lease_until=timezone.now() - timedelta(seconds=1),
+            )
+            with patch.object(services, "claim_work", return_value=str(token)):
+                perform_work(str(run.pk))
+            self.assertEqual(RunWork.objects.get(run=run).import_attempts, 2)
+            self.assertFalse(RunAttempt.objects.filter(run=run).exists())
+            self.assertEqual(dispatch.recover_expired(), 1)
+            self.drain(run)
+            self.assertEqual(ImportJob.objects.get(precheck=run).status, ImportJob.Status.SUCCEEDED)
+            self.assertEqual(RunWork.objects.get(run=run).import_attempts, 3)
+            self.assertFalse(RunAttempt.objects.filter(run=run, status="running").exists())
 
     def test_publish_rollback_receipt_allows_same_import_retry(self):
         from apps.accounts.errors import ApiError

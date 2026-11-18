@@ -479,6 +479,7 @@ class ImportJob(models.Model):
         STAGED = "staged", "已暂存"
         SUCCEEDED = "succeeded", "解析成功"
         FAILED = "failed", "处理失败"
+        SUPERSEDED = "superseded", "已由新版本替代"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     version = models.OneToOneField(FileVersion, on_delete=models.CASCADE, related_name="import_job")

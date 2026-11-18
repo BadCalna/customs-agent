@@ -21,7 +21,7 @@ from apps.accounts.models import Role, User
 from apps.accounts.permissions import UPLOAD_VERSION, _require_authenticated, get_visible_task, require_action
 from apps.reviews.models import AuditEvent, FileVersion, ImportJob, Item, ItemImage, ItemMember, Submission, Task
 from apps.runs.inline import execute_precheck
-from apps.runs.models import Run
+from apps.runs.models import Run, RunAttempt, RunWork
 from . import files, idempotency
 from .claims import validate_key
 
@@ -83,6 +83,70 @@ def parse(data, filename):
     if issues:
         raise ApiError(422, "parse_blocked", "模板含阻断问题，请按来源位置修正", {"issues": issues})
     return mapping
+
+
+def _supersede_failed_imports(task, replacement):
+    """Close failed predecessor imports while retaining their source files.
+
+    Failed imports are durable history. Once a newer version is accepted they
+    can no longer be resumed, but their uploaded originals must still be
+    published outside ``incoming/`` so a complete backup contains the same
+    evidence as the database history.
+    """
+    failed_jobs = (ImportJob.objects.select_for_update()
+                   .select_related("version", "precheck")
+                   .filter(version__task=task, status=ImportJob.Status.FAILED,
+                           version__number__lt=replacement.number)
+                   .order_by("version__number"))
+    for job in failed_jobs:
+        version = job.version
+        if not version.storage_path:
+            version = files.publish_staged_version_original(
+                version, job.stage_token, filename=version.original_filename,
+            )
+        try:
+            stored_sha = storage.file_sha256(files.storage_root(), version.storage_path)
+        except storage.StorageError as exc:
+            raise ApiError(
+                409, "storage_conflict",
+                "旧失败版本原件无法核对，拒绝在未保全原件前替代该版本",
+                {"version_id": str(version.pk)},
+            ) from exc
+        if stored_sha != job.sha256:
+            raise ApiError(
+                409, "storage_conflict",
+                "旧失败版本原件与上传登记不一致，拒绝在未保全原件前替代该版本",
+                {"version_id": str(version.pk)},
+            )
+
+        previous_error = job.error
+        job.status = ImportJob.Status.SUPERSEDED
+        job.error = {
+            "code": "superseded_version",
+            "message": "该失败版本已由更新版本替代，保留原件供历史回查",
+            "replaced_by_version_id": str(replacement.pk),
+            "replaced_by_version_number": replacement.number,
+            "previous_error": previous_error,
+        }
+        job.save(update_fields=["status", "error", "updated_at"])
+
+        run = Run.objects.select_for_update().get(pk=job.precheck_id)
+        run.status, run.is_current, run.finished_at = Run.Status.SUPERSEDED, False, timezone.now()
+        run.save(update_fields=["status", "is_current", "finished_at"])
+        work = RunWork.objects.select_for_update().filter(run=run).first()
+        if work is not None:
+            work.state = "done"
+            work.token, work.lease_until, work.dispatched_at = None, None, None
+            work.last_error = "import_superseded"
+            work.save(update_fields=["state", "token", "lease_until", "dispatched_at", "last_error", "updated_at"])
+        RunAttempt.objects.filter(run=run, status="running").update(
+            status="superseded", finished_at=timezone.now(), error_code="import_superseded",
+        )
+        AuditEvent.objects.create(
+            task=task, version=version, actor=version.uploaded_by,
+            action="import.superseded",
+            details={"import_id": str(job.pk), "replacement_version_id": str(replacement.pk)},
+        )
 
 
 def upload(user, *, filename, data, key, task_id=None, expected_current_version_id=None, confirm_duplicate=False):
@@ -164,6 +228,8 @@ def queue_import(job_id, *, replay=False):
     initial = ImportJob.objects.select_related("version").get(pk=job_id)
     Task.objects.select_for_update().get(pk=initial.version.task_id)
     job = ImportJob.objects.select_for_update().select_related("version__task", "precheck").get(pk=job_id)
+    if job.status == ImportJob.Status.SUPERSEDED:
+        return import_response(job, replay=True)
     work = register_run(job.precheck)
     work = RunWork.objects.select_for_update().get(pk=work.pk)
     if job.status != "succeeded" and job.version.task.versions.filter(number__gt=job.version.number).exists():
@@ -195,6 +261,8 @@ def finish_import(job_id, *, replay=False, mapping=None, defer_precheck=False, w
                 if (work.state != "running" or str(work.token) != str(worker_token)
                         or not work.lease_until or work.lease_until <= timezone.now()):
                     raise ImportWorkerFenced("import worker lease is no longer current")
+            if job.status == ImportJob.Status.SUPERSEDED:
+                return import_response(job, replay=True)
             if job.status != ImportJob.Status.SUCCEEDED:
                 if task.versions.filter(number__gt=job.version.number).exists():
                     raise ApiError(409, "stale_version", "旧版本导入不能覆盖当前版本")
@@ -251,6 +319,7 @@ def finish_import(job_id, *, replay=False, mapping=None, defer_precheck=False, w
                 job.error = {}
                 job.status = ImportJob.Status.SUCCEEDED
                 job.save(update_fields=["report", "error", "status", "updated_at"])
+                _supersede_failed_imports(task, version)
                 task.stage = Task.Stage.PRECHECKING if defer_precheck else Task.Stage.AWAITING_CONFIRMATION
                 task.save(update_fields=["stage", "updated_at"])
                 AuditEvent.objects.create(task=task, version=version, actor=version.uploaded_by, action="import.succeeded",
@@ -272,7 +341,7 @@ def finish_import(job_id, *, replay=False, mapping=None, defer_precheck=False, w
                 if (work.state != "running" or str(work.token) != str(worker_token)
                         or not work.lease_until or work.lease_until <= timezone.now()):
                     raise ImportWorkerFenced("import worker lease is no longer current") from exc
-            if current.status == ImportJob.Status.SUCCEEDED:
+            if current.status in (ImportJob.Status.SUCCEEDED, ImportJob.Status.SUPERSEDED):
                 return import_response(current, replay=True)
             current.status, current.error = ImportJob.Status.FAILED, error
             current.save(update_fields=["status", "error", "updated_at"])
