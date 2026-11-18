@@ -58,6 +58,7 @@ class Sheet:
         self.name = name
         self.cells: dict[str, str] = {}
         self.merges: list[str] = []
+        self.hidden_rows: set[int] = set()
         self.dimension: str | None = None
         self.extra = ""
         self.drawing_rel: str | None = None
@@ -89,7 +90,9 @@ class Sheet:
             row = int("".join(ch for ch in ref if ch.isdigit()))
             rows.setdefault(row, []).append(xml)
         body = "".join(
-            f'<row r="{number}">{"".join(rows[number])}</row>' for number in sorted(rows)
+            f'<row r="{number}"{" hidden=\"1\"" if number in self.hidden_rows else ""}>'
+            f'{"".join(rows[number])}</row>'
+            for number in sorted(rows)
         )
         extra = ""
         if self.merges:

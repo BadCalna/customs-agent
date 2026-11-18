@@ -15,6 +15,8 @@ BASE_DIR = Path(settings.BASE_DIR)
 MODULE_PATHS = (
     BASE_DIR / "adapters" / "sources" / "history_search.py",
     BASE_DIR / "adapters" / "sources" / "history_import.py",
+    BASE_DIR / "adapters" / "sources" / "history_consolidated.py",
+    BASE_DIR / "adapters" / "sources" / "history_publish.py",
 )
 
 #: history_search.py 的允许清单（保持严格：不因导入模块而放松）。
@@ -41,13 +43,34 @@ IMPORT_ALLOWED_TOP_LEVEL = SEARCH_ALLOWED_TOP_LEVEL | {
     "hashlib",
     "sys",
     "traceback",
+    "shutil",
+    "tempfile",
     "adapters",
     "django",
+}
+
+CONSOLIDATED_ALLOWED_TOP_LEVEL = {
+    "__future__",
+    "collections",
+    "dataclasses",
+    "hashlib",
+    "json",
+    "pathlib",
+    "re",
+    "typing",
+    "xml",
+    "zipfile",
+    "adapters",
 }
 
 MODULE_ALLOWED = {
     BASE_DIR / "adapters" / "sources" / "history_search.py": SEARCH_ALLOWED_TOP_LEVEL,
     BASE_DIR / "adapters" / "sources" / "history_import.py": IMPORT_ALLOWED_TOP_LEVEL,
+    BASE_DIR / "adapters" / "sources" / "history_consolidated.py": CONSOLIDATED_ALLOWED_TOP_LEVEL,
+    BASE_DIR / "adapters" / "sources" / "history_publish.py": {
+        "__future__", "os", "shutil", "stat", "time", "uuid", "contextlib", "hashlib",
+        "pathlib", "typing", "fcntl", "msvcrt",
+    },
 }
 
 #: 明确不允许出现的能力：向量库、网络客户端、模型 SDK、科学计算栈。
