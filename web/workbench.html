@@ -1530,7 +1530,7 @@ function viewTask(role, t, lineId){
       :`<button class="btn" data-act="batch-return">${svg('arrowL',14)} 整批退回</button>
         <button class="btn primary" data-act="batch-pass" ${allPassed?'':'disabled'} title="${allPassed?'':'全部商品通过后才可整批确认'}">${svg('check',14)} 整批确认</button>`)
     :(t.submitted?`<span class="tag">已提交快照</span>`
-      :t.prechecked?`<button class="btn" data-act="export">${svg('download',14)} 导出补料清单</button>
+      :t.prechecked?`${exportControl()}
         <button class="btn" data-act="reprecheck" title="手动重新预审当前版本">${svg('refresh',14)} 重新预审</button>
         ${unconf?`<span class="tag warn">${svg('alert',11)} 还有 ${unconf} 条待确认</span>`:''}
         <button class="btn primary" data-act="open-submit" data-task="${t.id}" ${unconf?'disabled title="还有 '+unconf+' 条待确认，确认后才能整批提交"':''}>${svg('arrowR',14)} 提交专家审核</button>`
@@ -2068,7 +2068,7 @@ document.addEventListener('click',e=>{
     render();toast('整批确认，已形成专家确认版本');return;
   }
   if(act==='batch-return'){toast('退回需逐条指定对象与问题（原型演示）');return;}
-  if(act==='export'){exportCsv();return;}
+  if(act==='export'){exportUnavailable();return;}
   if(act==='reset-demo'){S=seed();S.role=null;closeModal();go('');render();return;}
 });
 
@@ -2117,19 +2117,19 @@ function assignDemoResults(t){
 }
 
 /* ---------------------------- 导出 & toast ---------------------------- */
-function exportCsv(){
-  const r=parseRoute();const t=task(r.b||(S.ui&&S.ui.task));
-  if(!t){toast('未定位到任务，导出取消');return;}
-  const head=['合同号','项号','主品名','别名','规格','供应商海关编码','AI推荐HScode','预审结论','预审置信度','待审HS','专家结论','备注'];
-  const rows=t.lines.map(l=>[t.contract,l.no,l.name,l.alias,l.spec,l.supplierCode||'',l.aiCode||'',
-    l.verdict?VERDICT[l.verdict].label:'',l.verdictConf?CONF[l.verdictConf]:'',
-    l.decision?(l.decision.code||'待补料'):'',l.expert&&l.expert.result?(l.expert.result==='pass'?'通过':'退回'):'',(l.aiGap||'').replace(/\s+/g,' ')]);
-  const csv=[head,...rows].map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\r\n');
-  const blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'});
-  const a=document.createElement('a');a.href=window.URL.createObjectURL(blob);
-  a.download=`${t.contract}_预审结论_${t.id}.csv`;document.body.appendChild(a);a.click();a.remove();
-  setTimeout(()=>window.URL.revokeObjectURL(a.href),2000);
-  toast('已导出预审结论（原型为 CSV，正式版需插列保真写回原表）');
+/* 本页是原型数据模型：任务与商品行都由 mapDataset() 生成，没有真实的 version_id /
+   run_id / submission_id，因此无法组成契约要求的“结果集属于请求版本”的导出请求。
+   这里只说明现状，绝不生成 CSV/XLSX 之类的假文件、也不提示导出成功。 */
+const EXPORT_MOVED='导出入口已迁移到上传/任务页（/uploads/、/tasks/）：本页是原型数据，没有可引用的真实执行';
+function exportControl(){
+  if(window.WB_MODE==='live')
+    return `<button class="btn" disabled aria-disabled="true" title="${EXPORT_MOVED}">${svg('download',14)} 导出补料清单</button>
+      <span class="tag">导出已迁至上传/任务页</span>`;
+  return `<button class="btn" data-act="export" title="样例模式不生成文件">${svg('download',14)} 导出补料清单</button>`;
+}
+function exportUnavailable(){
+  if(window.WB_MODE==='live'){toast(EXPORT_MOVED);return;}
+  toast('样例模式（FIXTURE/DEMO）不可导出真实文件；请在 LIVE 模式的上传/任务页导出 xlsx');
 }
 let toastTimer=null;
 function toast(msg,undo){

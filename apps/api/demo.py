@@ -11,6 +11,10 @@ Django 开发服务器只会自动服务 app 内部的 ``static/`` 目录，而�
 三者都只读、只接受白名单后缀，并且把请求路径 resolve 之后校验仍位于允许的根目录
 内，避免 ``../`` 穿越读到仓库其他文件。演示壳不写数据库、不校验业务权限，只用于
 查看组件形状；接口是否可用以 live 端点的响应为准。
+
+正式 /workbench/ 与 /uploads/ 以及 /workbench/assets/ 白名单不依赖 DEBUG；
+页面不包含账号或业务资料，所有数据和写动作仍由 session API 校验。
+原型/fixture 入口继续只在开发模式提供。
 """
 from pathlib import Path
 
@@ -29,9 +33,9 @@ CONTENT_TYPES = {
 }
 
 
-def _served_file(root: Path, relative: str) -> FileResponse:
+def _served_file(root: Path, relative: str, *, formal: bool = False) -> FileResponse:
     """把仓内相对路径变成响应，越界或后缀不合法一律 404。"""
-    if not settings.DEBUG:
+    if not settings.DEBUG and not formal:
         # 演示壳含演示账号与本地样例，只在开发模式可用；生产由正式页面替代。
         raise Http404("演示壳只在开发模式可用")
     relative = relative or ""
@@ -57,8 +61,27 @@ def demo_index(request):
 
 
 def workbench_index(request):
-    """正式工作台前端（定稿 UI），数据经 /api/v1 或契约样例加载。"""
-    return _served_file(WEB_ROOT, "workbench.html")
+    """正式入口只用真实会话/API；显式样例模式保留在 DEBUG 环境。"""
+    if request.GET.get("mode") in ("demo", "fixture"):
+        return _served_file(WEB_ROOT, "workbench.html")
+    return _served_file(WEB_ROOT, "workbench-live.html", formal=True)
+
+
+# Public static resources contain no data or demo accounts. APIs still enforce session/object scope.
+WORKBENCH_ASSETS = frozenset((
+    "api.js", "state.js", "workbench-context.js", "workbench-live.js", "styles.css",
+    "components/task-list.js", "components/run-progress.js", "components/export-actions.js",
+    "components/commodity-list.js", "components/commodity-card.js", "components/hs-comparison.js",
+    "components/review-actions.js", "styles/commodity.css", "styles/review-actions.css",
+    "pages/p06.js", "styles/p06.css",
+    "styles/tasks.css", "styles/workbench-live.css",
+))
+
+
+def workbench_asset(request, path: str):
+    if path not in WORKBENCH_ASSETS:
+        raise Http404("工作台资源不存在")
+    return _served_file(WEB_ROOT, path, formal=True)
 
 
 def demo_asset(request, path: str):
@@ -72,5 +95,10 @@ def demo_fixture(request, path: str):
 
 
 def upload_index(request):
-    """P06 开发验收入口，仅 live API。"""
-    return _served_file(WEB_ROOT, "pages/p06.html")
+    """P06 真实上传与认领入口，仅 live API（正式入口，不依赖 DEBUG）。"""
+    return _served_file(WEB_ROOT, "pages/p06.html", formal=True)
+
+
+def tasks_index(request):
+    """P08 独立只读任务列表与运行进度开发验收入口（DEBUG=True 时可用）。"""
+    return _served_file(WEB_ROOT, "pages/p08.html")

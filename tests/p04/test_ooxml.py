@@ -225,6 +225,20 @@ class PackageTest(unittest.TestCase):
         self.assertEqual(sheet.cells["B1"].value, "富文本")
         self.assertEqual(sheet.cells["C1"].value, "共享文本")
 
+    def test_invalid_drawing_coordinate_raises_ooxml_error_instead_of_value_error(self):
+        for bad_col in ("--5", "²"):
+            with self.subTest(bad_col=bad_col):
+                package = standard_package()
+                package.image("xl/media/image9.png", png(b"\xff\x00\x00"))
+                bad_drawing = drawing_with_anchor("xl/media/image9.png", row=4, column=6).replace(
+                    "<xdr:col>6</xdr:col>", f"<xdr:col>{bad_col}</xdr:col>", 1
+                )
+                package.attach_drawing("节点①申报要素", bad_drawing, "xl/media/image9.png")
+                workbook = Workbook.open(self.build(package))
+                with self.assertRaises(OoxmlError) as caught:
+                    workbook.picture_anchors()
+                self.assertEqual(caught.exception.code, "invalid_drawing_coordinate")
+
 
 if __name__ == "__main__":
     unittest.main()

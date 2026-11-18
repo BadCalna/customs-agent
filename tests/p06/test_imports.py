@@ -323,9 +323,9 @@ class ImportTests(TestCase):
         response=self.client.get("/uploads/")
         self.assertEqual(response.status_code,200)
         content=b"".join(response.streaming_content).decode()
-        self.assertIn("LIVE API",content);self.assertIn("/demo/assets/pages/p06.js",content)
+        self.assertIn("LIVE API",content);self.assertIn("/workbench/assets/pages/p06.js",content)
         for asset in ("pages/p06.js","styles/p06.css"):
-            self.assertEqual(self.client.get("/demo/assets/"+asset).status_code,200)
+            self.assertEqual(self.client.get("/workbench/assets/"+asset).status_code,200)
 
     def test_key_required_and_invalid_upload_errors_are_json(self):
         self.client.force_login(self.supplier)
