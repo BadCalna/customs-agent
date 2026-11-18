@@ -378,30 +378,130 @@ def _publish_lock(out_root: Path) -> Iterator[None]:
         rlock.release()
 
 
+def _read_release_json(path: Path) -> dict[str, Any]:
+    try:
+        payload = read_json(path)
+    except (OSError, ValueError, UnicodeError) as exc:
+        raise PublishError(f"发布元数据不可读：{path.name}") from exc
+    if not isinstance(payload, dict):
+        raise PublishError(f"发布元数据必须是对象：{path.name}")
+    return payload
+
+
+def _release_metadata(release_dir: Path, *, require_pointer: bool = False) -> dict[str, Any]:
+    release = _read_release_json(release_dir / "release.json")
+    if release.get("schema_version") != RELEASE_SCHEMA_VERSION:
+        raise PublishError("发布元数据 schema_version 不受支持")
+    if release.get("release_id") != release_dir.name:
+        raise PublishError("发布元数据 release_id 与目录不匹配")
+    for field_name in ("release_fingerprint", "business_fingerprint"):
+        value = release.get(field_name)
+        if not isinstance(value, str) or not __import__("re").fullmatch(r"[0-9a-f]{64}", value):
+            raise PublishError(f"发布元数据 {field_name} 非法")
+    expected_id = f"rel-{str(release.get('snapshot_id', '')).split('-')[-1]}-{release['release_fingerprint'][:12]}"
+    if expected_id != release_dir.name:
+        raise PublishError("发布指纹、快照与 release 目录不匹配")
+    pointer = release_dir / ".current.json"
+    if pointer.exists() or pointer.is_symlink():
+        if pointer.is_symlink():
+            raise PublishError("release 内的 .current.json 不得为软链")
+        meta = _read_release_json(pointer)
+        for field_name in ("release_id", "release_fingerprint", "business_fingerprint", "review_status"):
+            if meta.get(field_name) != release.get(field_name):
+                raise PublishError(f".current.json 的 {field_name} 与发布元数据不匹配")
+    elif require_pointer:
+        raise PublishError("当前 release 缺少 .current.json")
+    return release
+
+
+def _validate_activation_target(release_dir: Path) -> dict[str, Any]:
+    """提交前校验完整发布物；不得把损坏版本通过 activate 绕过发布门。"""
+
+    release = _release_metadata(release_dir)
+    if release.get("dataset_kind") != DatasetKind.REAL.value:
+        raise PublishError("激活目标必须是真实数据发布")
+    review = release.get("review")
+    expected_review_status = "reviewed" if review is not None else "unreviewed"
+    if release.get("review_status") != expected_review_status:
+        raise PublishError("发布复核状态与复核记录不匹配")
+    if review is not None and (
+        not isinstance(review, dict) or review.get("decision") != "approved"
+        or not visible_text(review.get("reviewed_by"))
+        or not is_iso_datetime(review.get("reviewed_at"))
+        or not isinstance(review.get("scope"), list)
+    ):
+        raise PublishError("发布复核记录非法")
+    files = release.get("files")
+    if not isinstance(files, dict) or not files:
+        raise PublishError("发布元数据缺少非空 files")
+    output_fingerprints = {}
+    for name, info in files.items():
+        try:
+            dataset = DatasetId(name)
+        except ValueError as exc:
+            raise PublishError(f"未知发布数据类别：{name}") from exc
+        if not isinstance(info, dict) or info.get("file") != dataset.filename:
+            raise PublishError(f"发布文件映射不合法：{name}")
+        path = release_dir / dataset.filename
+        try:
+            if path.is_symlink() or not path.is_file():
+                raise PublishError(f"发布数据文件缺失或不是普通文件：{name}")
+            if path.stat().st_size != info.get("bytes") or sha256_file(path) != info.get("sha256"):
+                raise PublishError(f"发布数据文件 SHA-256/字节数不匹配：{name}")
+            payload = _read_release_json(path)
+        except OSError as exc:
+            raise PublishError(f"发布数据文件不可读：{name}") from exc
+        dataset_meta = payload.get("dataset")
+        if not isinstance(dataset_meta, dict) or dataset_meta.get("synthetic") is not False:
+            raise PublishError(f"发布数据性质与真实批次不匹配：{name}")
+        scope = review.get("scope", []) if review else []
+        reviewed = review is not None and (not scope or name in scope)
+        expected = "reviewed" if reviewed else "unreviewed"
+        if dataset_meta.get("review_status") != expected or info.get("review_status") != expected:
+            raise PublishError(f"发布文件复核状态与发布元数据不匹配：{name}")
+        if reviewed and (
+            dataset_meta.get("reviewed_by") != review["reviewed_by"]
+            or dataset_meta.get("reviewed_at") != review["reviewed_at"]
+        ):
+            raise PublishError(f"发布文件复核人与时间不匹配：{name}")
+        output_fingerprints[name] = fingerprint(payload)
+    calculated = fingerprint({
+        "snapshot_business_fingerprint": release["business_fingerprint"],
+        "converter_version": release.get("converter_version"),
+        "review": release.get("review"),
+        "outputs": output_fingerprints,
+    })
+    if calculated != release["release_fingerprint"]:
+        raise PublishError("发布元数据与内容的 release_fingerprint 不匹配")
+    return release
+
+
 def _active_release_id(out_root: Path) -> str | None:
-    """从单一权威指针 ``published/current`` 解析当前激活的 release_id。
+    """只解析一次 current，随后只读固定 release 目录，不再穿过 current.json。"""
 
-    ``current.json`` 通过软链 ``current/.current.json`` 派生自 ``current``；
-    若外部篡改导致 ``current.json`` 与 ``current`` 指向不同版本，立即报 PublishError。
-    """
-
-    published_dir = out_root / "published"
-    pointer = published_dir / "current.json"
-    link = published_dir / "current"
-    link_id: str | None = None
-    if link.is_symlink():
-        link_id = Path(os.readlink(link)).name or None
-    pointer_id: str | None = None
-    if pointer.is_file():
-        payload = read_json(pointer)
-        if isinstance(payload, Mapping):
-            pointer_id = visible_text(payload.get("release_id")) or None
-    if pointer_id and link_id and pointer_id != link_id:
-        raise PublishError(
-            f"当前版本指针不一致：current.json 指向 {pointer_id}，"
-            f"current 软链指向 {link_id}；请先用 activate 显式指定版本"
-        )
-    return link_id or pointer_id
+    link = out_root / "published" / "current"
+    pointer = out_root / "published" / "current.json"
+    # 只校验派生路径的链接结构，不读取经 current 跳转的内容，避免双读竞态。
+    try:
+        pointer_target = os.readlink(pointer)
+    except OSError as exc:
+        if link.is_symlink():
+            raise PublishError("current.json 必须是 current/.current.json 的派生软链；可用 activate 修复") from exc
+    else:
+        if pointer_target != os.path.join("current", ".current.json"):
+            raise PublishError("current.json 的派生软链目标不合法；可用 activate 修复")
+    try:
+        target = os.readlink(link)
+    except FileNotFoundError:
+        return None
+    except OSError as exc:
+        raise PublishError("current 必须是发布目录软链") from exc
+    release_id = Path(target).name
+    if not _RELEASE_ID.fullmatch(release_id) or target != os.path.join("releases", release_id):
+        raise PublishError("current 的发布目录目标不合法")
+    release_dir = out_root / "published" / "releases" / release_id
+    _release_metadata(release_dir, require_pointer=True)
+    return release_id
 
 
 def _current_release_dir(out_root: Path) -> Path | None:
@@ -655,7 +755,7 @@ def _activate(
         release_dir = releases_dir / release_id
         if not release_dir.is_dir():
             raise PublishError(f"release 不存在：{release_id}")
-        release = read_json(release_dir / "release.json")
+        release = _validate_activation_target(release_dir)
         published_dir = out_root / "published"
         published_dir.mkdir(parents=True, exist_ok=True)
         pointer = published_dir / "current.json"
@@ -778,7 +878,9 @@ def activate_release(out_root: str | Path, release_id: str) -> dict[str, Any]:
     root = Path(out_root)
     with _publish_lock(root):
         event, result = _activate(root, release_id)
-        current = dict(read_json(root / "published" / "current.json"))
+        current = dict(_read_release_json(
+            root / "published" / "releases" / release_id / ".current.json"
+        ))
         current["activation_event_id"] = event["event_id"]
         if result.get("audit_warning"):
             current["audit_warning"] = result["audit_warning"]
