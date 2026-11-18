@@ -4,7 +4,7 @@ from ninja import NinjaAPI, Schema
 
 from apps.accounts.api import install_error_handlers
 from apps.accounts.api import router as accounts_router
-from apps.api.demo import demo_asset, demo_fixture, demo_index, workbench_index, upload_index
+from apps.api.demo import demo_asset, demo_fixture, demo_index, production_asset, production_index, workbench_index, upload_index
 from apps.api.not_implemented import router as pending_router
 from apps.reviews.api.confirmations import router as confirmations_router
 from apps.reviews.api.decisions import router as decisions_router
@@ -40,6 +40,8 @@ api_v1.add_router("", runs_router)
 api_v1.add_router("", pending_router)
 
 urlpatterns = [
+    path("", production_index, name="production-index"),
+    path("app/assets/<path:path>", production_asset, name="production-asset"),
     path("admin/", admin.site.urls),
     path("api/v1/", api_v1.urls),
     path("api/", api.urls),

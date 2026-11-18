@@ -536,6 +536,11 @@ body.prod .upload-grid{grid-template-columns:1fr}
 .phase-step.done,.phase-step.active{color:var(--ink-2)}
 .phase-step::after{content:"";flex:1;height:1px;background:var(--line);margin:0 4px}
 .phase-step:last-child::after{display:none}
+.ai-thinking-banner{display:flex;align-items:center;gap:9px;padding:9px 12px;margin-bottom:14px;border:1px solid var(--teal-line);border-radius:var(--r);background:var(--teal-bg);color:var(--teal)}
+.ai-thinking-mark{width:8px;height:8px;display:block;flex:none;border-radius:50%;background:var(--teal-3);animation:ai-pulse 1.2s ease-in-out infinite}
+.ai-thinking-banner strong{font-size:12px;font-weight:600}
+@keyframes ai-pulse{0%,100%{opacity:.35;transform:scale(.8)}50%{opacity:1;transform:scale(1)}}
+@media (prefers-reduced-motion:reduce){.ai-thinking-mark{animation:none}}
 
 /* ---------- 杂项 ---------- */
 .empty{padding:36px 16px;text-align:center;font-size:12px;color:var(--ink-4)}
@@ -1839,6 +1844,7 @@ function modalAutoPrecheck(t,fileName){
         <div class="phase-step" data-phase="1"><span class="dot">2</span>提取商品与附图</div>
         <div class="phase-step" data-phase="2"><span class="dot">3</span>自动预审</div>
       </div>
+      <div class="ai-thinking-banner" role="status" aria-live="polite"><span class="ai-thinking-mark" aria-hidden="true"></span><strong>AI 思考中...</strong></div>
       <div class="callout info" style="margin-bottom:14px">${svg('zap',14,'ic')}<div>解析成功后<b>自动触发</b>：对每条商品先按商品事实独立推荐 HS，再与供应商原码比较，写入「AI推荐HScode」「预审结论」两列，原码不动。</div></div>
       <div class="bar" style="margin-bottom:14px"><i id="run-bar" style="width:0%"></i></div>
       <div id="run-list">${t.lines.map(l=>`<div class="run-row" data-run="${l.id}">

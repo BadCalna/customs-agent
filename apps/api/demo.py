@@ -74,3 +74,24 @@ def demo_fixture(request, path: str):
 def upload_index(request):
     """P06 开发验收入口，仅 live API。"""
     return _served_file(WEB_ROOT, "pages/p06.html")
+
+
+def production_index(request):
+    return _production_file("production.html")
+
+
+def production_asset(request, path: str):
+    allowed = {"production.js", "production.css", "api.js"}
+    if path not in allowed:
+        raise Http404("资源不存在")
+    return _production_file(path)
+
+
+def _production_file(relative: str):
+    candidate = (WEB_ROOT / relative).resolve()
+    if not candidate.is_relative_to(WEB_ROOT.resolve()) or not candidate.is_file():
+        raise Http404("资源不存在")
+    response = FileResponse(candidate.open("rb"), content_type=CONTENT_TYPES[candidate.suffix])
+    response["Cache-Control"] = "private, no-store"
+    response["X-Content-Type-Options"] = "nosniff"
+    return response

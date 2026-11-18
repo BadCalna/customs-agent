@@ -16,7 +16,7 @@ class ImportOut(Schema):
     image_counts: dict[str, int]
     precheck_run_id: str
     precheck_status: str
-    result_mode: Literal["mock"]
+    result_mode: Literal["mock", "live"]
     executor_mode: Literal["inline", "rq"]
     assignment_status: Literal["claimed", "unclaimed"]
     original_download_url: str

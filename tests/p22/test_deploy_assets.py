@@ -112,7 +112,7 @@ class ComposeTests(unittest.TestCase):
         self.app = mapping(self.top["x-app"], 2)
 
     def test_required_services_and_only_web_ports(self):
-        self.assertTrue({"db", "app", "migrate", "web"} <= self.services.keys())
+        self.assertTrue({"db", "app", "migrate", "web", "redis", "worker", "dispatcher"} <= self.services.keys())
         published = [name for name, block in self.services.items() if "ports" in mapping(block, 4)]
         self.assertEqual(published, ["web"])
         self.assertIn("pgdata:/var/lib/postgresql/data", self.services["db"])
@@ -121,7 +121,7 @@ class ComposeTests(unittest.TestCase):
 
     def test_persistent_volumes_and_migrate_order(self):
         self.assertTrue({"pgdata", "files", "static"} <= mapping(self.top["volumes"], 2).keys())
-        for name in ("migrate", "app", "worker"):
+        for name in ("migrate", "app", "worker", "dispatcher"):
             self.assertIn("files:/srv/customs", self.services[name])
         self.assertIn("CUSTOMS_FILE_ROOT:-/srv/customs/files", self.app["environment"])
         self.assertIn("service_completed_successfully", self.services["app"])
@@ -151,9 +151,16 @@ class ComposeTests(unittest.TestCase):
                 self.assertGreaterEqual(seconds, 135 if name in {"app", "migrate", "worker", "web"} else 60)
                 self.assertLessEqual(seconds, 180)
 
-    def test_queue_remains_opt_in(self):
-        for name in ("worker", "redis"):
-            self.assertIn('profiles: ["queue"]', self.services[name])
+    def test_queue_services_start_with_app(self):
+        for name in ("worker", "redis", "dispatcher"):
+            self.assertNotIn("profiles:", self.services[name])
+        self.assertIn("CUSTOMS_EXECUTOR_MODE: rq", self.app["environment"])
+        self.assertIn("CUSTOMS_REDIS_URL: redis://redis:6379/0", self.app["environment"])
+        self.assertIn("rqworker", self.services["worker"])
+        self.assertIn("CUSTOMS_QUEUE_NAME:-customs", self.services["worker"])
+        self.assertIn("dispatch_runs", self.services["dispatcher"])
+        for name in ("worker", "dispatcher"):
+            self.assertIn("service_completed_successfully", self.services[name])
 
 
 class EnvTemplateTests(unittest.TestCase):
@@ -161,6 +168,8 @@ class EnvTemplateTests(unittest.TestCase):
         values = dict(line.split("=", 1) for line in read(DEPLOY / ".env.example").splitlines()
                       if line and not line.startswith("#") and "=" in line)
         for key in ("DJANGO_SECRET_KEY", "CUSTOMS_PG_PASSWORD", "CUSTOMS_ALLOWED_HOSTS"):
+            self.assertEqual(values[key], "", f"{key} 必须让部署者显式填写")
+        for key in ("CUSTOMS_AI_API_BASE", "CUSTOMS_AI_API_KEY", "CUSTOMS_AI_MODEL"):
             self.assertEqual(values[key], "", f"{key} 必须让部署者显式填写")
 
     def test_sensitive_local_files_are_not_git_tracked(self):
@@ -201,7 +210,12 @@ class NginxAndIgnoreTests(unittest.TestCase):
                        (("proxy_pass", "http://app:8000"), None) in body]
             self.assertEqual(len(proxies), 1)
             self.assertIn((("proxy_set_header", "Host", "$customs_forwarded_host"), None), proxies[0])
-            self.assertIn((("proxy_set_header", "X-Forwarded-Proto", "$scheme"), None), proxies[0])
+            forwarded_proto = "$customs_forwarded_proto" if filename == "default.conf" else "$scheme"
+            self.assertIn((("proxy_set_header", "X-Forwarded-Proto", forwarded_proto), None), proxies[0])
+            if filename == "default.conf":
+                proto_map = next(body for words, body in tree
+                                 if words == ("map", "$http_x_forwarded_proto", "$customs_forwarded_proto"))
+                self.assertIn((("https", "https"), None), proto_map)
             self.assertTrue(any((("alias", "/usr/share/nginx/static/"), None) in (body or [])
                                 for _, server in servers for _, body in server))
 

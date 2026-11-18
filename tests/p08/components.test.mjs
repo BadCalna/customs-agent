@@ -90,6 +90,23 @@ test('FIX-05 completed count includes failures, never turns business missing fac
   assert.equal(view.failureIds.length,1);assert.ok(view.businessRows>0);assert.equal(view.percent,100);
 });
 
+test('AI thinking indicator appears only while either run kind is running', async()=>{
+  for (const kind of ['precheck', 'expert_check']) {
+    const value=activeRun({kind}),node=host();
+    const controller=createRunProgress(node,{client:{getRun:async()=>value}});
+    await controller.open(context(value));
+    assert.match(node.innerHTML,/AI 思考中\.\.\./);
+    controller.destroy();
+  }
+  for (const status of ['queued','succeeded','failed']) {
+    const value=run({status}),node=host();
+    const controller=createRunProgress(node,{client:{getRun:async()=>value}});
+    await controller.open(context(value));
+    assert.doesNotMatch(node.innerHTML,/AI 思考中\.\.\./);
+    controller.destroy();
+  }
+});
+
 test('FIX-10 expert run uses explicit issues without treating a null precheck comparison as an error',async()=>{
   const value=fixture('FIX-10').run,node=host();
   assert.equal(value.items[0].comparison_status,null);

@@ -41,7 +41,9 @@ def register_run(run):
     if run.submission_id:
         items = items.filter(submission_items__submission_id=run.submission_id)
     for item in items:
-        RunItem.objects.get_or_create(run=run, item=item)
+        RunItem.objects.get_or_create(run=run, item=item, defaults={
+            "result": {"result_mode": "mock" if settings.ENGINE_MODE == "mock" else "live"},
+        })
     return work
 
 
@@ -129,6 +131,9 @@ def retry_capability(user, run):
         return []
     if run.status not in (Run.Status.SUCCEEDED, Run.Status.FAILED) or not run.is_current or not _eligible(run, run.task):
         return []
+    modes = {row.result.get("result_mode", "mock") for row in run.items.all()}
+    if modes != {"mock" if settings.ENGINE_MODE == "mock" else "live"}:
+        return []
     return [str(v) for v in run.items.filter(status="failed").values_list("item_id", flat=True)]
 
 
@@ -146,6 +151,9 @@ def retry_run(user, run_id, item_ids, key=None):
     if replay is not None:
         return replay
     failed = set(str(v) for v in parent.items.filter(status="failed").values_list("item_id", flat=True))
+    modes = {row.result.get("result_mode", "mock") for row in parent.items.all()}
+    if modes != {"mock" if settings.ENGINE_MODE == "mock" else "live"}:
+        raise ApiError(409, "engine_mode_changed", "引擎模式已变化，请重新发起完整预审或联系维护人员")
     if not item_ids or len(set(item_ids)) != len(item_ids) or not set(item_ids).issubset(failed):
         raise ApiError(422, "invalid_retry_items", "只能重试本轮执行中明确失败的商品行")
     if not retry_capability(user, parent):
@@ -162,7 +170,8 @@ def retry_run(user, run_id, item_ids, key=None):
             suggested_hs=None if str(old.item_id) in item_ids else old.suggested_hs,
             comparison_status="" if str(old.item_id) in item_ids else old.comparison_status,
             confidence=None if str(old.item_id) in item_ids else old.confidence,
-            result={} if str(old.item_id) in item_ids else copied,
+            result={"result_mode": "mock" if settings.ENGINE_MODE == "mock" else "live"}
+                   if str(old.item_id) in item_ids else copied,
             error_message="" if str(old.item_id) in item_ids else old.error_message)
     task.revision += 1
     if run.kind == Run.Kind.PRECHECK:
@@ -240,7 +249,8 @@ def begin_attempt(run_id, item_id, token):
     attempt = RunAttempt.objects.create(row=row, number=count+1, token=token,
                                        input_hash=_payload(run, row.item).context.input_hash)
     row.status = "running"
-    row.result = {"attempts": count+1, "issues": [], "evidence": []}
+    row.result = {"attempts": count+1, "issues": [], "evidence": [],
+                  "result_mode": "mock" if settings.ENGINE_MODE == "mock" else "live"}
     row.save(update_fields=["status", "result", "updated_at"])
     run.status, run.is_current = "running", True
     run.started_at = run.started_at or timezone.now()
@@ -266,6 +276,9 @@ def evaluate_row(run, item):
     """Pure engine boundary: call only outside Task/Run DB locks."""
     engine, payload = get_engine(), _payload(run, item)
     metadata = {k: getattr(payload.context, k) for k in ("engine_version", "prompt_version", "rules_version", "input_hash")}
+    metadata["result_mode"] = payload.context.result_mode.value
+    if payload.context.mock_scenario:
+        metadata["mock_scenario"] = payload.context.mock_scenario
     if run.kind == Run.Kind.PRECHECK:
         recommendation = engine.recommend(payload)
         comparison = engine.compare(CompareInput(context=payload.context, recommendation=recommendation,
@@ -308,7 +321,8 @@ def finish_attempt(attempt_id, token, output=None, error=None):
         attempt.status, attempt.error_code = "failed", type(error).__name__[:100]
         row.status = "queued" if attempt.number < settings.CUSTOMS_ROW_MAX_ATTEMPTS else "failed"
         row.error_message = f"技术执行失败（{attempt.error_code}），已尝试 {attempt.number} 次"
-        row.result = {"attempts": attempt.number, "issues": [], "evidence": []}
+        row.result = {"attempts": attempt.number, "issues": [], "evidence": [],
+                      "result_mode": "mock" if settings.ENGINE_MODE == "mock" else "live"}
     else:
         attempt.status, attempt.result = "succeeded", deepcopy(output)
         row.status, row.error_message = "succeeded", ""

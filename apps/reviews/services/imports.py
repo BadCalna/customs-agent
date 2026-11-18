@@ -202,13 +202,15 @@ def upload(user, *, filename, data, key, task_id=None, expected_current_version_
                     number = 1
                 version = FileVersion.objects.create(task=task, number=number, uploaded_by=user, original_filename=filename)
                 run = Run.objects.create(task=task, version=version, kind=Run.Kind.PRECHECK, status=Run.Status.QUEUED)
-                job = ImportJob.objects.create(version=version, precheck=run, sha256=digest, stage_token=staged.token)
+                result_mode = "mock" if settings.ENGINE_MODE == "mock" else "live"
+                job = ImportJob.objects.create(version=version, precheck=run, sha256=digest,
+                                               stage_token=staged.token, report={"result_mode": result_mode})
                 job_id = str(job.pk)
                 if settings.EXECUTOR_MODE == "rq":
                     from apps.runs.services import schedule_run
                     schedule_run(run)
                 AuditEvent.objects.create(task=task, version=version, actor=user, action="version.created",
-                                          details={"number": number, "sha256": digest, "import_id": job_id, "result_mode": "mock"})
+                                          details={"number": number, "sha256": digest, "import_id": job_id, "result_mode": result_mode})
                 idempotency.store(user, ACTION, key, payload, {"import_id": job_id}, target_id=target_id)
                 reserved = True
     finally:
@@ -264,6 +266,9 @@ def finish_import(job_id, *, replay=False, mapping=None, defer_precheck=False, w
             if job.status == ImportJob.Status.SUPERSEDED:
                 return import_response(job, replay=True)
             if job.status != ImportJob.Status.SUCCEEDED:
+                if (job.report or {}).get("result_mode", "mock") != (
+                        "mock" if settings.ENGINE_MODE == "mock" else "live"):
+                    raise ApiError(409, "engine_mode_changed", "导入登记时的引擎模式已变化，请上传新版本")
                 if task.versions.filter(number__gt=job.version.number).exists():
                     raise ApiError(409, "stale_version", "旧版本导入不能覆盖当前版本")
                 if mapping is None:
@@ -315,7 +320,7 @@ def finish_import(job_id, *, replay=False, mapping=None, defer_precheck=False, w
                     run.save(update_fields=["is_current"])
                 else:
                     run = execute_precheck(version, triggered_by=version.uploaded_by, run=job.precheck)
-                job.report = mapping.as_dict()
+                job.report = {**mapping.as_dict(), "result_mode": (job.report or {}).get("result_mode", "mock")}
                 job.error = {}
                 job.status = ImportJob.Status.SUCCEEDED
                 job.save(update_fields=["report", "error", "status", "updated_at"])
@@ -323,7 +328,8 @@ def finish_import(job_id, *, replay=False, mapping=None, defer_precheck=False, w
                 task.stage = Task.Stage.PRECHECKING if defer_precheck else Task.Stage.AWAITING_CONFIRMATION
                 task.save(update_fields=["stage", "updated_at"])
                 AuditEvent.objects.create(task=task, version=version, actor=version.uploaded_by, action="import.succeeded",
-                                          details={"import_id": str(job.pk), "precheck_id": str(run.pk), "result_mode": "mock"})
+                                          details={"import_id": str(job.pk), "precheck_id": str(run.pk),
+                                                   "result_mode": job.report["result_mode"]})
     except ImportWorkerFenced:
         raise
     except Exception as exc:
@@ -370,6 +376,6 @@ def import_response(job, *, replay=False):
             "item_count": version.items.count(), "member_count": ItemMember.objects.filter(item__version=version).count(),
             "image_counts": {s: images.filter(status=s).count() for s in ItemImage.Status.values},
             "precheck_run_id": str(job.precheck_id), "precheck_status": Run.objects.get(pk=job.precheck_id).status,
-            "result_mode": "mock", "executor_mode": settings.EXECUTOR_MODE,
+            "result_mode": (job.report or {}).get("result_mode", "mock"), "executor_mode": settings.EXECUTOR_MODE,
             "assignment_status": "claimed" if task.assignments.filter(role=Role.OPERATOR).exists() else "unclaimed",
             "original_download_url": f"/api/v1/files/{version.pk}", "idempotent_replay": replay}

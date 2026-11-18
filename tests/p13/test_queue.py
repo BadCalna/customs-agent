@@ -1,3 +1,4 @@
+import io
 import json
 import tempfile
 import uuid
@@ -8,6 +9,7 @@ from unittest.mock import patch
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
+from apps.accounts.errors import ApiError
 from apps.accounts.models import Role
 from apps.reviews.models import AuditEvent, Confirmation, FileVersion, ImportJob, Submission, Task
 from apps.reviews.services import imports
@@ -83,6 +85,38 @@ class QueueTests(TestCase):
         self.assertEqual(RunAttempt.objects.filter(row__item=self.items[0]).count(), 3)
         self.assertEqual(RunAttempt.objects.filter(row__item=self.items[1]).count(), 1)
         self.assertEqual(services.retry_capability(self.operator, self.run), [str(self.items[0].pk)])
+
+    @override_settings(ENGINE_MODE="openai", CUSTOMS_AI_API_BASE="https://ai.example.invalid/v1",
+                       CUSTOMS_AI_API_KEY="test-only", CUSTOMS_AI_MODEL="test-model",
+                       CUSTOMS_AI_TIMEOUT_SECONDS=3)
+    def test_live_worker_persists_unverified_real_engine_result(self):
+        def response(*args, **kwargs):
+            content = {"suggested_hs": "8544422900", "candidates": [{"hs": "8544422900"}], "gaps": []}
+            return io.BytesIO(json.dumps({"choices": [{"message": {"content": json.dumps(content)}}]}).encode())
+
+        with patch("adapters.engines.openai.request.urlopen", side_effect=response):
+            self.drain()
+        self.assertEqual(self.run.status, Run.Status.SUCCEEDED)
+        for row in self.run.items.all():
+            self.assertEqual(row.result["result_mode"], "live")
+            self.assertEqual(row.result["evidence_status"], "version_unverified")
+            self.assertEqual(row.result["evidence"], [])
+            self.assertEqual(row.comparison_status, "needs_confirmation")
+
+    def test_mock_failures_cannot_be_retried_into_live_run(self):
+        original = services.evaluate_row
+        with patch.object(services, "evaluate_row", side_effect=lambda run, item:
+                          (_ for _ in ()).throw(TimeoutError()) if item.pk == self.items[0].pk
+                          else original(run, item)):
+            self.drain()
+        with override_settings(ENGINE_MODE="openai"):
+            self.assertEqual(services.retry_capability(self.operator, self.run), [])
+            from apps.reviews.serializers import task_to_entry
+
+            self.assertEqual(task_to_entry(self.operator, self.task).result_mode.value, "mock")
+            with self.assertRaises(ApiError) as failure:
+                services.retry_run(self.operator, str(self.run.pk), [str(self.items[0].pk)], "mode-change")
+        self.assertEqual(failure.exception.code, "engine_mode_changed")
 
     def test_dispatch_claim_is_single_delivery_until_redelivery_window(self):
         with patch.object(dispatch, "_enqueue") as enqueue:

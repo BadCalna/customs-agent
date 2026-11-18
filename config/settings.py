@@ -30,8 +30,28 @@ def mode(name, default, choices):
 
 
 PAGE_DATA_MODE = mode("CUSTOMS_PAGE_MODE", "live", ("live", "fixture"))
-ENGINE_MODE = mode("CUSTOMS_ENGINE_MODE", "mock", ("mock",))
+ENGINE_MODE = mode("CUSTOMS_ENGINE_MODE", "mock", ("mock", "openai"))
 EXECUTOR_MODE = mode("CUSTOMS_EXECUTOR_MODE", "inline", ("inline", "rq"))
+CUSTOMS_AI_API_BASE = os.environ.get("CUSTOMS_AI_API_BASE", "").strip().rstrip("/")
+CUSTOMS_AI_API_KEY = os.environ.get("CUSTOMS_AI_API_KEY", "").strip()
+CUSTOMS_AI_MODEL = os.environ.get("CUSTOMS_AI_MODEL", "").strip()
+CUSTOMS_AI_TIMEOUT_SECONDS = 60
+if ENGINE_MODE == "openai":
+    from urllib.parse import urlsplit
+
+    endpoint = urlsplit(CUSTOMS_AI_API_BASE)
+    if (not endpoint.hostname or endpoint.scheme not in ("https", "http")
+            or endpoint.username or endpoint.password or endpoint.query or endpoint.fragment
+            or (endpoint.scheme == "http" and os.environ.get("CUSTOMS_AI_ALLOW_HTTP") != "1")):
+        raise ImproperlyConfigured("CUSTOMS_AI_API_BASE 必须是 HTTPS 服务地址；内网 HTTP 须显式设置 CUSTOMS_AI_ALLOW_HTTP=1")
+    if not CUSTOMS_AI_API_KEY or not CUSTOMS_AI_MODEL:
+        raise ImproperlyConfigured("openai 引擎需要 CUSTOMS_AI_API_KEY 和 CUSTOMS_AI_MODEL")
+    try:
+        CUSTOMS_AI_TIMEOUT_SECONDS = int(os.environ.get("CUSTOMS_AI_TIMEOUT_SECONDS", "60"))
+    except ValueError as exc:
+        raise ImproperlyConfigured("CUSTOMS_AI_TIMEOUT_SECONDS 必须是 1 到 240 的整数") from exc
+    if not 1 <= CUSTOMS_AI_TIMEOUT_SECONDS <= 240:
+        raise ImproperlyConfigured("CUSTOMS_AI_TIMEOUT_SECONDS 必须是 1 到 240 的整数")
 
 
 def byte_setting(name: str, default: int) -> int:

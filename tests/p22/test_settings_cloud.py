@@ -113,6 +113,28 @@ class DebugTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("CUSTOMS_DEBUG", result.stderr)
 
+    def test_production_rejects_mock_and_missing_tls(self):
+        result = run_settings({"CUSTOMS_PRODUCTION": "1"})
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("CUSTOMS_ENGINE_MODE=openai", result.stderr)
+        result = run_settings({"CUSTOMS_PRODUCTION": "1", "CUSTOMS_ENGINE_MODE": "openai",
+                               "CUSTOMS_AI_API_BASE": "https://ai.example.invalid/v1",
+                               "CUSTOMS_AI_API_KEY": "test-only", "CUSTOMS_AI_MODEL": "test-model",
+                               "CUSTOMS_EXECUTOR_MODE": "rq", "CUSTOMS_DB_BACKEND": "postgres",
+                               "CUSTOMS_PG_NAME": "test", "CUSTOMS_PG_USER": "test",
+                               "CUSTOMS_PG_PASSWORD": "test"})
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("CUSTOMS_HTTPS=1", result.stderr)
+
+    def test_production_accepts_complete_live_configuration(self):
+        result = run_settings({"CUSTOMS_PRODUCTION": "1", "CUSTOMS_ENGINE_MODE": "openai",
+                               "CUSTOMS_AI_API_BASE": "https://ai.example.invalid/v1",
+                               "CUSTOMS_AI_API_KEY": "test-only", "CUSTOMS_AI_MODEL": "test-model",
+                               "CUSTOMS_EXECUTOR_MODE": "rq", "CUSTOMS_DB_BACKEND": "postgres",
+                               "CUSTOMS_PG_NAME": "test", "CUSTOMS_PG_USER": "test",
+                               "CUSTOMS_PG_PASSWORD": "test", "CUSTOMS_HTTPS": "1"})
+        self.assertEqual(result.returncode, 0, result.stderr)
+
 
 class CsrfAndCookieTests(unittest.TestCase):
     def test_csrf_origins_must_be_http_origins(self):

@@ -34,8 +34,11 @@ def iso(value):
     return value.isoformat() if value else None
 
 
-def result_mode() -> ResultMode:
-    return ResultMode(settings.ENGINE_MODE)
+def result_mode(result=None) -> ResultMode:
+    if result is not None:
+        # Historical rows predate the persisted marker and were all mock.
+        return ResultMode(result.get("result_mode", "mock"))
+    return ResultMode.MOCK if settings.ENGINE_MODE == "mock" else ResultMode.LIVE
 
 
 def source_location(item) -> SourceLocation:
@@ -196,7 +199,7 @@ def item_to_list_entry(item) -> ItemListEntry:
         comparison_status=ComparisonStatus(precheck.comparison_status) if precheck and precheck.comparison_status else None,
         image_status=summarize_image_status(list(item.images.all())),
         latest_run_id=str(precheck.run_id) if precheck else None,
-        result_mode=result_mode(),
+        result_mode=result_mode(precheck.result if precheck else None),
     )
 
 
@@ -234,7 +237,7 @@ def item_to_card(user, item) -> ItemCard:
         confidence=precheck.confidence if precheck else None,
         latest_run_id=str(precheck.run_id) if precheck else None,
         latest_expert_check=_expert_check_ref(stages["expert"]),
-        result_mode=result_mode(),
+        result_mode=result_mode(precheck.result if precheck else None),
         task_stage=task.stage,
         submission_status=submission_item.submission.status if submission_item else None,
         allowed_actions=allowed_actions(user),
@@ -254,6 +257,10 @@ def _version_entry(version, current_id) -> VersionEntry:
 def task_to_entry(user, task) -> TaskListEntry:
     current_version = task.versions.order_by("-number").first()
     run = Run.objects.filter(version=current_version).order_by("-created_at").first() if current_version else None
+    precheck = (Run.objects.filter(version=current_version, kind=Run.Kind.PRECHECK, is_current=True)
+                .order_by("-created_at").first()) if current_version else None
+    mode_run = precheck or run
+    mode_row = mode_run.items.first() if mode_run else None
     return TaskListEntry(
         task_id=str(task.pk),
         title=task.title,
@@ -266,7 +273,7 @@ def task_to_entry(user, task) -> TaskListEntry:
         latest_run_kind=run.kind if run else None,
         latest_run_status=run.status if run else None,
         allowed_actions=allowed_actions(user),
-        result_mode=result_mode(),
+        result_mode=result_mode(mode_row.result if mode_row else None),
         created_at=iso(task.created_at),
         updated_at=iso(task.updated_at),
     )

@@ -1,7 +1,8 @@
-# 云端多人测试环境部署（单台云服务器 · Docker Compose）
+# Docker Compose 部署与验收
 
-> **状态（2026-11-17）**：PR #24 已合入但事后审核不通过；本轮 follow-up 修复须经独立复审。**尚未上线，真实容器构建与 Compose 恢复演练仍未验证，不可据本说明直接认定可上线。**
-> 本目录给出的是一套“在一台云服务器上给少量人员试用”的方案，不是生产方案。宿主机须具备 Python >=3.12（运维编排器使用标准库）；优先使用项目 venv，也可设置 `OPERATIONS_PYTHON`。
+> **状态（2026-11-18）**：真实 AI 的 OpenAI 兼容接入层、三角色正式页面及队列 Compose 配置已加入代码；尚缺实际模型服务参数、Linux 容器构建、真实单证端到端演练和备份恢复演练。**这些验收通过前，不得开放真实业务流量。**
+> 正式入口为 `/`；`/demo/`、`/uploads/`、`/workbench/` 在 `DEBUG=0` 下关闭。正式页面只调用 live API，模型建议不等于人工审核决定，税则依据未连接可核验来源时始终标为待核。
+> 宿主机须具备 Python >=3.12（运维编排器使用标准库）；优先使用项目 venv，也可设置 `OPERATIONS_PYTHON`。
 > 本机没有 Docker，**容器相关步骤没有在本机实跑过**；实际跑过的部分见
 > [交接/P22.md](../docs/开发文档/交接/P22.md) 的“已验证/未验证”两栏。
 
@@ -16,16 +17,14 @@
 | 原件/图片/导出文件持久化 | 配置已提供、容器未验证 | 命名卷 `files`，按版本内容寻址 |
 | 数据库持久化 | 配置已提供、容器未验证 | 命名卷 `pgdata` |
 | 迁移、静态资源、健康检查 | 配置已提供、容器未验证 | 一次性 `migrate` 服务 + `/api/health` |
-| 后台任务（Redis + worker） | **不可用** | P13 未交付；Compose 里只是预留位（`profile=queue`） |
-| 上传 / 认领 / 正式页面 | **未交付** | P06、P07/P08/P11 还在开发；当前没有上传入口 |
+| 后台任务（Redis + worker + dispatcher） | 配置已接入、容器未验证 | Compose 默认启动三项服务，需在 Linux 上做实际队列和恢复演练 |
+| 上传 / 认领 / 正式页面 | 代码已接通、浏览器实机待验收 | `/` 覆盖供应商上传、业务员确认提交和专家人工裁决 |
 | 演示壳 `/demo/`、工作台 `/workbench/` | **按设计 404** | 两者只在 `DEBUG=1` 时可用，云端必须 `DEBUG=0` |
-| AI 引擎 | mock | 真实引擎属 P16/P18 |
+| AI 引擎 | OpenAI 兼容适配器已实现、真实服务待验收 | `CUSTOMS_ENGINE_MODE=openai`；没有可核验证据来源时不生成已核实结论 |
 
-**所以“多人测试”现在能测到的是**：`/admin/` 后台、`/api/v1/` 接口、`/api/v1/docs` 接口文档，
-以及 P12/P09/P10 已交付的提交/决定接口链路（用管理员在后台或脚本造数据）。
+**当前可验证的范围**：`/`、`/admin/`、`/api/v1/` 及队列配置。生产上线的剩余验收见 [正式上线清单](PRODUCTION.md)。
 
-**如果测试人员必须看到工作台页面**，有三个选择，需要 Jay 先定（见第 12 节 D1）：
-等 P07/P08/P11 交付正式页面 / 由主控加一个受控开关 / 短时间 `DEBUG=1`（有风险，不推荐）。
+以下第 1 至 15 节保留 P22 试用环境的历史操作说明。正式部署以 [正式上线清单](PRODUCTION.md) 和 `deploy/.env.example` 为准；其中关于“只需三项配置”“HTTP 公网测试端口”和“mock 唯一引擎”的旧描述不适用于正式环境。
 
 ---
 
@@ -142,11 +141,11 @@ docker compose -f deploy/docker-compose.yml --env-file deploy/.env config >/dev/
 # 4.2 构建并启动（首次会拉镜像 + 装依赖，5～15 分钟）
 docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --build
 
-# 4.3 看启动顺序是否按预期：db 健康 → migrate 跑完 → app 健康 → web 起来
+# 4.3 看启动顺序是否按预期：db/redis 健康 → migrate 跑完 → app/worker/dispatcher → web
 docker compose -f deploy/docker-compose.yml --env-file deploy/.env ps
 ```
 
-启动后 `ps` 里应看到 `db`(healthy)、`app`(healthy)、`web`(healthy)，`migrate` 状态是 `exited (0)`——
+启动后 `ps` 里应看到 `db`(healthy)、`redis`(healthy)、`app`(healthy)、`worker`、`dispatcher`、`web`(healthy)，`migrate` 状态是 `exited (0)`——
 一次性服务跑完就退出是正常的。
 
 ```bash
@@ -410,7 +409,7 @@ docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --no-de
 | TLS | 可选、手工证书 | 自动续期（certbot/ACME）、HSTS 评估、只允许 TLS1.2+ |
 | 反向代理 | nginx 单实例同机 | 独立入口、限流、请求体上限、超时与重试策略、真实 IP 传递 |
 | 应用运行 | gunicorn 3 worker，单机 | 多实例/滚动发布、健康检查接入负载均衡、优雅重启 |
-| 后台任务 | 无（P13 未交付） | Redis 持久化与容量、worker 并发/超时/重试、死信与告警、待派发重扫 |
+| 后台任务 | P13 已实现，Compose 启动 Redis/worker/dispatcher；未做实机演练 | Redis 容量、worker 并发/超时/重试、死信与告警、待派发重扫实机验收 |
 | 备份 | 手工脚本，同机目录 | 异地/对象存储、加密、保留策略、定期自动演练、RPO/RTO 指标 |
 | 日志 | `docker compose logs` + 每容器有限轮转 | 集中日志、保留期、审计（谁的什么操作）、告警 |
 | 监控 | `/api/health` 手工 curl | 存活/就绪探针、指标、告警通道、磁盘水位 |
@@ -478,7 +477,7 @@ P22 只**新增**文件，不改 P06 正在改的上传/认领/页面/业务逻�
 | 路径 | 作用 |
 |---|---|
 | `deploy/Dockerfile` | 应用镜像（python:3.13-slim + uv 锁依赖 + gunicorn + 非 root） |
-| `deploy/docker-compose.yml` | db / migrate / app / web；Redis+worker 为 P13 预留（`profile=queue`） |
+| `deploy/docker-compose.yml` | db / migrate / app / web / redis / worker / dispatcher；默认启用 P13 队列 |
 | `deploy/settings_cloud.py` | 云端设置：DEBUG 默认关、ALLOWED_HOSTS 必填、CSRF/HTTPS/cookie/STATIC_ROOT |
 | `deploy/.env.example` | 无真实密钥的配置模板（敏感项留空，逼你自己生成） |
 | `deploy/nginx/default.conf` | 反代 + `/static/` + 110MB 上传上限 |

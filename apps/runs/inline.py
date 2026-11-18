@@ -9,6 +9,7 @@
 import hashlib
 import json
 
+from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
@@ -60,8 +61,8 @@ def _context(run, item, scenario) -> ExecutionContext:
         engine_version=getattr(engine, "engine_version", ""),
         prompt_version=getattr(engine, "prompt_version", ""),
         rules_version=getattr(engine, "rules_version", ""),
-        result_mode=ResultMode.MOCK,
-        mock_scenario=scenario,
+        result_mode=ResultMode.MOCK if settings.ENGINE_MODE == "mock" else ResultMode.LIVE,
+        mock_scenario=scenario if settings.ENGINE_MODE == "mock" else None,
     )
 
 
@@ -135,7 +136,7 @@ def _start_run(task, version, kind, submission=None, triggered_by=None) -> Run:
 
 def _finish_run(run):
     rows = list(run.items.all())
-    run.status = Run.Status.FAILED if rows and all(r.status == RunItem.Status.FAILED for r in rows) else Run.Status.SUCCEEDED
+    run.status = Run.Status.FAILED if any(r.status == RunItem.Status.FAILED for r in rows) else Run.Status.SUCCEEDED
     run.finished_at = timezone.now()
     run.save(update_fields=["status", "finished_at"])
     return run
@@ -179,7 +180,8 @@ def execute_precheck(version, scenarios: dict[str, str] | None = None, triggered
         except EngineTechnicalError as exc:
             row.status = RunItem.Status.FAILED
             row.error_message = str(exc)
-            row.result = {"issues": [], "evidence": [], "attempts": 1}
+            row.result = {"issues": [], "evidence": [], "attempts": 1,
+                          "result_mode": recommend_input.context.result_mode.value}
             row.save()
             continue
         row.status = RunItem.Status.SUCCEEDED
@@ -198,8 +200,10 @@ def execute_precheck(version, scenarios: dict[str, str] | None = None, triggered
             "prompt_version": recommend_input.context.prompt_version,
             "rules_version": recommend_input.context.rules_version,
             "input_hash": recommend_input.context.input_hash,
-            "mock_scenario": scenario,
+            "result_mode": recommend_input.context.result_mode.value,
         }
+        if recommend_input.context.mock_scenario:
+            row.result["mock_scenario"] = scenario
         row.save()
     return _finish_run(run)
 
@@ -278,7 +282,8 @@ def execute_expert_check(submission, scenarios: dict[str, str] | None = None, tr
         except EngineTechnicalError as exc:
             row.status = RunItem.Status.FAILED
             row.error_message = str(exc)
-            row.result = {"issues": [], "evidence": [], "attempts": 1}
+            row.result = {"issues": [], "evidence": [], "attempts": 1,
+                          "result_mode": context.result_mode.value}
             row.save()
             continue
         row.status = RunItem.Status.SUCCEEDED
@@ -294,7 +299,9 @@ def execute_expert_check(submission, scenarios: dict[str, str] | None = None, tr
             "prompt_version": context.prompt_version,
             "rules_version": context.rules_version,
             "input_hash": context.input_hash,
-            "mock_scenario": scenario,
+            "result_mode": context.result_mode.value,
         }
+        if context.mock_scenario:
+            row.result["mock_scenario"] = scenario
         row.save()
     return _finish_run(run)

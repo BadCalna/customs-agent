@@ -42,6 +42,14 @@ function rowHtml(item, selected, retryEnabled, kind) {
     <small>本轮已尝试 ${esc(item.attempts ?? "—")} 次${item.origin_run_id ? ' · 沿用前次结果' : ''}${item.suggested_hs ? ` · ${suggestionLabel} ${esc(item.suggested_hs)}` : ""}</small></li>`;
 }
 
+function aiThinkingHtml(run, view) {
+  if (!view.active || run.status !== "running") return "";
+  return `<div class="p08-ai-thinking" role="status" aria-live="polite">
+    <span class="p08-ai-orb" aria-hidden="true"></span>
+    <strong>AI 思考中...</strong>
+  </div>`;
+}
+
 export function renderRunProgress(host, state, {retryConnected = false} = {}) {
   const run = state.run;
   const view = run ? progressView(run) : null;
@@ -57,6 +65,7 @@ export function renderRunProgress(host, state, {retryConnected = false} = {}) {
     ${!run && !state.loading ? `<div class="p08-empty"><strong>${state.context?.runId ? "暂未取得执行记录" : "选择任务后查看运行进度"}</strong><p>按所选文件版本查看，旧版本结果保留为历史。</p></div>` : ""}
     ${run ? `<div class="p08-run-flags"><span class="p08-stage">${esc(known(RUN_STATUSES, run.status))}</span>${run.result_mode === "mock" ? '<span class="p08-mock">合成样例 · 非真实AI结论</span>' : ""}
       ${historical ? '<span class="p08-history">历史执行 · 只读</span>' : ""}</div>
+      ${aiThinkingHtml(run, view)}
       <div class="p08-progress-label"><strong>${view.completed}<span> / ${view.counts.total} 项已结束</span></strong><span>${view.percent === null ? "无商品" : `${view.percent}%`}</span></div>
       <div class="p08-meter" role="progressbar" aria-label="技术执行进度" aria-valuemin="0" aria-valuemax="${view.counts.total || 1}" aria-valuenow="${view.completed}">
         ${COUNTS.map(k => `<span class="is-${k}" style="width:${view.counts.total ? view.counts[k] * 100 / view.counts.total : 0}%"></span>`).join("")}</div>
