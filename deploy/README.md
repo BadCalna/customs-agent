@@ -17,15 +17,13 @@
 | 数据库持久化 | 配置已提供、容器未验证 | 命名卷 `pgdata` |
 | 迁移、静态资源、健康检查 | 配置已提供、容器未验证 | 一次性 `migrate` 服务 + `/api/health` |
 | 后台任务（Redis + worker） | **不可用** | P13 未交付；Compose 里只是预留位（`profile=queue`） |
-| 上传 / 认领 / 正式页面 | **未交付** | P06、P07/P08/P11 还在开发；当前没有上传入口 |
-| 演示壳 `/demo/`、工作台 `/workbench/` | **按设计 404** | 两者只在 `DEBUG=1` 时可用，云端必须 `DEBUG=0` |
+| 上传 / 认领 / 正式页面 | 已接线、未部署验收 | 正式 `/workbench/` 与 `/uploads/` 含静态白名单；P13 队列/重试与专家工作簿布局仍待交付 |
+| 演示壳 `/demo/`、任务页 `/tasks/` | **按设计 404** | 仅在 `DEBUG=1` 时可用（`apps/api/demo.py::_served_file`），云端必须 `DEBUG=0` |
+| 正式 `/workbench/`、`/uploads/` | 页面 200，数据须登录 | 只开放静态白名单；API 继续校验会话、CSRF 与对象权限；未部署验收 |
 | AI 引擎 | mock | 真实引擎属 P16/P18 |
 
-**所以“多人测试”现在能测到的是**：`/admin/` 后台、`/api/v1/` 接口、`/api/v1/docs` 接口文档，
-以及 P12/P09/P10 已交付的提交/决定接口链路（用管理员在后台或脚本造数据）。
-
-**如果测试人员必须看到工作台页面**，有三个选择，需要 Jay 先定（见第 12 节 D1）：
-等 P07/P08/P11 交付正式页面 / 由主控加一个受控开关 / 短时间 `DEBUG=1`（有风险，不推荐）。
+**所以“多人测试”现在能测到的是**：`/admin/` 后台、`/api/v1/` 接口、`/api/v1/docs` 接口文档、
+以及正式 `/workbench/`、`/uploads/` 页面与已交付的上传/认领/确认/提交/决定/导出链路（mock AI / inline 执行；未部署到云端容器验证）。
 
 ---
 
@@ -169,9 +167,11 @@ curl -sS -o /dev/null -w '%{http_code}\n' "$BASE/api/v1/docs"    # 期望 200
 curl -sS -o /dev/null -w '%{http_code}\n' "$BASE/admin/login/"   # 期望 200
 # 5.4 静态资源（nginx 提供，验证 collectstatic 生效）
 curl -sS -o /dev/null -w '%{http_code}\n' "$BASE/static/admin/css/base.css"   # 期望 200
-# 5.5 确认 DEBUG 确实是关的：这两个入口应返回 404
+# 5.5 确认 DEBUG 确实是关的：开发入口应返回 404，正式工作台/上传页返回 200
 curl -sS -o /dev/null -w '%{http_code}\n' "$BASE/demo/"           # 期望 404
-curl -sS -o /dev/null -w '%{http_code}\n' "$BASE/workbench/"      # 期望 404
+curl -sS -o /dev/null -w '%{http_code}\n' "$BASE/tasks/"          # 期望 404（P08 独立开发页只在 DEBUG=1 可用）
+curl -sS -o /dev/null -w '%{http_code}\n' "$BASE/workbench/"      # 期望 200，数据仍需登录
+curl -sS -o /dev/null -w '%{http_code}\n' "$BASE/uploads/"        # 期望 200，数据仍需登录
 # 5.6 从你自己电脑（公网）验证一次
 #     浏览器打开 http://<服务器公网IP>:8080/admin/login/
 ```
@@ -434,7 +434,7 @@ docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --no-de
 | 浏览器 400 `Bad Request (400)` | `deploy/.env` | 访问用的 Host 不在 `CUSTOMS_ALLOWED_HOSTS` 里 |
 | 登录成功但马上变匿名 / 提交 403 | `deploy/.env` | `CUSTOMS_HTTPS=1` 但实际走 HTTP（Secure cookie 不发送）；或 CSRF 来源不匹配 |
 | `/static/...` 404 | `logs migrate`、`logs web` | 没跑 collectstatic / static 卷没挂 |
-| `/demo/`、`/workbench/` 404 | —— | **预期行为**：`DEBUG=0` 时演示壳按设计关闭 |
+| `/demo/`、`/tasks/` 404 | —— | **预期行为**：`DEBUG=0` 时开发验收入口按设计关闭；正式 `/workbench/`、`/uploads/` 应为 200 |
 | `db` 一直 `unhealthy` | `logs db` | 数据卷权限、磁盘满、`pg_isready` 用户名/库名不一致 |
 | `migrate` 退出码非 0 | `logs migrate` | 迁移冲突、数据库连不上、旧库结构不一致（先备份再处理） |
 | 磁盘满 | `df -h`、`docker system df` | 旧镜像堆积：`docker image prune`（确认无回退需求） |

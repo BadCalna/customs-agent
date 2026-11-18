@@ -134,6 +134,9 @@ def _xml(data: bytes, *, part: str) -> ET.Element:
         return ET.fromstring(data)
     except ET.ParseError as exc:
         raise OoxmlError("malformed_xml", f"部件 XML 无法解析：{part}（{exc}）") from exc
+    except LookupError as exc:
+        # XML 声明里的未知编码：同样属于无法解析的部件，不能冒成 500。
+        raise OoxmlError("malformed_xml", f"部件 XML 声明了不支持的编码：{part}（{exc}）") from exc
 
 
 def _text(element: ET.Element | None) -> str:
@@ -364,7 +367,7 @@ class Workbook:
                     if info.file_size > MAX_PART_BYTES:
                         raise OoxmlError("part_too_large", f"部件过大：{info.filename}")
                     self._parts[info.filename] = archive.read(info.filename)
-        except BadZipFile as exc:
+        except (BadZipFile, NotImplementedError, RuntimeError) as exc:
             raise OoxmlError("unreadable_package", "不是可读的 XLSX/ZIP 包") from exc
 
         if "xl/workbook.xml" not in self._parts:
@@ -432,7 +435,10 @@ class Workbook:
             raw = element.findtext("s:v", "", NS)
             if kind == "s":
                 try:
-                    value = self.shared_strings[int(raw)] if raw else ""
+                    index = int(raw) if raw else None
+                    if index is not None and index < 0:
+                        raise IndexError(index)
+                    value = self.shared_strings[index] if index is not None else ""
                 except (ValueError, IndexError) as exc:
                     raise OoxmlError(
                         "broken_shared_string", f"共享字符串索引越界：{ref}", sheet=name, cell=ref
@@ -624,10 +630,19 @@ class Workbook:
             for marker in anchor:
                 local = marker.tag.rsplit("}", 1)[-1]
                 if local in ("from", "to"):
-                    markers[local] = {
-                        e.tag.rsplit("}", 1)[-1]: int(e.text or 0) for e in marker
-                        if (e.text or "").strip().lstrip("-").isdigit()
-                    }
+                    coords: dict[str, int] = {}
+                    for e in marker:
+                        raw = (e.text or "").strip()
+                        if not raw:
+                            continue
+                        if not re.fullmatch(r"-?[0-9]{1,20}", raw):
+                            raise OoxmlError(
+                                "invalid_drawing_coordinate",
+                                f"绘图坐标不是整数：{part} ({raw!r})",
+                                sheet=sheet.name,
+                            )
+                        coords[e.tag.rsplit("}", 1)[-1]] = int(raw)
+                    markers[local] = coords
             images = []
             for element in anchor.iter():
                 if not element.tag.endswith("}blip"):

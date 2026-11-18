@@ -4,10 +4,19 @@ from ninja import NinjaAPI, Schema
 
 from apps.accounts.api import install_error_handlers
 from apps.accounts.api import router as accounts_router
-from apps.api.demo import demo_asset, demo_fixture, demo_index, workbench_index, upload_index
+from apps.api.demo import (
+    demo_asset,
+    demo_fixture,
+    demo_index,
+    tasks_index,
+    upload_index,
+    workbench_asset,
+    workbench_index,
+)
 from apps.api.not_implemented import router as pending_router
 from apps.reviews.api.confirmations import router as confirmations_router
 from apps.reviews.api.decisions import router as decisions_router
+from apps.reviews.api.exports import router as exports_router
 from apps.reviews.api.history import router as history_router
 from apps.reviews.api.history_reference import router as history_reference_router
 from apps.reviews.api.imports import router as imports_router
@@ -39,6 +48,7 @@ api_v1.add_router("", decisions_router)
 api_v1.add_router("", history_router)
 api_v1.add_router("", history_reference_router)
 api_v1.add_router("", runs_router)
+api_v1.add_router("", exports_router)
 api_v1.add_router("", pending_router)
 
 urlpatterns = [
@@ -50,7 +60,9 @@ urlpatterns = [
     path("demo/", demo_index, name="demo-index"),
     path("demo/assets/<path:path>", demo_asset, name="demo-asset"),
     path("demo/fixtures/<path:path>", demo_fixture, name="demo-fixture"),
-    # 独立演示入口（定稿 UI）：默认 FIXTURE 样例数据，不改动现有首页；
-    # 真实读/审批接口接通后再设为首页。写动作待后端 P 任务。
+    # 正式工作台默认真实会话/API；样例仍只在 DEBUG 下显式访问。
+    path("workbench/assets/<path:path>", workbench_asset, name="workbench-asset"),
     path("workbench/", workbench_index, name="workbench-index"),
+    # P08 独立只读任务列表与运行进度页面入口（仅在 DEBUG=True 开发模式可用；正式工作台为 /workbench/）。
+    path("tasks/", tasks_index, name="p08-tasks"),
 ]

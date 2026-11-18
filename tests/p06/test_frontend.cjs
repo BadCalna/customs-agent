@@ -9,17 +9,19 @@ const source=fs.readFileSync(path.join(__dirname,'../../web/pages/p06.js'),'utf8
  .replace('const api = createClient({mode:"live"});','const api = globalThis.TEST_API;');
 
 async function harness(){
- const elements=new Map(),calls=[];
+ const elements=new Map(),calls=[],exportCalls=[];
  function el(selector){if(!elements.has(selector))elements.set(selector,{hidden:false,disabled:false,value:'',files:[],textContent:'',innerHTML:'',listeners:{},addEventListener(event,fn){this.listeners[event]=fn},insertAdjacentHTML(_,text){this.innerHTML+=text}});return elements.get(selector);}
  const api={me:async()=>null,getTask:async id=>({task_id:id,title:id,current_version_id:'V'+id,versions:[]}),
   listTasks:async()=>({items:[],next_cursor:null}),listItems:async()=>({items:[],next_cursor:null}),getImport:async()=>{throw {status:404}},
-  uploadFile(file,params){let resolve,reject;const promise=new Promise((a,b)=>{resolve=a;reject=b});calls.push({file,params,resolve,reject});return promise;}};
- const ctx={TEST_API:api,document:{querySelector:el,addEventListener(){}},crypto:{randomUUID:crypto.randomUUID},console};
- vm.createContext(ctx);vm.runInContext(source+'\nglobalThis.hooks={upload,openTask};',ctx);
+  uploadFile(file,params){let resolve,reject;const promise=new Promise((a,b)=>{resolve=a;reject=b});calls.push({file,params,resolve,reject});return promise;},
+  createExport(versionId,payload){let resolve,reject;const promise=new Promise((a,b)=>{resolve=a;reject=b});exportCalls.push({versionId,payload,resolve,reject});return promise;}};
+ const createdLinks=[];
+ const ctx={TEST_API:api,document:{querySelector:el,querySelectorAll:()=>[],addEventListener(){},createElement(){const node={click(){createdLinks.push(this)},remove(){}};return node;},body:{appendChild(){}}},URL:{createObjectURL:()=>'blob:1',revokeObjectURL(){}},setTimeout(){},crypto:{randomUUID:crypto.randomUUID},console};
+ vm.createContext(ctx);vm.runInContext(source+'\nglobalThis.hooks={upload,openTask,renderExports,exportResult,hideExports,state:()=>({exporting,latestReport})};',ctx);
  await new Promise(r=>setImmediate(r));
  vm.runInContext('me={role:"supplier"};task={task_id:"A",title:"A",current_version_id:"VA",versions:[]};epoch=1;',ctx);
  el('#upload-target').value='current';el('#file').files=[Object.freeze({name:'A.xlsx',size:123,lastModified:100})];
- return {ctx,el,calls};
+ return {ctx,el,calls,exportCalls,createdLinks};
 }
 const duplicate={status:409,code:'duplicate_file',details:{version_number:1}};
 (async()=>{
@@ -44,5 +46,24 @@ const duplicate={status:409,code:'duplicate_file',details:{version_number:1}};
  const d=await harness();const uploaded=d.ctx.hooks.upload();await d.ctx.hooks.openTask('B');
  d.calls[0].resolve({task_id:'A',version_id:'VA2',version_number:2,item_count:3,member_count:3,precheck_status:'succeeded'});await uploaded;
  assert.equal(vm.runInContext('task.task_id',d.ctx),'B');assert.equal(d.el('#file').files[0].name,'A.xlsx');
- console.log('PASS: late duplicate/success discarded; immutable confirmation; stable retry key; file change invalidates intent');
+ // 导出过程中切换版本/隐藏导出区后，立即允许新上下文导出，旧导出的迟到结算不得重置新导出的 exporting 锁；且数值字段做 HTML 转义。
+ const e=await harness();
+ vm.runInContext('me={role:"operator"};version="VA";',e.ctx);
+ e.ctx.hooks.renderExports({version_id:'VA',version_number:'1<b>',precheck_run_id:'RA',precheck_status:'succeeded',result_mode:'<mock>'});
+ assert.match(e.el('#exports').innerHTML,/1&lt;b&gt;/);
+ assert.match(e.el('#exports').innerHTML,/&lt;MOCK&gt;/);
+ const expA=e.ctx.hooks.exportResult('precheck');
+ assert.equal(e.ctx.hooks.state().exporting,true);
+ e.ctx.hooks.hideExports();
+ assert.equal(e.ctx.hooks.state().exporting,false);
+ vm.runInContext('version="VB";',e.ctx);
+ e.ctx.hooks.renderExports({version_id:'VB',version_number:2,precheck_run_id:'RB',precheck_status:'succeeded',result_mode:'mock'});
+ const expB=e.ctx.hooks.exportResult('precheck');
+ assert.equal(e.exportCalls.length,2);
+ e.exportCalls[0].reject({status:500,code:'boom',message:'late error'});await expA;
+ assert.equal(e.ctx.hooks.state().exporting,true);
+ e.exportCalls[1].resolve({runId:'RB',contentType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',blob:{},filename:'out.xlsx',resultMode:'mock'});await expB;
+ assert.equal(e.ctx.hooks.state().exporting,false);
+ assert.equal(e.createdLinks.length,1);
+ console.log('PASS: late duplicate/success discarded; immutable confirmation; stable retry key; file change invalidates intent; export ticket isolated');
 })().catch(error=>{console.error(error);process.exitCode=1});
