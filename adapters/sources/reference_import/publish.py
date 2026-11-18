@@ -458,7 +458,10 @@ def _validate_activation_target(release_dir: Path) -> dict[str, Any]:
                 raise PublishError(f"发布数据文件缺失或不是普通文件：{name}")
             if path.stat().st_size != info.get("bytes") or sha256_file(path) != info.get("sha256"):
                 raise PublishError(f"发布数据文件 SHA-256/字节数不匹配：{name}")
-            payload = _read_release_json(path)
+            try:
+                payload = _read_release_json(path)
+            except PublishError as exc:
+                raise PublishError(f"发布数据文件不可读：{name}（{exc}）") from exc
         except OSError as exc:
             raise PublishError(f"发布数据文件不可读：{name}") from exc
         dataset_meta = payload.get("dataset")
@@ -539,12 +542,17 @@ def _active_release_id(out_root: Path) -> str | None:
     _release_metadata(release_dir, require_pointer=True)
     # current.json 只是兼容派生路径。首次发布时它可能尚未创建（读取与发布切换重叠），
     # 不能因此把已经可解析的 current 误报成“指针损坏”。它若存在，则必须是正确软链；
-    # 遗留的普通 JSON 文件仍要求显式 activate 修复。
-    if pointer.is_symlink():
-        if os.readlink(pointer) != os.path.join("current", ".current.json"):
-            raise PublishError("current.json 的派生软链目标不合法；可用 activate 修复")
-    elif pointer.exists():
-        raise PublishError("current.json 必须是 current/.current.json 的派生软链；可用 activate 修复")
+    # 遗留的普通 JSON 文件仍要求显式 activate 修复。指针读取异常统一转 PublishError。
+    try:
+        if pointer.is_symlink():
+            if os.readlink(pointer) != os.path.join("current", ".current.json"):
+                raise PublishError("current.json 的派生软链目标不合法；可用 activate 修复")
+        elif pointer.exists():
+            raise PublishError("current.json 必须是 current/.current.json 的派生软链；可用 activate 修复")
+    except PublishError:
+        raise
+    except OSError as exc:
+        raise PublishError("读取 current/current.json 指针失败") from exc
     return release_id
 
 
@@ -554,6 +562,28 @@ def _current_release_dir(out_root: Path) -> Path | None:
         return None
     release_dir = out_root / "published" / "releases" / release_id
     return release_dir if release_dir.is_dir() else None
+
+
+def _previous_for_publish(out_root: Path) -> Path | None:
+    """发布入口的前驱：没有当前版本时，只有“从未发布”才允许继续。
+
+    若已存在 release 目录但 current 丢失/损坏，不能把它当成首次发布，
+    否则内容不同的新版本会绕过换版门禁并以“无前驱、内容未变”记审计。
+    """
+
+    previous = _current_release_dir(out_root)
+    if previous is not None:
+        return previous
+    releases_dir = out_root / "published" / "releases"
+    has_releases = releases_dir.is_dir() and any(
+        entry.is_dir() and not entry.name.startswith(".") for entry in releases_dir.iterdir()
+    )
+    if has_releases:
+        raise PublishError(
+            "当前版本指针丢失或损坏（已有发布版本，但 current 无法解析）；"
+            "请先运行 activate 指定版本修复，再发布新版本"
+        )
+    return None
 
 
 def _check_content_change(
@@ -663,7 +693,7 @@ def publish_release(request: PublishRequest) -> PublishResult:
             }
         # 先在锁外做一次预检，兼容在 _current_release_dir/diff_snapshots 上设屏障的并发测试；
         # 真正落盘 release.json 与切换 current 必须在排他锁内复核当前指针，防止交错覆盖。
-        observed_previous = _current_release_dir(out_root)
+        observed_previous = _previous_for_publish(out_root)
         diff, changed = _check_content_change(
             observed_previous,
             temp_dir,
@@ -671,7 +701,7 @@ def publish_release(request: PublishRequest) -> PublishResult:
             reason=reason,
         )
         with _publish_lock(out_root):
-            previous = _current_release_dir(out_root)
+            previous = _previous_for_publish(out_root)
             if previous != observed_previous:
                 diff, changed = _check_content_change(
                     previous,
@@ -680,7 +710,7 @@ def publish_release(request: PublishRequest) -> PublishResult:
                     reason=reason,
                 )
             while True:
-                after_diff_previous = _current_release_dir(out_root)
+                after_diff_previous = _previous_for_publish(out_root)
                 if after_diff_previous == previous:
                     break
                 previous = after_diff_previous
@@ -870,6 +900,9 @@ def _activate(
                 diff_status = "no_previous"
             else:
                 try:
+                    # 差异必须基于可信的前驱发布物；否则 SHA 不匹配但 JSON 仍可解析的
+                    # 坏文件会被当作正常内容算出 “computed” 差异。前驱不完整时降级。
+                    _validate_activation_target(previous)
                     content_diff = diff_snapshots(previous, release_dir)
                     content_changed = bool(content_diff.get("changed"))
                 except (PublishError, OSError, ValueError, UnicodeError, KeyError, TypeError, IndexError, AttributeError) as exc:
