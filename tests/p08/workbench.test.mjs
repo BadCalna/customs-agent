@@ -241,7 +241,7 @@ test('mountWorkbench preserves operator selected item and P11 draft across recon
     querySelector(sel){return sel.startsWith('#')?elements.get(sel.slice(1))||null:null;},
   };
   const jsonResp=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:{'Content-Type':'application/json'}});
-  let stage='awaiting_confirmation',revision=1,confirmPayloads=[];
+  let stage='awaiting_confirmation',revision=1,failTaskA=false,confirmPayloads=[];
   const makeRun=()=>({run_id:'A-pre2',task_id:'A',version_id:'A2',kind:'precheck',status:'succeeded',is_current:true,
     progress:{total:1,queued:0,running:0,succeeded:1,failed:0},items:[{item_id:'A2i',status:'succeeded',source_location:{sheet_name:'S',row_number:2},attempts:1}]});
   const makeTaskA=()=>({task_id:'A',title:'任务甲',stage,current_version_id:'A2',current_version_number:2,
@@ -255,7 +255,7 @@ test('mountWorkbench preserves operator selected item and P11 draft across recon
     const u=String(url);
     if(u.endsWith('/me'))return jsonResp({username:'op',display_name:'业务员',role:'operator',role_label:'业务员'});
     if(u.includes('/tasks?'))return jsonResp({items:[makeTaskA()],next_cursor:null});
-    if(u.endsWith('/tasks/A'))return jsonResp(makeTaskA());
+    if(u.endsWith('/tasks/A')){if(failTaskA)return jsonResp({error:{code:'server_error',message:'A暂时失败'}},502);return jsonResp(makeTaskA());}
     if(u.endsWith('/tasks/A/history'))return jsonResp({task_id:'A',versions:[{version_id:'A2',runs:[makeRun()],submissions:[]}]});
     if(u.includes('/versions/A2/items?'))return jsonResp({items:[makeItem()],next_cursor:null});
     if(u.endsWith('/versions/A2/items/A2i'))return jsonResp(makeItem());
@@ -283,8 +283,14 @@ test('mountWorkbench preserves operator selected item and P11 draft across recon
     await until(()=>!elements.get('wb-review').hidden && /expected_revision=2/.test(reviewRoot.innerHTML),'reconciled preserving draft');
     assert.equal(elements.get('wb-review').children[0],reviewRoot);
 
-    // Click #wb-refresh -> item & draft survive as well
-    revision=3;
+    // Click #wb-refresh -> item & draft survive as well (including after a transient 502 failure)
+    failTaskA=true;
+    elements.get('wb-refresh').listeners.get('click')();
+    await until(()=>/A暂时失败/.test(elements.get('wb-context-error')?.innerHTML||''),'transient refresh failed');
+    assert.equal(elements.get('wb-review').children[0],reviewRoot);
+    assert.equal(elements.get('wb-review').hidden,true);
+
+    failTaskA=false;revision=3;
     elements.get('wb-refresh').listeners.get('click')();
     await until(()=>!elements.get('wb-review').hidden && /expected_revision=3/.test(reviewRoot.innerHTML),'#wb-refresh preserved draft');
     assert.equal(elements.get('wb-review').children[0],reviewRoot);

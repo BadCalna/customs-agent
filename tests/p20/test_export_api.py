@@ -147,3 +147,9 @@ class ExportApiTests(TestCase):
             )
             self.assertEqual(response.status_code, 422)
             self.assertEqual(response.json()["error"]["code"], expected_code)
+
+    def test_null_issues_in_run_item_result_does_not_raise_500(self):
+        self.row.result = {"issues": None, "comparison_reason": None, "mock_scenario": "normal"}
+        self.row.save()
+        artifact = build_export(self.operator, str(self.version.pk), self.payload())
+        self.assertTrue(artifact.content.startswith(b"PK"))

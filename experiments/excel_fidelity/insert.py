@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import copy
 import html
+import math
 import os
 import re
 import tempfile
@@ -201,6 +202,18 @@ def rewrite_columns(raw: str, start: int, prefix: str) -> str:
     return raw[:match.start()] + replacement + raw[match.end():]
 
 
+def _shift_xsplit(raw_value: str, start: int) -> str | None:
+    try:
+        x_split = float(raw_value)
+    except ValueError as exc:
+        raise CorruptPartError(f"invalid pane xSplit: {raw_value!r}") from exc
+    if not math.isfinite(x_split):
+        raise CorruptPartError(f"non-finite pane xSplit: {raw_value!r}")
+    if x_split >= start - 1:
+        return str(int(x_split) + 2)
+    return None
+
+
 def rewrite_target(raw: str, target: dict, start: int, header_row: int, data_rows: list[int]) -> str:
     prefix = sheet_prefix(raw)
     selected_rows = set(data_rows) | {header_row}
@@ -231,8 +244,9 @@ def rewrite_target(raw: str, target: dict, start: int, header_row: int, data_row
             text = set_attribute(text, "spans", f"{first + (2 if first >= start else 0)}:{last + (2 if last >= start else 0)}")
         if local == "pane" and attribute(text, "state") in ("frozen", "frozenSplit"):
             value = attribute(text, "xSplit")
-            if value is not None and float(value) >= start - 1:
-                text = set_attribute(text, "xSplit", str(int(float(value)) + 2))
+            shifted_split = _shift_xsplit(value, start) if value is not None else None
+            if shifted_split is not None:
+                text = set_attribute(text, "xSplit", shifted_split)
         return text
 
     # Coordinates on <c> were already changed; r on rows is intentionally intact.
@@ -463,8 +477,10 @@ def audit_sheet_metadata(before, after, target, start, added_rows=()):
             if local == "row" and node.get("spans"):
                 first, last = map(int, node.get("spans").split(":"))
                 node.set("spans", f"{first + (2 if first >= start else 0)}:{last + (2 if last >= start else 0)}")
-            if local == "pane" and node.get("state") in ("frozen", "frozenSplit") and float(node.get("xSplit", 0)) >= start - 1:
-                node.set("xSplit", str(int(float(node.get("xSplit"))) + 2))
+            if local == "pane" and node.get("state") in ("frozen", "frozenSplit") and node.get("xSplit") is not None:
+                shifted_split = _shift_xsplit(node.get("xSplit"), start)
+                if shifted_split is not None:
+                    node.set("xSplit", shifted_split)
         if local in ("formula", "formula1", "formula2"):
             node.text = transform_formula(node.text or "", before["name"], target, start)
         if local == "hyperlink" and node.get("location"):

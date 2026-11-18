@@ -17,9 +17,9 @@ export function createWorkbenchReview({host, client, getContext, getUser, getSes
   function canRetain(s, role) {
     if (!panel || role!==bound.role || getSession()!==bound.ticket || getContext()!==bound.ctx || s.taskId!==bound.taskId) return false;
     if (role==='operator') {
-      if (s.error || (s.versionId && s.versionId!==bound.versionId)) return false;
+      if (s.versionId && s.versionId!==bound.versionId) return false;
       if (s.itemId && s.itemId!==bound.itemId) return false;
-      return !!(s.loading || (s.itemId===bound.itemId && !s.card));
+      return !!(s.loading || s.error || (s.itemId===bound.itemId && !s.card));
     }
     if (role!=='expert') return false;
     if ((s.task && s.task.current_version_id!==bound.versionId) || (s.versionId && s.versionId!==bound.versionId)) return false;
@@ -113,7 +113,11 @@ export function createWorkbenchReview({host, client, getContext, getUser, getSes
       }});
     panel.mount(host);
   }
-  return {render,clear,destroy:clear};
+  function retainedScope() {
+    if (!panel || !bound || bound.role!=='operator' || bound.ctx!==getContext() || bound.ticket!==getSession()) return null;
+    return {taskId: bound.taskId, versionId: bound.versionId, itemId: bound.itemId};
+  }
+  return {render,clear,retainedScope,destroy:clear};
 }
 
 export async function mountWorkbench(root) {
@@ -142,6 +146,18 @@ export async function mountWorkbench(root) {
     const ticket=session;
     try{return await value(...args);}catch(error){if(ticket===session)expire(error);throw error;}
   }:value;}});
+  function operatorPreserve(taskId) {
+    if (user?.role !== 'operator') return {};
+    const s = context?.store.get();
+    if (s?.taskId === taskId && s.versionId && s.itemId) {
+      return {preserveItem: true, preserveVersionId: s.versionId, preserveItemId: s.itemId};
+    }
+    const retained = review?.retainedScope?.();
+    if (retained && retained.taskId === taskId && retained.versionId && retained.itemId) {
+      return {preserveItem: true, preserveVersionId: retained.versionId, preserveItemId: retained.itemId};
+    }
+    return {preserveItem: true};
+  }
   function render(s) {
     if(!alive||!user||!context)return;
     const version=(s.task?.versions || []).find(v=>v.version_id===s.versionId);
@@ -166,7 +182,7 @@ export async function mountWorkbench(root) {
     $('#wb-kind')?.addEventListener('change',e=>context.chooseKind(e.target.value));
     $('#wb-run')?.addEventListener('change',e=>context.chooseRun(e.target.value));
     $('#wb-decision')?.addEventListener('change',e=>context.chooseDecision(e.target.value));
-    $('#wb-refresh')?.addEventListener('click',()=>void refreshTask?.(s.taskId,{preserveItem:user.role==='operator'}));
+    $('#wb-refresh')?.addEventListener('click',()=>void refreshTask?.(s.taskId,operatorPreserve(s.taskId)));
     $('#wb-summary').textContent=s.versionId?`V${version?.number ?? '?'} · ${s.loading?'正在读取商品…':s.items.length+' 件商品'} · ${s.versionId===s.task?.current_version_id?'当前版本':'历史版本，只读'}。商品卡片展示该版本阶段有效结果；运行明细及导出严格使用上方所选 Run。`:'';
     exports.update(s,user.role);
     renderCommodityList($('#wb-items'),{items:s.items,selectedItemId:s.itemId,onSelectItem:id=>void context.selectItem(id),emptyTitle:s.loading?'正在读取商品':'本版本暂无商品',emptyHint:'上传完成后刷新任务。'});
@@ -241,8 +257,9 @@ export async function mountWorkbench(root) {
         const stageChanged = (entry.stage || null) !== (s.task.stage || null);
         if (!versionChanged && !runChanged && !stageChanged) return;
       }
-      selectionIntent = (user.role === 'operator' && s.taskId === listState.selectedId && s.versionId && s.itemId)
-        ? {taskId: s.taskId, versionId: s.versionId, itemId: s.itemId} : null;
+      const keep = operatorPreserve(listState.selectedId);
+      selectionIntent = (keep.preserveVersionId && keep.preserveItemId)
+        ? {taskId: listState.selectedId, versionId: keep.preserveVersionId, itemId: keep.preserveItemId} : null;
       await tasks.selectTask(listState.selectedId);
     }
     tasks=createTaskList($('#wb-tasks'),{

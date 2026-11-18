@@ -187,7 +187,7 @@ test('operator confirmation draft survives 409 conflict reload and concurrent re
   const off=ctx.store.subscribe(s=>view.render(s));
   await ctx.openTask('T');
   await ctx.selectItem('first');
-  const root=node.child;
+  let root=node.child;
   field(root,'confirm-hs','8501109900','first');
   field(root,'confirm-reason','业务员冲突测试','first');
 
@@ -223,6 +223,30 @@ test('operator confirmation draft survives 409 conflict reload and concurrent re
   await flush();
   assert.equal(ctx.store.get().itemId,'first');
   assert.equal(ctx.store.get().card.revision,2);
+  root=node.child;
+
+  // If 409 reload transiently fails (s.error set), keep panel & draft hidden rather than destroying
+  let failGetTask=true;
+  client.getTask=async()=>{if(failGetTask){const e=new Error('502');e.status=502;throw e;}return base.task;};
+  let retryPayloads=[];
+  client.confirmItem=async(v,id,p)=>{retryPayloads.push(p);if(failGetTask){const err=new Error('conflict');err.status=409;throw err;}return {revision:3,status:'confirmed'};};
+  field(root,'confirm-hs','8501109902','first');
+  field(root,'confirm-reason','断网重连保留草稿','first');
+  click(root,'confirm','first');
+  await flush();
+  assert.equal(node.child,root);
+  assert.equal(node.hidden,true);
+  assert.equal(ctx.store.get().error.status,502);
+  const retained=view.retainedScope();
+  assert.deepEqual(retained,{taskId:'T',versionId:'V',itemId:'first'});
+  failGetTask=false;
+  await ctx.openTask('T',{preserveItem:true,preserveVersionId:retained.versionId,preserveItemId:retained.itemId});
+  assert.equal(node.child,root);
+  assert.equal(node.hidden,false);
+  click(root,'confirm','first');
+  await flush();
+  assert.equal(retryPayloads[1].confirmed_hs,'8501109902');
+  assert.equal(retryPayloads[1].reason,'断网重连保留草稿');
 
   off();view.destroy();ctx.destroy();
 });

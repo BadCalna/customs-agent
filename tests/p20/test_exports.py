@@ -307,6 +307,11 @@ class ExportTests(unittest.TestCase):
             {sheet_part: sheet_raw.replace('<row r="1">', "<row>", 1).encode()},
             {sheet_part: sheet_raw.replace("</worksheet>", "<mergeCells><mergeCell/></mergeCells></worksheet>", 1).encode()},
             {sheet_part: sheet_raw.encode("utf-16")},
+            {sheet_part: sheet_raw.replace(
+                "<sheetData>",
+                '<sheetViews><sheetView workbookViewId="0"><pane xSplit="inf" ySplit="1" topLeftCell="C2" state="frozen"/></sheetView></sheetViews><sheetData>',
+                1,
+            ).encode()},
             {"xl/workbook.xml": Workbook(base_insert).media_bytes("xl/workbook.xml").replace(
                 b"</workbook>", b'<definedNames><definedName name="N" localSheetId="99">A1</definedName></definedNames></workbook>', 1)},
             {"xl/worksheets/_rels/sheet1.xml.rels": (

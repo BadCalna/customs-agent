@@ -100,14 +100,19 @@ def build_export(user, version_id: str, payload: ExportIn):
                                ("confidence", row.confidence)):
                 if key in data and data[key] != value:
                     raise ExportError("result_value_conflict", "执行摘要与完整结果中的编码、结论或置信度冲突")
+            raw_issues = data.get("issues")
+            if raw_issues is None:
+                raw_issues = []
+            elif not isinstance(raw_issues, list):
+                raise ExportError("invalid_result", "执行完整结果中的 issues 必须是数组")
             lines.append(ExportLine(
                 item_id=str(item.pk), version_id=str(version.pk), run_id=str(run.pk),
                 sheet=item.source_sheet, row=item.source_row, suggested_hs=row.suggested_hs,
-                comparison_status=row.comparison_status or None, reason=data.get("comparison_reason", ""),
-                confidence=row.confidence, confidence_label=data.get("confidence_label", ""),
-                confidence_note=data.get("confidence_note", ""), status=row.status,
+                comparison_status=row.comparison_status or None, reason=data.get("comparison_reason") or "",
+                confidence=row.confidence, confidence_label=data.get("confidence_label") or "",
+                confidence_note=data.get("confidence_note") or "", status=row.status,
                 error_message=row.error_message,
-                issues=tuple(IssueEntry.model_validate(issue) for issue in data.get("issues", [])),
+                issues=tuple(IssueEntry.model_validate(issue) for issue in raw_issues),
             ))
         original = _read_original(user, version.pk)
         selection = ExportSelection(

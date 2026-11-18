@@ -630,10 +630,19 @@ class Workbook:
             for marker in anchor:
                 local = marker.tag.rsplit("}", 1)[-1]
                 if local in ("from", "to"):
-                    markers[local] = {
-                        e.tag.rsplit("}", 1)[-1]: int(e.text or 0) for e in marker
-                        if (e.text or "").strip().lstrip("-").isdigit()
-                    }
+                    coords: dict[str, int] = {}
+                    for e in marker:
+                        raw = (e.text or "").strip()
+                        if not raw:
+                            continue
+                        if not re.fullmatch(r"-?[0-9]+", raw):
+                            raise OoxmlError(
+                                "invalid_drawing_coordinate",
+                                f"绘图坐标不是整数：{part} ({raw!r})",
+                                sheet=sheet.name,
+                            )
+                        coords[e.tag.rsplit("}", 1)[-1]] = int(raw)
+                    markers[local] = coords
             images = []
             for element in anchor.iter():
                 if not element.tag.endswith("}blip"):
