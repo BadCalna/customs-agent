@@ -54,3 +54,166 @@ test('row navigation enforces task/version/run/item and teardown rejects pending
   await ctx.selectItem('A2i',{task_id:'A',version_id:'A2',run_id:'A-pre2'});assert.equal(ctx.store.get().card.item_id,'A2i');
   const wait=deferred();a.getItem=()=>wait.promise;const pending=ctx.selectItem('A2i');ctx.destroy();wait.resolve(item('A2i','A2'));await pending;assert.equal(ctx.store.get().card,null);
 });
+test('missing current version in history exits loading with explicit error and failTask clears pending state',async()=>{
+  const a=api();a.getHistory=async id=>({task_id:id,versions:[]});
+  const ctx=createWorkbenchContext(a);await ctx.openTask('A');
+  assert.equal(ctx.store.get().loading,false);assert.match(ctx.store.get().error.message,/缺少当前版本/);
+  ctx.beginTask('B');assert.equal(ctx.store.get().loading,true);
+  ctx.failTask('B',new Error('读取失败'));assert.equal(ctx.store.get().loading,false);assert.equal(ctx.store.get().error.message,'读取失败');
+  ctx.destroy();
+});
+test('mountWorkbench reconciles refreshed V3, recovers task A after B fails, and keeps card placeholder',async()=>{
+  const {mountWorkbench}=await import('../../web/workbench-live.js');
+  const original={fetch:globalThis.fetch,document:globalThis.document,location:globalThis.location,addEventListener:globalThis.addEventListener};
+  // DOM-lite shim using node-level stubs for workbench IDs
+  const elements=new Map();
+  const root={
+    _html:'',listeners:new Map(),
+    set innerHTML(v){
+      this._html=v;elements.clear();
+      for(const m of v.matchAll(/id="([^"]+)"/g)){
+        const el=makeEl(m[1]);elements.set(m[1],el);
+      }
+    },
+    get innerHTML(){return this._html;},
+    querySelector(sel){
+      if(sel.startsWith('#'))return elements.get(sel.slice(1))||null;
+      return null;
+    },
+  };
+  function makeEl(id){
+    const listeners=new Map();
+    return {
+      id,hidden:false,disabled:false,_html:'',_text:'',value:'',dataset:{},children:[],listeners,
+      set innerHTML(v){this._html=v;},get innerHTML(){return this._html;},
+      set textContent(v){this._text=v;},get textContent(){return this._text;},
+      addEventListener(k,v){listeners.set(k,v);},
+      removeEventListener(k){listeners.delete(k);},
+      contains:()=>true,
+      replaceChildren(...items){this.children=items;},
+      focus(){},scrollIntoView(){},
+      querySelector:()=>null,querySelectorAll:()=>[],
+    };
+  }
+  const jsonResp=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:{'Content-Type':'application/json'}});
+  let listVersion='A2',failB=false;
+  const makeRun=(v,r)=>({run_id:r,task_id:'A',version_id:v,kind:'precheck',status:'succeeded',is_current:true,
+    progress:{total:1,queued:0,running:0,succeeded:1,failed:0},items:[{item_id:v+'i',status:'succeeded',source_location:{sheet_name:'S',row_number:2},attempts:1}]});
+  const makeTaskA=v=>({task_id:'A',title:'任务甲',stage:'awaiting_confirmation',current_version_id:v,current_version_number:Number(v.slice(1)),
+    latest_run_id:'A-pre'+v.slice(1),latest_run_kind:'precheck',latest_run_status:'succeeded',revision:1,allowed_actions:['read','confirmation.write','submission.create'],
+    versions:[{version_id:'A2',number:2,original_filename:'v2.xlsx',is_current:v==='A2'},...(v==='A3'?[{version_id:'A3',number:3,original_filename:'v3.xlsx',is_current:true}]:[])]});
+  const makeTaskB=()=>({task_id:'B',title:'任务乙',stage:'awaiting_confirmation',current_version_id:'B1',current_version_number:1,
+    latest_run_id:'B-pre1',latest_run_kind:'precheck',latest_run_status:'succeeded',revision:1,allowed_actions:['read'],
+    versions:[{version_id:'B1',number:1,original_filename:'b1.xlsx',is_current:true}]});
+  globalThis.document={cookie:'csrftoken=test',createElement:()=>makeEl('dyn'),activeElement:null,getElementById:()=>null};
+  globalThis.location={search:''};
+  globalThis.addEventListener=()=>{};
+  globalThis.fetch=async(url)=>{
+    const u=String(url);
+    if(u.endsWith('/me'))return jsonResp({username:'op',display_name:'业务员',role:'operator',role_label:'业务员'});
+    if(u.includes('/tasks?'))return jsonResp({items:[makeTaskA(listVersion),makeTaskB()],next_cursor:null});
+    if(u.endsWith('/tasks/A'))return jsonResp(makeTaskA(listVersion));
+    if(u.endsWith('/tasks/B')){if(failB)return jsonResp({error:{code:'server_error',message:'B失败'}},500);return jsonResp(makeTaskB());}
+    if(u.endsWith('/tasks/A/history'))return jsonResp({task_id:'A',versions:[
+      {version_id:'A2',runs:[makeRun('A2','A-pre2')],submissions:[]},
+      ...(listVersion==='A3'?[{version_id:'A3',runs:[makeRun('A3','A-pre3')],submissions:[]}]:[]),
+    ]});
+    if(u.includes('/versions/A2/items?'))return jsonResp({items:[{item_id:'A2i',task_id:'A',version_id:'A2',name:'甲V2',supplier_hs_raw:'1',image_status:'absent',revision:1,source_location:{sheet_name:'S',row_number:2}}],next_cursor:null});
+    if(u.includes('/versions/A3/items?'))return jsonResp({items:[{item_id:'A3i',task_id:'A',version_id:'A3',name:'甲V3',supplier_hs_raw:'1',image_status:'absent',revision:1,source_location:{sheet_name:'S',row_number:2}}],next_cursor:null});
+    if(u.endsWith('/runs/A-pre2'))return jsonResp(makeRun('A2','A-pre2'));
+    if(u.endsWith('/runs/A-pre3'))return jsonResp(makeRun('A3','A-pre3'));
+    return jsonResp({error:{code:'not_found',message:'not found'}},404);
+  };
+  try{
+    const wb=await mountWorkbench(root);
+    const until=async(pred,label)=>{for(let i=0;i<60;i++){if(pred())return;await new Promise(r=>setImmediate(r));}assert.fail('timeout: '+label);};
+    await until(()=>/任务甲/.test(elements.get('wb-tasks')?.innerHTML||''),'initial list');
+    assert.match(elements.get('wb-card').innerHTML,/选择一件商品/);
+    // Select A
+    elements.get('wb-tasks').listeners.get('click')({target:{closest:()=>({dataset:{task:'A'},disabled:false})}});
+    await until(()=>/V2 · 1 件商品/.test(elements.get('wb-summary')?.textContent||''),'A V2 loaded');
+    // Refresh list when server upgraded A to V3 -> right panel reconciles to V3
+    listVersion='A3';
+    elements.get('wb-tasks').listeners.get('click')({target:{closest:()=>({dataset:{action:'refresh'},disabled:false})}});
+    await until(()=>/V3 · 1 件商品/.test(elements.get('wb-summary')?.textContent||''),'reconciled to V3');
+    // Click B which fails -> task-list rolls back to A AND workbench recovers A instead of hanging on B
+    failB=true;
+    elements.get('wb-tasks').listeners.get('click')({target:{closest:()=>({dataset:{task:'B'},disabled:false})}});
+    await until(()=>elements.get('wb-title').textContent==='任务甲'&&/V3 · 1 件商品/.test(elements.get('wb-summary').textContent),'recovered A after B failed');
+    assert.doesNotMatch(elements.get('wb-title').textContent,/正在读取/);
+    wb.destroy();
+  }finally{
+    Object.assign(globalThis,original);
+  }
+});
+test('missing current version in task.versions exits loading with explicit error',async()=>{
+  const a=api();a.getTask=async id=>({...task(id),versions:[{version_id:id+'1'}]});
+  const ctx=createWorkbenchContext(a);await ctx.openTask('A');
+  assert.equal(ctx.store.get().loading,false);assert.match(ctx.store.get().error.message,/缺少当前版本/);
+  ctx.destroy();
+});
+test('mountWorkbench recovers after failed reconcileSelection and blocks submit without submission.create',async()=>{
+  const {mountWorkbench}=await import('../../web/workbench-live.js');
+  const original={fetch:globalThis.fetch,document:globalThis.document,location:globalThis.location,addEventListener:globalThis.addEventListener};
+  const elements=new Map();
+  const makeEl=id=>{
+    const listeners=new Map();
+    return {
+      id,hidden:false,disabled:false,_html:'',_text:'',value:'',dataset:{},children:[],listeners,
+      set innerHTML(v){this._html=v;},get innerHTML(){return this._html;},
+      set textContent(v){this._text=v;},get textContent(){return this._text;},
+      addEventListener(k,v){listeners.set(k,v);},
+      removeEventListener(k){listeners.delete(k);},
+      contains:()=>true,replaceChildren(...items){this.children=items;},focus(){},scrollIntoView(){},
+      querySelector:()=>null,querySelectorAll:()=>[],
+    };
+  };
+  const root={
+    _html:'',listeners:new Map(),
+    set innerHTML(v){this._html=v;elements.clear();for(const m of v.matchAll(/id="([^"]+)"/g))elements.set(m[1],makeEl(m[1]));},
+    get innerHTML(){return this._html;},
+    querySelector(sel){return sel.startsWith('#')?elements.get(sel.slice(1))||null:null;},
+  };
+  const jsonResp=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:{'Content-Type':'application/json'}});
+  let stage='awaiting_confirmation',failA=false,getItemCalls=0,submitCalls=0;
+  const makeRun=()=>({run_id:'A-pre2',task_id:'A',version_id:'A2',kind:'precheck',status:'succeeded',is_current:true,
+    progress:{total:1,queued:0,running:0,succeeded:1,failed:0},items:[{item_id:'A2i',status:'succeeded',source_location:{sheet_name:'S',row_number:2},attempts:1}]});
+  const makeTaskA=()=>({task_id:'A',title:'任务甲',stage,current_version_id:'A2',current_version_number:2,
+    latest_run_id:'A-pre2',latest_run_kind:'precheck',latest_run_status:'succeeded',revision:1,allowed_actions:['read','confirmation.write'],
+    versions:[{version_id:'A2',number:2,original_filename:'v2.xlsx',is_current:true}]});
+  globalThis.document={cookie:'csrftoken=test',createElement:()=>makeEl('dyn'),activeElement:null,getElementById:()=>null};
+  globalThis.location={search:''};
+  globalThis.addEventListener=()=>{};
+  globalThis.fetch=async(url)=>{
+    const u=String(url);
+    if(u.endsWith('/me'))return jsonResp({username:'op',display_name:'业务员',role:'operator',role_label:'业务员'});
+    if(u.includes('/tasks?'))return jsonResp({items:[makeTaskA()],next_cursor:null});
+    if(u.endsWith('/tasks/A')){if(failA)return jsonResp({error:{code:'server_error',message:'A暂时失败'}},500);return jsonResp(makeTaskA());}
+    if(u.endsWith('/tasks/A/history'))return jsonResp({task_id:'A',versions:[{version_id:'A2',runs:[makeRun()],submissions:[]}]});
+    if(u.includes('/versions/A2/items?'))return jsonResp({items:[{item_id:'A2i',task_id:'A',version_id:'A2',name:'甲V2',supplier_hs_raw:'1',image_status:'absent',revision:1,source_location:{sheet_name:'S',row_number:2}}],next_cursor:null});
+    if(u.includes('/versions/A2/items/')){getItemCalls++;return jsonResp({});}
+    if(u.endsWith('/submissions')){submitCalls++;return jsonResp({});}
+    if(u.endsWith('/runs/A-pre2'))return jsonResp(makeRun());
+    return jsonResp({error:{code:'not_found',message:'not found'}},404);
+  };
+  try{
+    const wb=await mountWorkbench(root);
+    const until=async(pred,label)=>{for(let i=0;i<60;i++){if(pred())return;await new Promise(r=>setImmediate(r));}assert.fail('timeout: '+label);};
+    await until(()=>/任务甲/.test(elements.get('wb-tasks')?.innerHTML||''),'initial list');
+    elements.get('wb-tasks').listeners.get('click')({target:{closest:()=>({dataset:{task:'A'},disabled:false})}});
+    await until(()=>/V2 · 1 件商品/.test(elements.get('wb-summary')?.textContent||''),'A loaded');
+    await elements.get('wb-submit').onclick();
+    assert.equal(getItemCalls,0);assert.equal(submitCalls,0);
+    // Reconcile fails once -> failTask leaves error; subsequent list refresh recovers A
+    stage='returned';failA=true;
+    elements.get('wb-tasks').listeners.get('click')({target:{closest:()=>({dataset:{action:'refresh'},disabled:false})}});
+    await until(()=>/A暂时失败/.test(elements.get('wb-context-error')?.innerHTML||''),'reconcile failed');
+    failA=false;
+    elements.get('wb-tasks').listeners.get('click')({target:{closest:()=>({dataset:{action:'refresh'},disabled:false})}});
+    await until(()=>elements.get('wb-title').textContent==='任务甲'&&/V2 · 1 件商品/.test(elements.get('wb-summary').textContent),'recovered A on refresh');
+    assert.equal(elements.get('wb-context-error').innerHTML,'');
+    wb.destroy();
+  }finally{
+    Object.assign(globalThis,original);
+  }
+});

@@ -6,12 +6,12 @@ export function exportSelection(s, role) {
   if (s.loading || s.error || s.progressError) return {reason: '请先成功读取所选版本与执行结果。'};
   if (!s.task || !s.versionId || !run || run.task_id !== s.taskId || run.version_id !== s.versionId || run.run_id !== s.runId || run.kind !== s.kind) return {reason: '请选择明确的任务、文件版本、阶段和执行记录。'};
   if (!['succeeded','failed'].includes(run.status)) return {reason: '执行尚未结束或已作废，暂不能导出。'};
-  if (!s.items.length || run.items.length !== s.items.length || new Set(run.items.map(i=>i.item_id)).size !== s.items.length || run.items.some(i=>!s.items.some(x=>x.item_id===i.item_id) || !['succeeded','failed'].includes(i.status))) return {reason: '执行结果未覆盖本版本全部商品，暂不能导出。'};
+  if (!Array.isArray(run.items) || !s.items.length || run.items.length !== s.items.length || new Set(run.items.map(i=>i.item_id)).size !== s.items.length || run.items.some(i=>!s.items.some(x=>x.item_id===i.item_id) || !['succeeded','failed'].includes(i.status))) return {reason: '执行结果未覆盖本版本全部商品，暂不能导出。'};
   let submission = null;
   if (run.kind === 'expert_check') {
-    submission = s.history?.versions.find(v=>v.version_id===s.versionId)?.submissions.find(x=>x.submission_id===run.submission_id);
+    submission = s.history?.versions?.find(v=>v.version_id===s.versionId)?.submissions?.find(x=>x.submission_id===run.submission_id);
     if (!submission) return {reason: '缺少该专家核查对应的提交快照，暂不能导出。'};
-    if (s.decisionId && !submission.decisions.some(d=>d.decision_id===s.decisionId)) return {reason: '专家决定与所选提交不匹配。'};
+    if (s.decisionId && !(submission.decisions || []).some(d=>d.decision_id===s.decisionId)) return {reason: '专家决定与所选提交不匹配。'};
   }
   return {versionId: s.versionId, taskId: s.taskId, runId: run.run_id, runKind: run.kind,
     submissionId: submission?.submission_id || null, decisionId: s.decisionId || null};
@@ -41,7 +41,7 @@ export function createExportActions(host, {client, download = downloadAttachment
   function update(state, role) {
     const selection = exportSelection(state, role);
     const next = JSON.stringify([state.taskId,state.versionId,state.kind,state.runId,state.decisionId,role]);
-    if (key !== next) {epoch++; busy = false; error = null; success = ''; key = next;}
+    if (key !== next || (busy && selection.reason)) {epoch++; busy = false; error = null; success = ''; key = next;}
     context = selection.reason ? null : selection; reason = selection.reason || ''; draw();
   }
   async function start(kind) {
@@ -50,7 +50,7 @@ export function createExportActions(host, {client, download = downloadAttachment
     try {
       const result = await client.exportFile(selected.versionId, {kind, run_id: selected.runId,
         ...(selected.submissionId ? {submission_id: selected.submissionId} : {}), ...(selected.decisionId ? {decision_id: selected.decisionId} : {})});
-      if (!alive || n !== epoch) return;
+      if (!alive || n !== epoch || !context || reason) return;
       // The server echoes the bound run. Never turn a mismatched attachment into a successful download.
       if (result.runId !== selected.runId) throw new Error('附件执行引用与所选结果不一致，已取消下载');
       download(result); success = result.filename;

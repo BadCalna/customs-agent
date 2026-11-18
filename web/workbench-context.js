@@ -18,6 +18,12 @@ export function createWorkbenchContext(client) {
   let alive = true, epoch = 0, cardTicket = 0;
   const active = (n) => alive && epoch === n;
   function beginTask(taskId) { epoch++; cardTicket++; store.set({...blank, taskId, loading: !!taskId}); }
+  function failTask(taskId, error) {
+    if (!alive) return;
+    if (taskId && store.get().taskId !== taskId) return;
+    epoch++; cardTicket++;
+    store.set({...blank, taskId: taskId || null, error: error || new Error('任务读取失败'), loading: false});
+  }
   async function acceptTask(task) {
     if (!alive || store.get().taskId !== task.task_id) return;
     const n = epoch;
@@ -27,8 +33,15 @@ export function createWorkbenchContext(client) {
       if (!active(n)) return;
       if (history.task_id !== task.task_id) throw new Error('任务历史身份不匹配');
       store.set({history, kind: ['precheck','expert_check'].includes(task.latest_run_kind) ? task.latest_run_kind : 'precheck'});
-      if (task.current_version_id) await openVersion(task.current_version_id);
-      else store.set({loading: false});
+      if (task.current_version_id) {
+        if (!task?.versions?.some(v => v.version_id === task.current_version_id)
+            || !history?.versions?.some(v => v.version_id === task.current_version_id)) {
+          throw new Error('任务历史缺少当前版本记录');
+        }
+        await openVersion(task.current_version_id);
+      } else {
+        store.set({loading: false});
+      }
     } catch (error) { if (active(n)) store.set({error, loading: false}); }
   }
   async function openTask(id) {
@@ -39,7 +52,7 @@ export function createWorkbenchContext(client) {
   }
   async function openVersion(versionId) {
     const {task, history, kind} = store.get();
-    if (!alive || !task?.versions.some(v => v.version_id === versionId) || !history?.versions.some(v => v.version_id === versionId)) return;
+    if (!alive || !task?.versions?.some(v => v.version_id === versionId) || !history?.versions?.some(v => v.version_id === versionId)) return;
     const n = ++epoch; cardTicket++;
     store.set({versionId, items: [], itemId: null, card: null, runId: defaultRun(task, history, versionId, kind),
       run: null, progressError: null, decisionId: null, error: null, loading: true});
@@ -87,6 +100,6 @@ export function createWorkbenchContext(client) {
     const s = store.get(); const sub = s.history?.versions.find(v => v.version_id === s.versionId)?.submissions.find(x => x.submission_id === s.run?.submission_id);
     if (!id || sub?.decisions.some(d => d.decision_id === id)) store.set({decisionId: id || null});
   }
-  return {store, beginTask, acceptTask, openTask, openVersion, chooseKind, chooseRun, selectItem, acceptProgress, chooseDecision,
+  return {store, beginTask, failTask, acceptTask, openTask, openVersion, chooseKind, chooseRun, selectItem, acceptProgress, chooseDecision,
     destroy() {alive = false; epoch++; cardTicket++;}};
 }

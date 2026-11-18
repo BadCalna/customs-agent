@@ -32,6 +32,23 @@ class ExportError(ValueError):
         super().__init__(message)
 
 
+def _xml(data: bytes, *, part: str = "部件") -> ET.Element:
+    """解析原件或导出结果的 XML 部件。
+
+    原件里的 XML 可能损坏（例如样式表被替换成畸形内容）。这类问题属于输入文件问题，
+    必须转成结构化校验错误（422），不能让 ``ET.ParseError`` 冒到入口变成 500。
+    """
+    try:
+        return ET.fromstring(data)
+    except ET.ParseError as exc:
+        raise ExportError("source_workbook_invalid",
+                          f"原件中的 {part} 不是合法 XML，无法安全导出（{exc}）") from exc
+    except LookupError as exc:
+        # 未知编码（encoding="unknown-codec" 等）：ElementTree 抛 LookupError，同样按输入问题处理。
+        raise ExportError("source_workbook_invalid",
+                          f"原件中的 {part} 声明了不支持的编码，无法安全导出（{exc}）") from exc
+
+
 @dataclass(frozen=True)
 class ExportLine:
     item_id: str
@@ -188,15 +205,27 @@ def _append(raw: str, tag: str, fragments: list[str], count: int) -> str:
     return raw[:match.start()] + value + raw[match.end():]
 
 
+def _style_index(raw: str | None, *, label: str) -> int:
+    if raw is None:
+        return 0
+    try:
+        index = int(raw)
+    except (TypeError, ValueError) as exc:
+        raise ExportError("invalid_style", f"{label}无效：{raw!r}") from exc
+    if index < 0:
+        raise ExportError("invalid_style", f"{label}不能为负数：{index}")
+    return index
+
+
 def _styles(raw: bytes, requested: set[tuple[int, str]]) -> tuple[bytes, dict]:
-    root = ET.fromstring(raw)
+    root = _xml(raw, part="xl/styles.xml")
     fonts, fills, xfs = (root.find("s:" + tag, NS) for tag in ("fonts", "fills", "cellXfs"))
     if any(node is None or not len(node) for node in (fonts, fills, xfs)):
         raise ExportError("unsupported_styles", "模板缺少基础样式，不能安全应用结果标色")
     appended = {"fonts": [], "fills": [], "cellXfs": []}
     result = {}
     for base, level in sorted(requested):
-        if base >= len(xfs):
+        if not 0 <= base < len(xfs):
             raise ExportError("invalid_style", "结果单元格引用了不存在的样式")
         xf = copy.deepcopy(xfs[base])
         alignment = xf.find("s:alignment", NS)
@@ -207,8 +236,8 @@ def _styles(raw: bytes, requested: set[tuple[int, str]]) -> tuple[bytes, dict]:
         alignment.set("wrapText", "1")
         xf.set("applyAlignment", "1")
         if level in ("低", "中"):
-            font_id = int(xf.get("fontId", "0"))
-            if font_id >= len(fonts):
+            font_id = _style_index(xf.get("fontId"), label="模板字体索引")
+            if not 0 <= font_id < len(fonts):
                 raise ExportError("invalid_style", "模板字体索引无效")
             font = copy.deepcopy(fonts[font_id])
             for node in list(font.findall("s:color", NS)):
@@ -256,7 +285,10 @@ def _fill_sheet(raw: bytes, writes: dict[str, str]) -> bytes:
     cell_pattern = rf'<{cell_prefix}c\b[^>]*?(?:/>|>.*?</{cell_prefix}c>)'
 
     def replace_row(match):
-        number = int(re.search(r'\br="([0-9]+)"', match[1])[1])
+        row_attr = re.search(r'\br="([0-9]+)"', match[1])
+        if not row_attr:
+            raise ExportError("unsupported_xml", "工作表行缺少 r 属性，不能安全填充")
+        number = int(row_attr[1])
         if number not in grouped:
             return match[0]
         visited.add(number)
@@ -264,7 +296,10 @@ def _fill_sheet(raw: bytes, writes: dict[str, str]) -> bytes:
         pending = dict(grouped[number])
         pieces, end = [], 0
         for cell in re.finditer(cell_pattern, body, re.S):
-            ref = re.search(r'\br="([A-Z]+[0-9]+)"', cell[0])[1]
+            ref_attr = re.search(r'\br="([A-Za-z]+[0-9]+)"', cell[0])
+            if not ref_attr:
+                raise ExportError("unsupported_xml", "工作表单元格缺少 r 属性，不能安全填充")
+            ref = ref_attr[1].upper()
             before = sorted((r for r in pending if col_number(re.match(r"[A-Z]+", r)[0]) < col_number(re.match(r"[A-Z]+", ref)[0])),
                             key=lambda r: col_number(re.match(r"[A-Z]+", r)[0]))
             pieces.append(body[end:cell.start()])
@@ -289,7 +324,7 @@ def audit_fill(before: bytes, after: bytes, sheet_name: str, writes: dict[str, s
     for part in left.part_names - {sheet.part, "xl/styles.xml"}:
         if left.media_bytes(part) != right.media_bytes(part):
             raise ExportError("fidelity_failed", "原页签、图片或其他部件发生非预期变化")
-    a, b = ET.fromstring(left.media_bytes(sheet.part)), ET.fromstring(right.media_bytes(sheet.part))
+    a, b = _xml(left.media_bytes(sheet.part), part=sheet.part), _xml(right.media_bytes(sheet.part), part=sheet.part)
     for root in (a, b):
         for row in root.findall("s:sheetData/s:row", NS):
             for cell in list(row):
@@ -302,11 +337,11 @@ def audit_fill(before: bytes, after: bytes, sheet_name: str, writes: dict[str, s
         prefix = _prefix(expected, "c")
         declaration = f' xmlns:{prefix[:-1]}="{S}"' if prefix else ""
         node = ET.fromstring('<root xmlns="' + S + '"' + declaration + '>' + expected + '</root>')[0]
-        found = ET.fromstring(right.media_bytes(sheet.part)).find(f'.//s:c[@r="{ref}"]', NS)
+        found = _xml(right.media_bytes(sheet.part), part=sheet.part).find(f'.//s:c[@r="{ref}"]', NS)
         if found is None or canonical(found) != canonical(node) or actual.cell(ref).formula is not None:
             raise ExportError("fidelity_failed", "结果文本或标色未完整写入")
-    old_styles = ET.fromstring(left.media_bytes("xl/styles.xml"))
-    new_styles = ET.fromstring(right.media_bytes("xl/styles.xml"))
+    old_styles = _xml(left.media_bytes("xl/styles.xml"), part="xl/styles.xml")
+    new_styles = _xml(right.media_bytes("xl/styles.xml"), part="xl/styles.xml")
     for tag in ("fonts", "fills", "cellXfs"):
         old, new = old_styles.find("s:" + tag, NS), new_styles.find("s:" + tag, NS)
         if new is None or len(new) < len(old) or any(canonical(x) != canonical(y) for x, y in zip(old, new)):
@@ -336,7 +371,7 @@ def normalize_export_views(source: bytes) -> tuple[bytes, dict]:
     changes, views = {}, []
     for sheet in book.sheets:
         raw = book.media_bytes(sheet.part)
-        expected = ET.fromstring(raw)
+        expected = _xml(raw, part=sheet.part)
         changed = []
         for node in expected.findall("s:sheetViews/s:sheetView", NS):
             previous = node.get("view")
@@ -356,7 +391,7 @@ def normalize_export_views(source: bytes) -> tuple[bytes, dict]:
         view_attribute = re.compile(r'''(\sview\s*=\s*)(["'])(pageBreakPreview|pageLayout)\2''')
         replacement = opening.sub(lambda tag: view_attribute.sub(lambda attr: attr[1] + attr[2] + "normal" + attr[2], tag[0]), match[0])
         updated = (value[:match.start()] + replacement + value[match.end():]).encode("utf-8")
-        if canonical(ET.fromstring(updated)) != canonical(expected):
+        if canonical(_xml(updated, part=sheet.part)) != canonical(expected):
             raise ExportError("fidelity_failed", "视图调整改变了非预期的页签内容")
         changes[sheet.part] = updated
         views.extend(changed)
@@ -406,7 +441,7 @@ def export_precheck(source: bytes, selection: ExportSelection, *, excel2016_imag
             prepared = destination.read_bytes()
     book = Workbook(prepared)
     sheet = book.sheet(extracted.layout.sheet)
-    root = ET.fromstring(book.media_bytes(sheet.part))
+    root = _xml(book.media_bytes(sheet.part), part=sheet.part)
     if root.find("s:sheetProtection", NS) is not None:
         raise ExportError("protected_sheet", "申报要素页受保护，不能写入")
     requested, cells = set(), {}
@@ -420,7 +455,7 @@ def export_precheck(source: bytes, selection: ExportSelection, *, excel2016_imag
             old = sheet.cell(ref)
             if old and old.formula is not None:
                 raise ExportError("formula_in_result_cell", "结果格含公式，不能静默覆盖")
-            base = int(old.style or 0) if old else 0
+            base = _style_index(old.style, label="结果单元格样式索引") if old else 0
             level = line.confidence_label if line.status == "succeeded" else ""
             requested.add((base, level))
             segments = ([(line.suggested_hs or "", False)] if key == "ai_hs" and line.status == "succeeded"

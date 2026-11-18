@@ -15,7 +15,7 @@ from adapters.files.export_workbook import (
     ExportError, ExportLine, ExportSelection, _zip_replace, audit_fill, export_precheck, normalize_export_views,
 )
 from adapters.files.export_issues import HEADERS, STYLES, export_issues
-from adapters.files.ooxml import NS, S, Workbook
+from adapters.files.ooxml import NS, OoxmlError, S, Workbook
 from experiments.excel_fidelity.workbook import FidelityError
 from tests.p03.fixtures import make_fixture
 from tests.p04.builders import build_package
@@ -253,3 +253,36 @@ class ExportTests(unittest.TestCase):
         artifact = export_issues(self.source, self.selection)
         self.assertEqual(artifact.manifest["issue_count"], 0)
         self.assertIn("不表示", Workbook(artifact.content).sheet("补料清单").cell("A5").value)
+
+    def test_negative_and_out_of_range_style_or_font_indices_rejected(self):
+        book = Workbook(self.source)
+        sheet_part = book.find_sheet("申报要素").part
+        sheet_raw = book.media_bytes(sheet_part).decode()
+        styles_xml = ET.fromstring(book.media_bytes("xl/styles.xml"))
+        xfs_count = len(styles_xml.find("s:cellXfs", NS))
+        fonts_count = len(styles_xml.find("s:fonts", NS))
+
+        for bad_style in ("-1", "-999999", str(xfs_count), "bad", ""):
+            mutated = sheet_raw.replace('<c r="F2" t="inlineStr">', f'<c r="F2" s="{bad_style}" t="inlineStr">', 1)
+            source = _zip_replace(self.source, {sheet_part: mutated.encode()})
+            with self.subTest(bad_style=bad_style), self.assertRaises(ExportError) as caught:
+                export_precheck(source, selection(source))
+            self.assertEqual(caught.exception.code, "invalid_style")
+
+        for bad_font in ("-1", "-999999", str(fonts_count), "bad"):
+            styles_mutated = re.sub(r'fontId="[0-9]+"', f'fontId="{bad_font}"', book.media_bytes("xl/styles.xml").decode())
+            source = _zip_replace(self.source, {"xl/styles.xml": styles_mutated.encode()})
+            for level in ("低", "中"):
+                with self.subTest(bad_font=bad_font, level=level), self.assertRaises(ExportError) as caught:
+                    export_precheck(source, selection(source, confidence_label=level))
+                self.assertEqual(caught.exception.code, "invalid_style")
+
+    def test_negative_shared_string_index_rejected_in_ooxml(self):
+        book = Workbook(self.source)
+        sheet_part = book.find_sheet("申报要素").part
+        sheet_raw = book.media_bytes(sheet_part).decode()
+        mutated = re.sub(r'<c r="A2"[^>]*>.*?</c>', '<c r="A2" t="s"><v>-1</v></c>', sheet_raw, count=1)
+        source = _zip_replace(self.source, {sheet_part: mutated.encode()})
+        with self.assertRaises(OoxmlError) as caught:
+            Workbook(source)
+        self.assertEqual(caught.exception.code, "broken_shared_string")

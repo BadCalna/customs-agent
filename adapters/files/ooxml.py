@@ -134,6 +134,9 @@ def _xml(data: bytes, *, part: str) -> ET.Element:
         return ET.fromstring(data)
     except ET.ParseError as exc:
         raise OoxmlError("malformed_xml", f"部件 XML 无法解析：{part}（{exc}）") from exc
+    except LookupError as exc:
+        # XML 声明里的未知编码：同样属于无法解析的部件，不能冒成 500。
+        raise OoxmlError("malformed_xml", f"部件 XML 声明了不支持的编码：{part}（{exc}）") from exc
 
 
 def _text(element: ET.Element | None) -> str:
@@ -432,7 +435,10 @@ class Workbook:
             raw = element.findtext("s:v", "", NS)
             if kind == "s":
                 try:
-                    value = self.shared_strings[int(raw)] if raw else ""
+                    index = int(raw) if raw else None
+                    if index is not None and index < 0:
+                        raise IndexError(index)
+                    value = self.shared_strings[index] if index is not None else ""
                 except (ValueError, IndexError) as exc:
                     raise OoxmlError(
                         "broken_shared_string", f"共享字符串索引越界：{ref}", sheet=name, cell=ref

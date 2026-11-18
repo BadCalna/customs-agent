@@ -11,7 +11,7 @@ import {createReviewActions} from './components/review-actions.js';
 /** Bind P11 to immutable review scope; browsing a commodity never replaces an expert draft. */
 export function createWorkbenchReview({host, client, getContext, getUser, getSession}) {
   let panel=null, scopeKey='', dataKey='', bound=null;
-  function clear() {panel?.destroy();panel=null;bound=null;scopeKey=dataKey='';host.hidden=false;host.replaceChildren();}
+  function clear() {panel?.destroy();panel=null;bound=null;scopeKey=dataKey='';host.hidden=false;if(host.dataset)delete host.dataset.reviewNotice;host.replaceChildren();}
   // Empty fields during openTask/openVersion are not evidence of a different submission.
   // Keep the instance (including P11's private drafts), but never expose stale write controls.
   function canRetain(s, role) {
@@ -25,10 +25,10 @@ export function createWorkbenchReview({host, client, getContext, getUser, getSes
   }
   function binding(s, role) {
     if (!s.task || s.versionId!==s.task.current_version_id || !['operator','expert'].includes(role)) return null;
-    const version=s.task.versions.find(v=>v.version_id===s.versionId);
+    const version=(s.task.versions || []).find(v=>v.version_id===s.versionId);
     let submission=null, items=[];
     if (role==='expert') {
-      submission=s.history?.versions.find(v=>v.version_id===s.versionId)?.submissions.find(x=>x.submission_id===s.run?.submission_id);
+      submission=s.history?.versions?.find(v=>v.version_id===s.versionId)?.submissions?.find(x=>x.submission_id===s.run?.submission_id);
       if (!submission || submission.status!=='pending' || s.run?.kind!=='expert_check' || !s.run.is_current) return null;
       if (s.loading || s.progressError) return {notice:'正在读取并核对本版本审核信息，完成后再提交。'};
       const byId=new Map(s.items.map(item=>[item.item_id,item]));
@@ -48,7 +48,7 @@ export function createWorkbenchReview({host, client, getContext, getUser, getSes
     const scope=role==='expert' ? [role,s.taskId,s.versionId,submission.submission_id]
       : [role,s.taskId,s.versionId,s.card.item_id,s.card.revision,s.task.revision,s.runId];
     return {scope:JSON.stringify(scope),submissionId:submission?.submission_id,itemId:role==='operator'?s.card.item_id:null,
-      data:{task:{...s.task,allowed_actions:s.task.allowed_actions.filter(a=>role==='operator'?a!=='submission.create':true)},
+      data:{task:{...s.task,allowed_actions:(s.task.allowed_actions || []).filter(a=>role==='operator'?a!=='submission.create':true)},
         version,items,submission,expert_check:s.run?{run_id:s.run.run_id,status:s.run.status}:null}};
   }
   function render(s) {
@@ -75,7 +75,7 @@ export function createWorkbenchReview({host, client, getContext, getUser, getSes
       confirm:payload=>client.confirmItem(owner.versionId,owner.itemId,payload),
       submit:()=>Promise.reject(new Error('请使用本批次提交入口，避免只提交选中商品')),
       decide:payload=>{
-        if (!stillCurrent() || !getContext().store.get().task.allowed_actions.includes('decision.resolve')) return Promise.reject(new Error('审核上下文正在刷新、已切换或无操作权限；草稿已保留，请核对后再提交。'));
+        if (!stillCurrent() || !getContext().store.get().task?.allowed_actions?.includes('decision.resolve')) return Promise.reject(new Error('审核上下文正在刷新、已切换或无操作权限；草稿已保留，请核对后再提交。'));
         const signature=JSON.stringify(payload);if(decisionAttempt?.signature!==signature)decisionAttempt={signature,key:crypto.randomUUID()};
         return client.decideSubmission(owner.submissionId,payload,decisionAttempt.key);
       }},onChanged:()=>{
@@ -92,11 +92,11 @@ export function createWorkbenchReview({host, client, getContext, getUser, getSes
 export async function mountWorkbench(root) {
   const api = createClient({mode:'live'});
   let user = null, context = null, tasks = null, progress = null, exports = null, review = null;
-  let unsubscribe = null, alive = true, session = 0, runKey = '', cardKey = null, submitIntent = null, submitting = false;
+  let unsubscribe = null, alive = true, session = 0, runKey = '', cardKey = undefined, submitIntent = null, submitting = false, pendingReconcile = false;
   const $ = selector => root.querySelector(selector);
   function reset() {
     session++; unsubscribe?.(); tasks?.destroy(); progress?.destroy(); exports?.destroy(); context?.destroy(); review?.destroy();
-    context=tasks=progress=exports=review=null;unsubscribe=null;runKey='';cardKey=null;submitIntent=null;submitting=false;
+    context=tasks=progress=exports=review=null;unsubscribe=null;runKey='';cardKey=undefined;submitIntent=null;submitting=false;pendingReconcile=false;
   }
   function gate(error = null) {
     reset(); user=null;
@@ -117,15 +117,23 @@ export async function mountWorkbench(root) {
   }:value;}});
   function render(s) {
     if(!alive||!user||!context)return;
+    const version=(s.task?.versions || []).find(v=>v.version_id===s.versionId);
+    const next=JSON.stringify([s.taskId,s.versionId,s.kind,s.runId]);
+    if(next!==runKey){
+      runKey=next;
+      void progress.open({taskId:s.taskId,versionId:s.versionId,kind:s.kind,runId:s.runId,
+        versionNumber:version?.number,isVersionCurrent:s.versionId===s.task?.current_version_id});
+      // progress.open 同步通过 onStateChange 写回 store 并触发内层 render；此处若状态已更新则直接让出，防止旧快照覆盖新视图。
+      if(context.store.get()!==s)return;
+    }
     $('#wb-title').textContent=s.task?.title || (s.loading?'正在读取任务…':'选择左侧任务');
     $('#wb-context-error').innerHTML=s.error?errorHtml(s.error):'';
-    const version=s.task?.versions.find(v=>v.version_id===s.versionId);
     const runs=runsFor(s.history,s.versionId,s.kind);
-    const submission=s.history?.versions.find(v=>v.version_id===s.versionId)?.submissions.find(x=>x.submission_id===s.run?.submission_id);
-    $('#wb-toolbar').innerHTML=s.task?`<label>文件版本<select id="wb-version">${s.task.versions.map(v=>`<option value="${esc(v.version_id)}" ${v.version_id===s.versionId?'selected':''}>V${v.number} ${esc(v.original_filename)}${v.is_current?' · 当前':''}</option>`).join('')}</select></label>
+    const submission=s.history?.versions?.find(v=>v.version_id===s.versionId)?.submissions?.find(x=>x.submission_id===s.run?.submission_id);
+    $('#wb-toolbar').innerHTML=s.task?`<label>文件版本<select id="wb-version">${(s.task.versions || []).map(v=>`<option value="${esc(v.version_id)}" ${v.version_id===s.versionId?'selected':''}>V${v.number} ${esc(v.original_filename)}${v.is_current?' · 当前':''}</option>`).join('')}</select></label>
       <label>执行阶段<select id="wb-kind">${Object.entries(RUN_KINDS).map(([k,v])=>`<option value="${k}" ${k===s.kind?'selected':''}>${v}</option>`).join('')}</select></label>
       <label>执行记录<select id="wb-run"><option value="">${runs.length?'请选择执行记录':'本版本该阶段暂无执行'}</option>${runs.map(r=>`<option value="${esc(r.run_id)}" ${r.run_id===s.runId?'selected':''}>${esc(r.created_at)} · ${esc(r.status)} · ${esc(r.run_id.slice(0,8))}${r.is_current?' · 阶段有效':''}</option>`).join('')}</select></label>
-      ${submission?`<label>专家决定<select id="wb-decision"><option value="">仅所选提交，不绑定决定</option>${submission.decisions.map(d=>`<option value="${esc(d.decision_id)}" ${d.decision_id===s.decisionId?'selected':''}>${esc(d.action)} · ${esc(d.decision_id.slice(0,8))}</option>`).join('')}</select></label>`:''}
+      ${submission?`<label>专家决定<select id="wb-decision"><option value="">仅所选提交，不绑定决定</option>${(submission.decisions || []).map(d=>`<option value="${esc(d.decision_id)}" ${d.decision_id===s.decisionId?'selected':''}>${esc(d.action)} · ${esc(d.decision_id.slice(0,8))}</option>`).join('')}</select></label>`:''}
       <button class="btn" id="wb-refresh">刷新任务详情</button>`:s.taskId?'<button class="btn" id="wb-refresh">刷新任务详情</button>':'';
     $('#wb-version')?.addEventListener('change',e=>void context.openVersion(e.target.value));
     $('#wb-kind')?.addEventListener('change',e=>context.chooseKind(e.target.value));
@@ -133,28 +141,25 @@ export async function mountWorkbench(root) {
     $('#wb-decision')?.addEventListener('change',e=>context.chooseDecision(e.target.value));
     $('#wb-refresh')?.addEventListener('click',()=>void context.openTask(s.taskId));
     $('#wb-summary').textContent=s.versionId?`V${version?.number ?? '?'} · ${s.loading?'正在读取商品…':s.items.length+' 件商品'} · ${s.versionId===s.task?.current_version_id?'当前版本':'历史版本，只读'}。商品卡片展示该版本阶段有效结果；运行明细及导出严格使用上方所选 Run。`:'';
-    const next=JSON.stringify([s.taskId,s.versionId,s.kind,s.runId]);
-    if(next!==runKey){runKey=next;void progress.open({taskId:s.taskId,versionId:s.versionId,kind:s.kind,runId:s.runId,
-      versionNumber:version?.number,isVersionCurrent:s.versionId===s.task?.current_version_id});}
     exports.update(s,user.role);
     renderCommodityList($('#wb-items'),{items:s.items,selectedItemId:s.itemId,onSelectItem:id=>void context.selectItem(id),emptyTitle:s.loading?'正在读取商品':'本版本暂无商品',emptyHint:'上传完成后刷新任务。'});
     if(cardKey!==s.card){cardKey=s.card;
       renderCommodityCard($('#wb-card'),{card:s.card,contractNotes:true,onOpenRun:runId=>{
-        const found=s.history?.versions.find(v=>v.version_id===s.versionId)?.runs.find(r=>r.run_id===runId);
+        const found=s.history?.versions?.find(v=>v.version_id===s.versionId)?.runs?.find(r=>r.run_id===runId);
         if(found)context.chooseRun(runId,found.kind);
-      },onSelectImage:image=>{if(image.download_url)window.open(image.download_url,'_blank','noopener');},
+      },onSelectImage:image=>{if(image.download_url)(typeof window!=='undefined'?window:globalThis).open?.(image.download_url,'_blank','noopener');},
       onSelectSource:source=>{$('#wb-source').textContent=`${source.label} · ${source.sourceId || '未提供来源'}`;}});
     }
     if(!s.card)$('#wb-source').textContent='';
     $('#wb-submit').hidden=user.role!=='operator';
-    $('#wb-submit').disabled=submitting||s.loading||!!s.error||!s.items.length||s.versionId!==s.task?.current_version_id||!s.task.allowed_actions.includes('submission.create');
+    $('#wb-submit').disabled=submitting||s.loading||!!s.error||!s.items.length||s.versionId!==s.task?.current_version_id||!s.task.allowed_actions?.includes('submission.create');
     review.render(s);
-    if ($('#wb-review').hidden) $('#wb-summary').textContent+=` 专家草稿已保留，暂不可提交。${$('#wb-review').dataset.reviewNotice}`;
+    if ($('#wb-review').hidden) $('#wb-summary').textContent=[$('#wb-summary').textContent,`专家草稿已保留，暂不可提交。${$('#wb-review').dataset.reviewNotice}`].filter(Boolean).join(' ');
   }
   async function submitBatch() {
     if(submitting||!context)return;
     const s=context.store.get(),ticket=session;
-    if(!s.task||s.loading||s.error||s.versionId!==s.task.current_version_id||!s.items.length)return;
+    if(!s.task||s.loading||s.error||s.versionId!==s.task.current_version_id||!s.items.length||!s.task.allowed_actions?.includes('submission.create'))return;
     const matches=()=>alive&&ticket===session&&context?.store.get().taskId===s.taskId&&context.store.get().versionId===s.versionId;
     submitting=true;render(s);$('#wb-write-note').textContent='正在读取本版本全部确认记录…';
     try {
@@ -183,7 +188,50 @@ export async function mountWorkbench(root) {
       const ctx=context;await ctx.selectItem(identity.item_id,identity);
       if(context===ctx&&ctx.store.get().card?.item_id===identity.item_id){$('#wb-card').scrollIntoView({block:'start',behavior:'smooth'});$('#wb-card').focus();}
     }});
-    tasks=createTaskList($('#wb-tasks'),{client,onSelectionStart:id=>{$('#wb-write-note').textContent='';context.beginTask(id);},onSelectTask:t=>context.acceptTask(t)});
+    async function reconcileSelection(items) {
+      if (!alive || !tasks || !context || ticket !== session) return;
+      const listState = tasks.getState();
+      if (!listState.selectedId) return;
+      if (listState.selecting) { pendingReconcile = true; return; }
+      const s = context.store.get();
+      if (!s.task && s.loading) { pendingReconcile = true; return; }
+      if (s.task && s.task.task_id !== listState.selectedId) { pendingReconcile = true; return; }
+      const entry = (Array.isArray(items) ? items : []).find(row => row && row.task_id === listState.selectedId);
+      if (!entry) return;
+      if (s.task && s.history) {
+        const versionChanged = (entry.current_version_id || null) !== (s.task.current_version_id || null);
+        const runChanged = (entry.latest_run_id || null) !== (s.task.latest_run_id || null);
+        const stageChanged = (entry.stage || null) !== (s.task.stage || null);
+        if (!versionChanged && !runChanged && !stageChanged) return;
+      }
+      await tasks.selectTask(listState.selectedId);
+    }
+    tasks=createTaskList($('#wb-tasks'),{
+      client,
+      onSelectionStart:id=>{$('#wb-write-note').textContent='';context.beginTask(id);},
+      onSelectTask:t=>context.acceptTask(t),
+      onLoaded:items=>reconcileSelection(items),
+      onSelectionSettled:async(settledId,{taskId,ok,error})=>{
+        if (!alive || !context || ticket !== session) return;
+        if (!ok) {
+          pendingReconcile = false;
+          if (settledId && settledId !== taskId) {
+            await context.openTask(settledId);
+            if (!alive || !context || ticket !== session) return;
+            if (pendingReconcile) {
+              pendingReconcile = false;
+              await reconcileSelection(tasks.getState().items);
+            }
+          }
+          else if (!settledId) context.beginTask(null);
+          else context.failTask(taskId, error);
+          return;
+        }
+        if (!pendingReconcile) return;
+        pendingReconcile = false;
+        await reconcileSelection(tasks.getState().items);
+      },
+    });
     unsubscribe=context.store.subscribe(render);render(context.store.get());
     $('#wb-submit').onclick=submitBatch;
     $('#wb-logout').onclick=async()=>{
@@ -193,10 +241,15 @@ export async function mountWorkbench(root) {
     };
     await tasks.load();
     if(ticket!==session||!context)return;
-    const requested=new URLSearchParams(location.search).get('task');if(requested)await context.openTask(requested);
+    const requested=new URLSearchParams(location.search).get('task');
+    if(requested){
+      if(tasks.getState().items.some(t=>t.task_id===requested)) await tasks.selectTask(requested);
+      else await context.openTask(requested);
+    }
   }
-  function destroy(){alive=false;reset();}
-  window.addEventListener('pagehide',destroy,{once:true});
+  const hostWin = typeof window !== 'undefined' ? window : globalThis;
+  function destroy(){alive=false;hostWin.removeEventListener?.('pagehide',destroy);reset();}
+  hostWin.addEventListener?.('pagehide',destroy,{once:true});
   try {user=await api.me();if(!alive)return;if(user)await workspace();else gate();}catch(error){gate(error);}
   return {destroy};
 }

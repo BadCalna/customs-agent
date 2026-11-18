@@ -7,10 +7,12 @@ const host=()=>({innerHTML:'',addEventListener(){},removeEventListener(){},repla
 const state=(id='A',version='V1')=>({taskId:id,task:{task_id:id},versionId:version,kind:'precheck',runId:id+'R',items:[{item_id:id+'i'}],run:{task_id:id,version_id:version,run_id:id+'R',kind:'precheck',status:'succeeded',items:[{item_id:id+'i',status:'succeeded'}]}});
 const attachment=id=>({runId:id+'R',filename:'测试结果_审核工作簿.xlsx',blob:new Blob(['PK\x03\x04synthetic'])});
 
-test('UTF8 Chinese and quoted filenames are parsed safely',()=>{
+test('UTF8 Chinese and quoted filenames are parsed safely; traversal and non-attachment rejected',()=>{
  assert.equal(attachmentFilename("attachment; filename*=utf-8''%E6%B5%8B%E8%AF%95.xlsx"),'测试.xlsx');
  assert.equal(attachmentFilename('attachment; filename="audit.xlsx"'),'audit.xlsx');
- assert.equal(attachmentFilename('attachment; filename="../../audit.xlsx"'),'audit.xlsx');
+ assert.throws(()=>attachmentFilename('attachment; filename="../../audit.xlsx"'),e=>e instanceof ApiError&&e.code==='missing_export_filename');
+ assert.throws(()=>attachmentFilename('attachment; filename="..\\..\\win.ini"'),e=>e instanceof ApiError&&e.code==='missing_export_filename');
+ assert.throws(()=>attachmentFilename('inline; filename="audit.xlsx"'),ApiError);
  assert.throws(()=>attachmentFilename('inline'),ApiError);
  assert.throws(()=>attachmentFilename('attachment; filename=""'),ApiError);
 });
@@ -26,7 +28,7 @@ test('POST attachment uses current CSRF; JSON/HTML/non-XLSX do not become files'
    await assert.rejects(client.exportFile('V1',{}),e=>e.code==='refused'&&e.status===(status===200?502:status));
   }
   response=new Response('<html>error</html>',{status:502});await assert.rejects(client.exportFile('V1',{}));
-  response=new Response('{"error":"fake"}',{headers:{'Content-Type':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','Content-Disposition':'attachment; filename="bad.xlsx"'}});await assert.rejects(client.exportFile('V1',{}),e=>e.code==='invalid_attachment');
+  response=new Response('{"error":"fake"}',{headers:{'Content-Type':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','Content-Disposition':'attachment; filename="bad.xlsx"'}});await assert.rejects(client.exportFile('V1',{}),e=>e.code==='unexpected_export_type');
   globalThis.fetch=async()=>{throw new TypeError('offline');};await assert.rejects(client.exportFile('V1',{}),e=>e.status===0&&e.code==='network_error');
  }finally{globalThis.fetch=original;globalThis.document=doc;}
 });
@@ -61,4 +63,13 @@ test('Blob URL is released after successful click and after click error',()=>{
  downloadAttachment(attachment('A'),env);assert.deepEqual(events,['create','append','click','remove','blob:local']);
  events.length=0;env.document.createElement=()=>({click(){throw Error('click failed');},remove(){events.push('remove');}});
  assert.throws(()=>downloadAttachment(attachment('A'),env),/click failed/);assert.deepEqual(events,['create','append','remove','blob:local']);
+});
+test('same-version reload entering loading state cancels in-flight export download',async()=>{
+ const h=host(),pending=deferred(),downloads=[];
+ const ui=createExportActions(h,{client:{exportFile:()=>pending.promise},download:x=>downloads.push(x)});
+ const ready=state('A','V1');ui.update(ready,'operator');
+ const active=ui.start('issues');
+ ui.update({...ready,loading:true},'operator');
+ pending.resolve(attachment('A'));await active;
+ assert.equal(downloads.length,0);assert.doesNotMatch(h.innerHTML,/已发起下载/);ui.destroy();
 });

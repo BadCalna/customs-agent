@@ -53,12 +53,31 @@ export function renderTaskList(host, state) {
       <span>第 ${state.page + 1} 页</span><button class="p08-button" data-action="next" ${!state.nextCursor || state.loading ? "disabled" : ""}>下一页</button></nav></section>`;
 }
 
-/** Mount once. Host auth/session changes must destroy and remount this controller. */
-export function createTaskList(host, { client, onSelectTask = () => {}, onSelectionStart = () => {}, pageSize = 10 } = {}) {
+/**
+ * Mount once. Host auth/session changes must destroy and remount this controller.
+ *
+ * @param {HTMLElement} host
+ * @param {object} options
+ * @param {object} options.client 统一只读 client
+ * @param {(detail: object) => void|Promise<void>} [options.onSelectTask] 选中任务后读到的详情
+ * @param {(taskId: string|null) => void} [options.onSelectionStart] 开始切换选中任务或重置筛选时回调
+ * @param {(items: object[], page: object) => void|Promise<void>} [options.onLoaded]
+ *   每次列表读取成功后回调。页面「刷新」按钮走的是组件内部 load()，宿主只包一层
+ *   load() 覆盖不到这条路径；需要核对已选任务是否过期时用这个回调。
+ * @param {(detail: string|null, info: object) => void|Promise<void>} [options.onSelectionSettled]
+ *   一次选中流程结束（成功或失败）后回调。宿主在选中期间可能把刷新到的变化记成待核对，
+ *   需要在这里补做，否则「选中还没落定就刷新到新版本」会被漏掉。
+ * @param {number} [options.pageSize]
+ */
+export function createTaskList(host, { client, onSelectTask = () => {}, onSelectionStart = () => {},
+  onLoaded = null, onSelectionSettled = null, pageSize = 10 } = {}) {
   if (!host || !client?.listTasks || !client?.getTask) throw new TypeError("需要容器和统一任务client");
   let state = {items: [], stage: "", query: "", page: 0, nextCursor: null,
     loading: false, error: null, selectionError: null, selectedId: null, selecting: false};
   let alive = true, token = 0, selectionToken = 0;
+  //: 最近一次**成功交付给宿主**的任务（onSelectTask 正常返回）。失败回滚要用它，
+  //: 不能用「点击时的 selectedId」——那可能是一个还在加载、最终会被丢弃的选择。
+  let lastDeliveredId = null;
   let cursors = [null];
   const draw = () => { if (alive) renderTaskList(host, state); };
   async function load(page = state.page) {
@@ -80,29 +99,58 @@ export function createTaskList(host, { client, onSelectTask = () => {}, onSelect
       state = {...state, error, loading: false};
     }
     draw();
+    if (onLoaded && !state.error) {
+      try {
+        await onLoaded(state.items, {page: state.page, stage: state.stage});
+      } catch (error) {
+        // 核对失败只记在列表侧提示里，不把已经读到的一页数据判成失败。
+        if (!alive || request !== token) return;
+        state = {...state, selectionError: error};
+        draw();
+      }
+    }
   }
   async function selectTask(taskId) {
     if (!alive || !state.items.some(t => t.task_id === taskId)) return;
     if (state.selecting && taskId === state.selectedId) return;
+    // 失败时回到**最后一个真正显示过的**任务：连续点击 B→C 时，「点击时的 selectedId」
+    // 可能是还在加载的 B，回滚到它会让列表选中一个从未加载成功、且晚响应已被丢弃的任务。
     const request = ++selectionToken;
     onSelectionStart(taskId);
     state = {...state, selectedId: taskId, selecting: true, selectionError: null}; draw();
+    let settledId = taskId;
+    let settledOk = true;
+    let settledError = null;
     try {
       const detail = await client.getTask(taskId);
       if (!alive || request !== selectionToken) return;
       if (detail?.task_id !== taskId) throw new Error("所选任务响应身份不匹配");
-      await onSelectTask(detail);
+      const delivery = onSelectTask(detail);
+      if (delivery && typeof delivery.then === "function") await delivery;
+      if (!alive || request !== selectionToken) return;
+      lastDeliveredId = taskId;
     } catch (error) {
       if (!alive || request !== selectionToken) return;
-      state = {...state, selectionError: error};
+      settledOk = false;
+      settledError = error;
+      state = {...state, selectedId: lastDeliveredId, selectionError: error};
+      settledId = lastDeliveredId;
     }
     if (!alive || request !== selectionToken) return;
     state = {...state, selecting: false}; draw();
+    if (onSelectionSettled) {
+      try {
+        await onSelectionSettled(settledId, {taskId, ok: settledOk, error: settledError});
+      } catch (error) {
+        if (!alive || request !== selectionToken) return;
+        state = {...state, selectionError: error}; draw();
+      }
+    }
   }
   function setStage(stage) {
     if (!alive) return;
     if (stage && !Object.hasOwn(TASK_STAGES, stage)) throw new TypeError("未知阶段筛选");
-    selectionToken += 1; cursors = [null];
+    selectionToken += 1; lastDeliveredId = null; cursors = [null];
     onSelectionStart(null);
     state = {...state, stage, page: 0, query: "", items: [], nextCursor: null, selectedId: null, selecting: false, selectionError: null};
     return load(0);

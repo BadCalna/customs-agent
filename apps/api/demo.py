@@ -95,5 +95,10 @@ def demo_fixture(request, path: str):
 
 
 def upload_index(request):
-    """P06 真实上传与认领入口，仅 live API。"""
+    """P06 真实上传与认领入口，仅 live API（正式入口，不依赖 DEBUG）。"""
     return _served_file(WEB_ROOT, "pages/p06.html", formal=True)
+
+
+def tasks_index(request):
+    """P08 独立只读任务列表与运行进度开发验收入口（DEBUG=True 时可用）。"""
+    return _served_file(WEB_ROOT, "pages/p08.html")
