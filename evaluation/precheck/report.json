@@ -1,0 +1,2518 @@
+{
+  "cases": [
+    {
+      "actual": {
+        "comparison_status": "association_error",
+        "issue_codes": [
+          "ASSOCIATION_AMBIGUOUS"
+        ]
+      },
+      "description": "关联异常优先",
+      "differences": [],
+      "error": null,
+      "expected": {
+        "comparison_status": "association_error",
+        "issue_codes": [
+          "ASSOCIATION_AMBIGUOUS"
+        ]
+      },
+      "id": "association",
+      "input": {
+        "basis": null,
+        "payload": {
+          "association_note": "",
+          "association_ok": false,
+          "context": {
+            "engine_version": "compare-wrapper-only",
+            "input_hash": "",
+            "input_revision": 1,
+            "item_id": "association",
+            "mock_scenario": null,
+            "prompt_version": "not-used-model-not-called",
+            "result_mode": "mock",
+            "rules_version": "p16-compare-1.0.0",
+            "run_id": "synthetic-fixed-run",
+            "task_id": "synthetic-task",
+            "version_id": "p16-synthetic-postcompare-1.0.0"
+          },
+          "recommendation": {
+            "candidates": [],
+            "confidence": null,
+            "confidence_note": "Synthetic fixture; no model called and no calibrated probability",
+            "evidence": [
+              {
+                "document": "SYNTHETIC-TECHNICAL-ONLY",
+                "effective_from": null,
+                "effective_to": null,
+                "evidence_id": "synthetic-evidence-0",
+                "excerpt": null,
+                "issued_at": null,
+                "locator": "fixture-row-1-not-a-real-clause",
+                "note": "Only exercises post-recommendation comparison logic",
+                "query": null,
+                "retrieved_at": "2026-01-01T00:00:00+00:00",
+                "scope": null,
+                "source_type": "synthetic",
+                "status": "obtained",
+                "title": "SYNTHETIC technical evidence, not real law",
+                "url": null
+              }
+            ],
+            "evidence_status": "obtained",
+            "gaps": [],
+            "suggested_hs": "8544422900"
+          },
+          "supplier_hs_format_valid": true,
+          "supplier_hs_raw": "8544422900",
+          "supplier_hs_validity_note": ""
+        },
+        "source_mode": "none"
+      },
+      "input_sha256": "12de7ccd3fd3e421e8062df5719efd05781010b7eed9d109f58b89b21e42145a",
+      "output": {
+        "comparison_status": "association_error",
+        "issues": [
+          {
+            "code": "ASSOCIATION_AMBIGUOUS",
+            "field": null,
+            "message": "项号关联异常",
+            "missing": null,
+            "suggested_role": null
+          }
+        ],
+        "reason": "申报要素与装箱成员关联存在歧义，需人工确认"
+      },
+      "output_sha256": "07950734088b209c6fbfc36c1b14ab95d4b938cbc6573ca7642eb59b64dc8cd2",
+      "source_issues": {
+        "authority": "none-synthetic-not-business-basis",
+        "issue_codes": [
+          "ASSOCIATION_AMBIGUOUS"
+        ],
+        "limitations": [
+          "All evidence is synthetic; no real HS classification is evaluated",
+          "No-source comparison does not verify original code validity"
+        ],
+        "mode": "none",
+        "original_validity": "not_verified",
+        "recommendation_evidence_count": 1,
+        "recommendation_evidence_status": "obtained",
+        "synthetic": true
+      },
+      "synthetic": true,
+      "technical_passed": true
+    },
+    {
+      "actual": {
+        "comparison_status": "supplier_missing",
+        "issue_codes": [
+          "SUPPLIER_HS_MISSING"
+        ]
+      },
+      "description": "原码空白不回填",
+      "differences": [],
+      "error": null,
+      "expected": {
+        "comparison_status": "supplier_missing",
+        "issue_codes": [
+          "SUPPLIER_HS_MISSING"
+        ]
+      },
+      "id": "supplier-missing",
+      "input": {
+        "basis": null,
+        "payload": {
+          "association_note": "",
+          "association_ok": true,
+          "context": {
+            "engine_version": "compare-wrapper-only",
+            "input_hash": "",
+            "input_revision": 1,
+            "item_id": "supplier-missing",
+            "mock_scenario": null,
+            "prompt_version": "not-used-model-not-called",
+            "result_mode": "mock",
+            "rules_version": "p16-compare-1.0.0",
+            "run_id": "synthetic-fixed-run",
+            "task_id": "synthetic-task",
+            "version_id": "p16-synthetic-postcompare-1.0.0"
+          },
+          "recommendation": {
+            "candidates": [],
+            "confidence": null,
+            "confidence_note": "Synthetic fixture; no model called and no calibrated probability",
+            "evidence": [
+              {
+                "document": "SYNTHETIC-TECHNICAL-ONLY",
+                "effective_from": null,
+                "effective_to": null,
+                "evidence_id": "synthetic-evidence-0",
+                "excerpt": null,
+                "issued_at": null,
+                "locator": "fixture-row-1-not-a-real-clause",
+                "note": "Only exercises post-recommendation comparison logic",
+                "query": null,
+                "retrieved_at": "2026-01-01T00:00:00+00:00",
+                "scope": null,
+                "source_type": "synthetic",
+                "status": "obtained",
+                "title": "SYNTHETIC technical evidence, not real law",
+                "url": null
+              }
+            ],
+            "evidence_status": "obtained",
+            "gaps": [],
+            "suggested_hs": "8544422900"
+          },
+          "supplier_hs_format_valid": true,
+          "supplier_hs_raw": " \n",
+          "supplier_hs_validity_note": ""
+        },
+        "source_mode": "none"
+      },
+      "input_sha256": "25df8832b9b4f42f5a5a0f780871dc2566be94e1b5806398ac9a3b21acd0834d",
+      "output": {
+        "comparison_status": "supplier_missing",
+        "issues": [
+          {
+            "code": "SUPPLIER_HS_MISSING",
+            "field": "supplier_hs_raw",
+            "message": "供应商原 HS 为空",
+            "missing": null,
+            "suggested_role": null
+          }
+        ],
+        "reason": "供应商未填原 HS；原值保持空白，不用建议值回填"
+      },
+      "output_sha256": "17cd461f8d410cbf28268507f253eeed73f42fe058a5a229e4d4b5bae036db15",
+      "source_issues": {
+        "authority": "none-synthetic-not-business-basis",
+        "issue_codes": [
+          "SUPPLIER_HS_MISSING"
+        ],
+        "limitations": [
+          "All evidence is synthetic; no real HS classification is evaluated",
+          "No-source comparison does not verify original code validity"
+        ],
+        "mode": "none",
+        "original_validity": "not_verified",
+        "recommendation_evidence_count": 1,
+        "recommendation_evidence_status": "obtained",
+        "synthetic": true
+      },
+      "synthetic": true,
+      "technical_passed": true
+    },
+    {
+      "actual": {
+        "comparison_status": "supplier_invalid",
+        "issue_codes": [
+          "SUPPLIER_HS_INVALID"
+        ]
+      },
+      "description": "原码非法，不洗白",
+      "differences": [],
+      "error": null,
+      "expected": {
+        "comparison_status": "supplier_invalid",
+        "issue_codes": [
+          "SUPPLIER_HS_INVALID"
+        ]
+      },
+      "id": "supplier-invalid",
+      "input": {
+        "basis": null,
+        "payload": {
+          "association_note": "",
+          "association_ok": true,
+          "context": {
+            "engine_version": "compare-wrapper-only",
+            "input_hash": "",
+            "input_revision": 1,
+            "item_id": "supplier-invalid",
+            "mock_scenario": null,
+            "prompt_version": "not-used-model-not-called",
+            "result_mode": "mock",
+            "rules_version": "p16-compare-1.0.0",
+            "run_id": "synthetic-fixed-run",
+            "task_id": "synthetic-task",
+            "version_id": "p16-synthetic-postcompare-1.0.0"
+          },
+          "recommendation": {
+            "candidates": [],
+            "confidence": null,
+            "confidence_note": "Synthetic fixture; no model called and no calibrated probability",
+            "evidence": [
+              {
+                "document": "SYNTHETIC-TECHNICAL-ONLY",
+                "effective_from": null,
+                "effective_to": null,
+                "evidence_id": "synthetic-evidence-0",
+                "excerpt": null,
+                "issued_at": null,
+                "locator": "fixture-row-1-not-a-real-clause",
+                "note": "Only exercises post-recommendation comparison logic",
+                "query": null,
+                "retrieved_at": "2026-01-01T00:00:00+00:00",
+                "scope": null,
+                "source_type": "synthetic",
+                "status": "obtained",
+                "title": "SYNTHETIC technical evidence, not real law",
+                "url": null
+              }
+            ],
+            "evidence_status": "obtained",
+            "gaps": [],
+            "suggested_hs": "8544422900"
+          },
+          "supplier_hs_format_valid": true,
+          "supplier_hs_raw": "bad-code",
+          "supplier_hs_validity_note": ""
+        },
+        "source_mode": "none"
+      },
+      "input_sha256": "cc485c64294a97cf4cfeec969e7db6ef378cc7fdb25f90cfde0dd4917fedec6d",
+      "output": {
+        "comparison_status": "supplier_invalid",
+        "issues": [
+          {
+            "code": "SUPPLIER_HS_INVALID",
+            "field": "supplier_hs_raw",
+            "message": "原 HS 格式异常",
+            "missing": null,
+            "suggested_role": null
+          },
+          {
+            "code": "SUPPLIER_HS_INVALID",
+            "field": "supplier_hs_raw",
+            "message": "原 HS 格式或已证实有效性异常",
+            "missing": null,
+            "suggested_role": null
+          }
+        ],
+        "reason": "原 HS 不是 10 位 ASCII 数字；原文保留，不补零或猜测"
+      },
+      "output_sha256": "421ab0c0a95812cceff5cbe329dc549c53842a495acaeb388ce937cd23b47602",
+      "source_issues": {
+        "authority": "none-synthetic-not-business-basis",
+        "issue_codes": [
+          "SUPPLIER_HS_INVALID"
+        ],
+        "limitations": [
+          "All evidence is synthetic; no real HS classification is evaluated",
+          "No-source comparison does not verify original code validity"
+        ],
+        "mode": "none",
+        "original_validity": "not_verified",
+        "recommendation_evidence_count": 1,
+        "recommendation_evidence_status": "obtained",
+        "synthetic": true
+      },
+      "synthetic": true,
+      "technical_passed": true
+    },
+    {
+      "actual": {
+        "comparison_status": "needs_confirmation",
+        "issue_codes": [
+          "FACTS_PENDING"
+        ]
+      },
+      "description": "同码缺事实仍待核",
+      "differences": [],
+      "error": null,
+      "expected": {
+        "comparison_status": "needs_confirmation",
+        "issue_codes": [
+          "FACTS_PENDING"
+        ]
+      },
+      "id": "missing-facts",
+      "input": {
+        "basis": null,
+        "payload": {
+          "association_note": "",
+          "association_ok": true,
+          "context": {
+            "engine_version": "compare-wrapper-only",
+            "input_hash": "",
+            "input_revision": 1,
+            "item_id": "missing-facts",
+            "mock_scenario": null,
+            "prompt_version": "not-used-model-not-called",
+            "result_mode": "mock",
+            "rules_version": "p16-compare-1.0.0",
+            "run_id": "synthetic-fixed-run",
+            "task_id": "synthetic-task",
+            "version_id": "p16-synthetic-postcompare-1.0.0"
+          },
+          "recommendation": {
+            "candidates": [],
+            "confidence": null,
+            "confidence_note": "Synthetic fixture; no model called and no calibrated probability",
+            "evidence": [
+              {
+                "document": "SYNTHETIC-TECHNICAL-ONLY",
+                "effective_from": null,
+                "effective_to": null,
+                "evidence_id": "synthetic-evidence-0",
+                "excerpt": null,
+                "issued_at": null,
+                "locator": "fixture-row-1-not-a-real-clause",
+                "note": "Only exercises post-recommendation comparison logic",
+                "query": null,
+                "retrieved_at": "2026-01-01T00:00:00+00:00",
+                "scope": null,
+                "source_type": "synthetic",
+                "status": "obtained",
+                "title": "SYNTHETIC technical evidence, not real law",
+                "url": null
+              }
+            ],
+            "evidence_status": "obtained",
+            "gaps": [
+              {
+                "code": "FACTS_PENDING",
+                "field": null,
+                "message": "Synthetic technical gap; not a business finding",
+                "missing": null,
+                "suggested_role": null
+              }
+            ],
+            "suggested_hs": "8544422900"
+          },
+          "supplier_hs_format_valid": true,
+          "supplier_hs_raw": "8544422900",
+          "supplier_hs_validity_note": ""
+        },
+        "source_mode": "none"
+      },
+      "input_sha256": "b5b3fdf676851a107faef61549cf23987841dadce0a9963fbd164638fb8923cb",
+      "output": {
+        "comparison_status": "needs_confirmation",
+        "issues": [
+          {
+            "code": "FACTS_PENDING",
+            "field": null,
+            "message": "Synthetic technical gap; not a business finding",
+            "missing": null,
+            "suggested_role": null
+          }
+        ],
+        "reason": "缺少决定性事实或证据，需补充资料后再比较"
+      },
+      "output_sha256": "78a5746d2b9a73bdd68fb9b7849d6a1fb77bb0859105bb10ad3d15f34692c59f",
+      "source_issues": {
+        "authority": "none-synthetic-not-business-basis",
+        "issue_codes": [
+          "FACTS_PENDING"
+        ],
+        "limitations": [
+          "All evidence is synthetic; no real HS classification is evaluated",
+          "No-source comparison does not verify original code validity"
+        ],
+        "mode": "none",
+        "original_validity": "not_verified",
+        "recommendation_evidence_count": 1,
+        "recommendation_evidence_status": "obtained",
+        "synthetic": true
+      },
+      "synthetic": true,
+      "technical_passed": true
+    },
+    {
+      "actual": {
+        "comparison_status": "consistent",
+        "issue_codes": []
+      },
+      "description": "仅后置合成逻辑一致，不证明归类正确",
+      "differences": [],
+      "error": null,
+      "expected": {
+        "comparison_status": "consistent",
+        "issue_codes": []
+      },
+      "id": "consistent",
+      "input": {
+        "basis": null,
+        "payload": {
+          "association_note": "",
+          "association_ok": true,
+          "context": {
+            "engine_version": "compare-wrapper-only",
+            "input_hash": "",
+            "input_revision": 1,
+            "item_id": "consistent",
+            "mock_scenario": null,
+            "prompt_version": "not-used-model-not-called",
+            "result_mode": "mock",
+            "rules_version": "p16-compare-1.0.0",
+            "run_id": "synthetic-fixed-run",
+            "task_id": "synthetic-task",
+            "version_id": "p16-synthetic-postcompare-1.0.0"
+          },
+          "recommendation": {
+            "candidates": [],
+            "confidence": null,
+            "confidence_note": "Synthetic fixture; no model called and no calibrated probability",
+            "evidence": [
+              {
+                "document": "SYNTHETIC-TECHNICAL-ONLY",
+                "effective_from": null,
+                "effective_to": null,
+                "evidence_id": "synthetic-evidence-0",
+                "excerpt": null,
+                "issued_at": null,
+                "locator": "fixture-row-1-not-a-real-clause",
+                "note": "Only exercises post-recommendation comparison logic",
+                "query": null,
+                "retrieved_at": "2026-01-01T00:00:00+00:00",
+                "scope": null,
+                "source_type": "synthetic",
+                "status": "obtained",
+                "title": "SYNTHETIC technical evidence, not real law",
+                "url": null
+              }
+            ],
+            "evidence_status": "obtained",
+            "gaps": [],
+            "suggested_hs": "8544422900"
+          },
+          "supplier_hs_format_valid": true,
+          "supplier_hs_raw": "8544422900",
+          "supplier_hs_validity_note": ""
+        },
+        "source_mode": "none"
+      },
+      "input_sha256": "eca6a4c64e60552374e00b8c0275684937964b7549083d93b597dcc04dbe4967",
+      "output": {
+        "comparison_status": "consistent",
+        "issues": [],
+        "reason": "建议与供应商原码一致"
+      },
+      "output_sha256": "4f09bfcc2ebf558ed7483c738d24124fb440c07a95259b03d61109e1abdb18ba",
+      "source_issues": {
+        "authority": "none-synthetic-not-business-basis",
+        "issue_codes": [],
+        "limitations": [
+          "All evidence is synthetic; no real HS classification is evaluated",
+          "No-source comparison does not verify original code validity"
+        ],
+        "mode": "none",
+        "original_validity": "not_verified",
+        "recommendation_evidence_count": 1,
+        "recommendation_evidence_status": "obtained",
+        "synthetic": true
+      },
+      "synthetic": true,
+      "technical_passed": true
+    },
+    {
+      "actual": {
+        "comparison_status": "inconsistent",
+        "issue_codes": [
+          "HS_MISMATCH"
+        ]
+      },
+      "description": "完整码后置不一致",
+      "differences": [],
+      "error": null,
+      "expected": {
+        "comparison_status": "inconsistent",
+        "issue_codes": [
+          "HS_MISMATCH"
+        ]
+      },
+      "id": "inconsistent",
+      "input": {
+        "basis": null,
+        "payload": {
+          "association_note": "",
+          "association_ok": true,
+          "context": {
+            "engine_version": "compare-wrapper-only",
+            "input_hash": "",
+            "input_revision": 1,
+            "item_id": "inconsistent",
+            "mock_scenario": null,
+            "prompt_version": "not-used-model-not-called",
+            "result_mode": "mock",
+            "rules_version": "p16-compare-1.0.0",
+            "run_id": "synthetic-fixed-run",
+            "task_id": "synthetic-task",
+            "version_id": "p16-synthetic-postcompare-1.0.0"
+          },
+          "recommendation": {
+            "candidates": [],
+            "confidence": null,
+            "confidence_note": "Synthetic fixture; no model called and no calibrated probability",
+            "evidence": [
+              {
+                "document": "SYNTHETIC-TECHNICAL-ONLY",
+                "effective_from": null,
+                "effective_to": null,
+                "evidence_id": "synthetic-evidence-0",
+                "excerpt": null,
+                "issued_at": null,
+                "locator": "fixture-row-1-not-a-real-clause",
+                "note": "Only exercises post-recommendation comparison logic",
+                "query": null,
+                "retrieved_at": "2026-01-01T00:00:00+00:00",
+                "scope": null,
+                "source_type": "synthetic",
+                "status": "obtained",
+                "title": "SYNTHETIC technical evidence, not real law",
+                "url": null
+              }
+            ],
+            "evidence_status": "obtained",
+            "gaps": [],
+            "suggested_hs": "8544422900"
+          },
+          "supplier_hs_format_valid": true,
+          "supplier_hs_raw": "8536901900",
+          "supplier_hs_validity_note": ""
+        },
+        "source_mode": "none"
+      },
+      "input_sha256": "6641ab92c08903e6bdb479a848e453efd38dd8a14334747185afc9f4505fdfc0",
+      "output": {
+        "comparison_status": "inconsistent",
+        "issues": [
+          {
+            "code": "HS_MISMATCH",
+            "field": "supplier_hs_raw",
+            "message": "建议编码与原码不一致",
+            "missing": null,
+            "suggested_role": null
+          }
+        ],
+        "reason": "建议 8544422900 与原码 8536901900 不一致"
+      },
+      "output_sha256": "b7311585c395f284559a09721359b34e1d186ae32ab1e927b1e02438509b5b2e",
+      "source_issues": {
+        "authority": "none-synthetic-not-business-basis",
+        "issue_codes": [
+          "HS_MISMATCH"
+        ],
+        "limitations": [
+          "All evidence is synthetic; no real HS classification is evaluated",
+          "No-source comparison does not verify original code validity"
+        ],
+        "mode": "none",
+        "original_validity": "not_verified",
+        "recommendation_evidence_count": 1,
+        "recommendation_evidence_status": "obtained",
+        "synthetic": true
+      },
+      "synthetic": true,
+      "technical_passed": true
+    },
+    {
+      "actual": {
+        "comparison_status": "association_error",
+        "issue_codes": [
+          "ASSOCIATION_AMBIGUOUS",
+          "EVIDENCE_EMPTY",
+          "FACTS_PENDING",
+          "SUPPLIER_HS_MISSING"
+        ]
+      },
+      "description": "关联高于缺码、非法标记和证据异常",
+      "differences": [],
+      "error": null,
+      "expected": {
+        "comparison_status": "association_error",
+        "issue_codes": [
+          "ASSOCIATION_AMBIGUOUS",
+          "EVIDENCE_EMPTY",
+          "FACTS_PENDING",
+          "SUPPLIER_HS_MISSING"
+        ]
+      },
+      "id": "priority-association-all",
+      "input": {
+        "basis": null,
+        "payload": {
+          "association_note": "",
+          "association_ok": false,
+          "context": {
+            "engine_version": "compare-wrapper-only",
+            "input_hash": "",
+            "input_revision": 1,
+            "item_id": "priority-association-all",
+            "mock_scenario": null,
+            "prompt_version": "not-used-model-not-called",
+            "result_mode": "mock",
+            "rules_version": "p16-compare-1.0.0",
+            "run_id": "synthetic-fixed-run",
+            "task_id": "synthetic-task",
+            "version_id": "p16-synthetic-postcompare-1.0.0"
+          },
+          "recommendation": {
+            "candidates": [],
+            "confidence": null,
+            "confidence_note": "Synthetic fixture; no model called and no calibrated probability",
+            "evidence": [],
+            "evidence_status": "obtained",
+            "gaps": [
+              {
+                "code": "FACTS_PENDING",
+                "field": null,
+                "message": "Synthetic technical gap; not a business finding",
+                "missing": null,
+                "suggested_role": null
+              }
+            ],
+            "suggested_hs": "8544422900"
+          },
+          "supplier_hs_format_valid": false,
+          "supplier_hs_raw": "",
+          "supplier_hs_validity_note": ""
+        },
+        "source_mode": "none"
+      },
+      "input_sha256": "2cd917df48730392518608999d0019789782a34b1d7e8f2c7d6d2685d68787d4",
+      "output": {
+        "comparison_status": "association_error",
+        "issues": [
+          {
+            "code": "ASSOCIATION_AMBIGUOUS",
+            "field": null,
+            "message": "项号关联异常",
+            "missing": null,
+            "suggested_role": null
+          },
+          {
+            "code": "FACTS_PENDING",
+            "field": null,
+            "message": "Synthetic technical gap; not a business finding",
+            "missing": null,
+            "suggested_role": null
+          },
+          {
+            "code": "SUPPLIER_HS_MISSING",
+            "field": "supplier_hs_raw",
+            "message": "供应商原 HS 为空",
+            "missing": null,
+            "suggested_role": null
+          },
+          {
+            "code": "EVIDENCE_EMPTY",
+            "field": null,
+            "message": "状态为已取得但无可定位证据，仍需核实",
+            "missing": null,
+            "suggested_role": "expert"
+          }
+        ],
+        "reason": "申报要素与装箱成员关联存在歧义，需人工确认"
+      },
+      "output_sha256": "7ccb349a2da20711df9bd776963355665c12c79e38136d25a8509f213cbd0bd5",
+      "source_issues": {
+        "authority": "none-synthetic-not-business-basis",
+        "issue_codes": [
+          "ASSOCIATION_AMBIGUOUS",
+          "EVIDENCE_EMPTY",
+          "FACTS_PENDING",
+          "SUPPLIER_HS_MISSING"
+        ],
+        "limitations": [
+          "All evidence is synthetic; no real HS classification is evaluated",
+          "No-source comparison does not verify original code validity"
+        ],
+        "mode": "none",
+        "original_validity": "not_verified",
+        "recommendation_evidence_count": 0,
+        "recommendation_evidence_status": "obtained",
+        "synthetic": true
+      },
+      "synthetic": true,
+      "technical_passed": true
+    },
+    {
+      "actual": {
+        "comparison_status": "supplier_missing",
+        "issue_codes": [
+          "FACTS_PENDING",
+          "SUPPLIER_HS_MISSING"
+        ]
+      },
+      "description": "缺码高于非法标记和缺事实",
+      "differences": [],
+      "error": null,
+      "expected": {
+        "comparison_status": "supplier_missing",
+        "issue_codes": [
+          "FACTS_PENDING",
+          "SUPPLIER_HS_MISSING"
+        ]
+      },
+      "id": "priority-missing-invalid",
+      "input": {
+        "basis": null,
+        "payload": {
+          "association_note": "",
+          "association_ok": true,
+          "context": {
+            "engine_version": "compare-wrapper-only",
+            "input_hash": "",
+            "input_revision": 1,
+            "item_id": "priority-missing-invalid",
+            "mock_scenario": null,
+            "prompt_version": "not-used-model-not-called",
+            "result_mode": "mock",
+            "rules_version": "p16-compare-1.0.0",
+            "run_id": "synthetic-fixed-run",
+            "task_id": "synthetic-task",
+            "version_id": "p16-synthetic-postcompare-1.0.0"
+          },
+          "recommendation": {
+            "candidates": [],
+            "confidence": null,
+            "confidence_note": "Synthetic fixture; no model called and no calibrated probability",
+            "evidence": [
+              {
+                "document": "SYNTHETIC-TECHNICAL-ONLY",
+                "effective_from": null,
+                "effective_to": null,
+                "evidence_id": "synthetic-evidence-0",
+                "excerpt": null,
+                "issued_at": null,
+                "locator": "fixture-row-1-not-a-real-clause",
+                "note": "Only exercises post-recommendation comparison logic",
+                "query": null,
+                "retrieved_at": "2026-01-01T00:00:00+00:00",
+                "scope": null,
+                "source_type": "synthetic",
+                "status": "obtained",
+                "title": "SYNTHETIC technical evidence, not real law",
+                "url": null
+              }
+            ],
+            "evidence_status": "obtained",
+            "gaps": [
+              {
+                "code": "FACTS_PENDING",
+                "field": null,
+                "message": "Synthetic technical gap; not a business finding",
+                "missing": null,
+                "suggested_role": null
+              }
+            ],
+            "suggested_hs": "8544422900"
+          },
+          "supplier_hs_format_valid": false,
+          "supplier_hs_raw": "",
+          "supplier_hs_validity_note": ""
+        },
+        "source_mode": "none"
+      },
+      "input_sha256": "365ee3263a5b45ae836f2bcee7c8b6eaf30dc8d0a322463003150240a70d6e55",
+      "output": {
+        "comparison_status": "supplier_missing",
+        "issues": [
+          {
+            "code": "SUPPLIER_HS_MISSING",
+            "field": "supplier_hs_raw",
+            "message": "供应商原 HS 为空",
+            "missing": null,
+            "suggested_role": null
+          },
+          {
+            "code": "FACTS_PENDING",
+            "field": null,
+            "message": "Synthetic technical gap; not a business finding",
+            "missing": null,
+            "suggested_role": null
+          }
+        ],
+        "reason": "供应商未填原 HS；原值保持空白，不用建议值回填"
+      },
+      "output_sha256": "e82889d17a43befaed272b7be7e0948e7ccaf26a451397fdf4053379abbe2d6e",
+      "source_issues": {
+        "authority": "none-synthetic-not-business-basis",
+        "issue_codes": [
+          "FACTS_PENDING",
+          "SUPPLIER_HS_MISSING"
+        ],
+        "limitations": [
+          "All evidence is synthetic; no real HS classification is evaluated",
+          "No-source comparison does not verify original code validity"
+        ],
+        "mode": "none",
+        "original_validity": "not_verified",
+        "recommendation_evidence_count": 1,
+        "recommendation_evidence_status": "obtained",
+        "synthetic": true
+      },
+      "synthetic": true,
+      "technical_passed": true
+    },
+    {
+      "actual": {
+        "comparison_status": "supplier_invalid",
+        "issue_codes": [
+          "FACTS_PENDING",
+          "RECOMMENDATION_PENDING",
+          "SUPPLIER_HS_INVALID"
+        ]
+      },
+      "description": "非法原码高于推荐未知和资料待核",
+      "differences": [],
+      "error": null,
+      "expected": {
+        "comparison_status": "supplier_invalid",
+        "issue_codes": [
+          "FACTS_PENDING",
+          "RECOMMENDATION_PENDING",
+          "SUPPLIER_HS_INVALID"
+        ]
+      },
+      "id": "priority-invalid-pending",
+      "input": {
+        "basis": null,
+        "payload": {
+          "association_note": "",
+          "association_ok": true,
+          "context": {
+            "engine_version": "compare-wrapper-only",
+            "input_hash": "",
+            "input_revision": 1,
+            "item_id": "priority-invalid-pending",
+            "mock_scenario": null,
+            "prompt_version": "not-used-model-not-called",
+            "result_mode": "mock",
+            "rules_version": "p16-compare-1.0.0",
+            "run_id": "synthetic-fixed-run",
+            "task_id": "synthetic-task",
+            "version_id": "p16-synthetic-postcompare-1.0.0"
+          },
+          "recommendation": {
+            "candidates": [],
+            "confidence": null,
+            "confidence_note": "Synthetic fixture; no model called and no calibrated probability",
+            "evidence": [
+              {
+                "document": "SYNTHETIC-TECHNICAL-ONLY",
+                "effective_from": null,
+                "effective_to": null,
+                "evidence_id": "synthetic-evidence-0",
+                "excerpt": null,
+                "issued_at": null,
+                "locator": "fixture-row-1-not-a-real-clause",
+                "note": "Only exercises post-recommendation comparison logic",
+                "query": null,
+                "retrieved_at": "2026-01-01T00:00:00+00:00",
+                "scope": null,
+                "source_type": "synthetic",
+                "status": "obtained",
+                "title": "SYNTHETIC technical evidence, not real law",
+                "url": null
+              }
+            ],
+            "evidence_status": "obtained",
+            "gaps": [
+              {
+                "code": "FACTS_PENDING",
+                "field": null,
+                "message": "Synthetic technical gap; not a business finding",
+                "missing": null,
+                "suggested_role": null
+              }
+            ],
+            "suggested_hs": null
+          },
+          "supplier_hs_format_valid": true,
+          "supplier_hs_raw": "123",
+          "supplier_hs_validity_note": ""
+        },
+        "source_mode": "none"
+      },
+      "input_sha256": "b998f852bd8e7c24c2c38f109de5e7d21cce4a22ba8f304e7393626dddb39c2a",
+      "output": {
+        "comparison_status": "supplier_invalid",
+        "issues": [
+          {
+            "code": "SUPPLIER_HS_INVALID",
+            "field": "supplier_hs_raw",
+            "message": "原 HS 格式异常",
+            "missing": null,
+            "suggested_role": null
+          },
+          {
+            "code": "FACTS_PENDING",
+            "field": null,
+            "message": "Synthetic technical gap; not a business finding",
+            "missing": null,
+            "suggested_role": null
+          },
+          {
+            "code": "SUPPLIER_HS_INVALID",
+            "field": "supplier_hs_raw",
+            "message": "原 HS 格式或已证实有效性异常",
+            "missing": null,
+            "suggested_role": null
+          },
+          {
+            "code": "RECOMMENDATION_PENDING",
+            "field": null,
+            "message": "尚无独立推荐，不能比较",
+            "missing": null,
+            "suggested_role": "expert"
+          }
+        ],
+        "reason": "原 HS 不是 10 位 ASCII 数字；原文保留，不补零或猜测"
+      },
+      "output_sha256": "8cdf060cf08f4c84cd8fead2465757ad716a06a3e7555ea1ec4c717b64e9f69d",
+      "source_issues": {
+        "authority": "none-synthetic-not-business-basis",
+        "issue_codes": [
+          "FACTS_PENDING",
+          "RECOMMENDATION_PENDING",
+          "SUPPLIER_HS_INVALID"
+        ],
+        "limitations": [
+          "All evidence is synthetic; no real HS classification is evaluated",
+          "No-source comparison does not verify original code validity"
+        ],
+        "mode": "none",
+        "original_validity": "not_verified",
+        "recommendation_evidence_count": 1,
+        "recommendation_evidence_status": "obtained",
+        "synthetic": true
+      },
+      "synthetic": true,
+      "technical_passed": true
+    },
+    {
+      "actual": {
+        "comparison_status": "needs_confirmation",
+        "issue_codes": [
+          "FACTS_PENDING"
+        ]
+      },
+      "description": "缺资料高于异码不一致",
+      "differences": [],
+      "error": null,
+      "expected": {
+        "comparison_status": "needs_confirmation",
+        "issue_codes": [
+          "FACTS_PENDING"
+        ]
+      },
+      "id": "priority-pending-mismatch",
+      "input": {
+        "basis": null,
+        "payload": {
+          "association_note": "",
+          "association_ok": true,
+          "context": {
+            "engine_version": "compare-wrapper-only",
+            "input_hash": "",
+            "input_revision": 1,
+            "item_id": "priority-pending-mismatch",
+            "mock_scenario": null,
+            "prompt_version": "not-used-model-not-called",
+            "result_mode": "mock",
+            "rules_version": "p16-compare-1.0.0",
+            "run_id": "synthetic-fixed-run",
+            "task_id": "synthetic-task",
+            "version_id": "p16-synthetic-postcompare-1.0.0"
+          },
+          "recommendation": {
+            "candidates": [],
+            "confidence": null,
+            "confidence_note": "Synthetic fixture; no model called and no calibrated probability",
+            "evidence": [
+              {
+                "document": "SYNTHETIC-TECHNICAL-ONLY",
+                "effective_from": null,
+                "effective_to": null,
+                "evidence_id": "synthetic-evidence-0",
+                "excerpt": null,
+                "issued_at": null,
+                "locator": "fixture-row-1-not-a-real-clause",
+                "note": "Only exercises post-recommendation comparison logic",
+                "query": null,
+                "retrieved_at": "2026-01-01T00:00:00+00:00",
+                "scope": null,
+                "source_type": "synthetic",
+                "status": "obtained",
+                "title": "SYNTHETIC technical evidence, not real law",
+                "url": null
+              }
+            ],
+            "evidence_status": "obtained",
+            "gaps": [
+              {
+                "code": "FACTS_PENDING",
+                "field": null,
+                "message": "Synthetic technical gap; not a business finding",
+                "missing": null,
+                "suggested_role": null
+              }
+            ],
+            "suggested_hs": "8544422900"
+          },
+          "supplier_hs_format_valid": true,
+          "supplier_hs_raw": "8536901900",
+          "supplier_hs_validity_note": ""
+        },
+        "source_mode": "none"
+      },
+      "input_sha256": "c1bb16dc15f21505af1ab2bc3919a9d33a3ec495ae29afd06dfb4b0f0b645381",
+      "output": {
+        "comparison_status": "needs_confirmation",
+        "issues": [
+          {
+            "code": "FACTS_PENDING",
+            "field": null,
+            "message": "Synthetic technical gap; not a business finding",
+            "missing": null,
+            "suggested_role": null
+          }
+        ],
+        "reason": "缺少决定性事实或证据，需补充资料后再比较"
+      },
+      "output_sha256": "78a5746d2b9a73bdd68fb9b7849d6a1fb77bb0859105bb10ad3d15f34692c59f",
+      "source_issues": {
+        "authority": "none-synthetic-not-business-basis",
+        "issue_codes": [
+          "FACTS_PENDING"
+        ],
+        "limitations": [
+          "All evidence is synthetic; no real HS classification is evaluated",
+          "No-source comparison does not verify original code validity"
+        ],
+        "mode": "none",
+        "original_validity": "not_verified",
+        "recommendation_evidence_count": 1,
+        "recommendation_evidence_status": "obtained",
+        "synthetic": true
+      },
+      "synthetic": true,
+      "technical_passed": true
+    },
+    {
+      "actual": {
+        "comparison_status": "needs_confirmation",
+        "issue_codes": [
+          "EVIDENCE_PENDING"
+        ]
+      },
+      "description": "同码没有证据状态，不判一致",
+      "differences": [],
+      "error": null,
+      "expected": {
+        "comparison_status": "needs_confirmation",
+        "issue_codes": [
+          "EVIDENCE_PENDING"
+        ]
+      },
+      "id": "same-no-evidence-state",
+      "input": {
+        "basis": null,
+        "payload": {
+          "association_note": "",
+          "association_ok": true,
+          "context": {
+            "engine_version": "compare-wrapper-only",
+            "input_hash": "",
+            "input_revision": 1,
+            "item_id": "same-no-evidence-state",
+            "mock_scenario": null,
+            "prompt_version": "not-used-model-not-called",
+            "result_mode": "mock",
+            "rules_version": "p16-compare-1.0.0",
+            "run_id": "synthetic-fixed-run",
+            "task_id": "synthetic-task",
+            "version_id": "p16-synthetic-postcompare-1.0.0"
+          },
+          "recommendation": {
+            "candidates": [],
+            "confidence": null,
+            "confidence_note": "Synthetic fixture; no model called and no calibrated probability",
+            "evidence": [],
+            "evidence_status": null,
+            "gaps": [],
+            "suggested_hs": "8544422900"
+          },
+          "supplier_hs_format_valid": true,
+          "supplier_hs_raw": "8544422900",
+          "supplier_hs_validity_note": ""
+        },
+        "source_mode": "none"
+      },
+      "input_sha256": "4e7b4d9e8bdb8d5823134d260e122110990787cdb4b22160a11776c36241f86a",
+      "output": {
+        "comparison_status": "needs_confirmation",
+        "issues": [
+          {
+            "code": "EVIDENCE_PENDING",
+            "field": null,
+            "message": "依据未取得或版本待核，不能据此判无风险",
+            "missing": null,
+            "suggested_role": "expert"
+          }
+        ],
+        "reason": "缺少决定性事实或证据，需补充资料后再比较"
+      },
+      "output_sha256": "6a3fa0f3ea773611d0bd9989f684e401344537481eeab6ef2687a2f6d8f86aae",
+      "source_issues": {
+        "authority": "none-synthetic-not-business-basis",
+        "issue_codes": [
+          "EVIDENCE_PENDING"
+        ],
+        "limitations": [
+          "All evidence is synthetic; no real HS classification is evaluated",
+          "No-source comparison does not verify original code validity"
+        ],
+        "mode": "none",
+        "original_validity": "not_verified",
+        "recommendation_evidence_count": 0,
+        "recommendation_evidence_status": null,
+        "synthetic": true
+      },
+      "synthetic": true,
+      "technical_passed": true
+    },
+    {
+      "actual": {
+        "comparison_status": "needs_confirmation",
+        "issue_codes": [
+          "EVIDENCE_EMPTY"
+        ]
+      },
+      "description": "已取得但空证据，不判一致",
+      "differences": [],
+      "error": null,
+      "expected": {
+        "comparison_status": "needs_confirmation",
+        "issue_codes": [
+          "EVIDENCE_EMPTY"
+        ]
+      },
+      "id": "same-empty-obtained",
+      "input": {
+        "basis": null,
+        "payload": {
+          "association_note": "",
+          "association_ok": true,
+          "context": {
+            "engine_version": "compare-wrapper-only",
+            "input_hash": "",
+            "input_revision": 1,
+            "item_id": "same-empty-obtained",
+            "mock_scenario": null,
+            "prompt_version": "not-used-model-not-called",
+            "result_mode": "mock",
+            "rules_version": "p16-compare-1.0.0",
+            "run_id": "synthetic-fixed-run",
+            "task_id": "synthetic-task",
+            "version_id": "p16-synthetic-postcompare-1.0.0"
+          },
+          "recommendation": {
+            "candidates": [],
+            "confidence": null,
+            "confidence_note": "Synthetic fixture; no model called and no calibrated probability",
+            "evidence": [],
+            "evidence_status": "obtained",
+            "gaps": [],
+            "suggested_hs": "8544422900"
+          },
+          "supplier_hs_format_valid": true,
+          "supplier_hs_raw": "8544422900",
+          "supplier_hs_validity_note": ""
+        },
+        "source_mode": "none"
+      },
+      "input_sha256": "21b4b0a700ba8cef5c3a0a2b804f21515cf3f6c858a7b7475f69fd4818343f5b",
+      "output": {
+        "comparison_status": "needs_confirmation",
+        "issues": [
+          {
+            "code": "EVIDENCE_EMPTY",
+            "field": null,
+            "message": "状态为已取得但无可定位证据，仍需核实",
+            "missing": null,
+            "suggested_role": "expert"
+          }
+        ],
+        "reason": "缺少决定性事实或证据，需补充资料后再比较"
+      },
+      "output_sha256": "b30190123a7d46eb8142eac116d3b89bd96ab56bc1122a456a2ee916becc80e6",
+      "source_issues": {
+        "authority": "none-synthetic-not-business-basis",
+        "issue_codes": [
+          "EVIDENCE_EMPTY"
+        ],
+        "limitations": [
+          "All evidence is synthetic; no real HS classification is evaluated",
+          "No-source comparison does not verify original code validity"
+        ],
+        "mode": "none",
+        "original_validity": "not_verified",
+        "recommendation_evidence_count": 0,
+        "recommendation_evidence_status": "obtained",
+        "synthetic": true
+      },
+      "synthetic": true,
+      "technical_passed": true
+    },
+    {
+      "actual": {
+        "comparison_status": "needs_confirmation",
+        "issue_codes": [
+          "EVIDENCE_PENDING"
+        ]
+      },
+      "description": "来源失败不等于查无或无效",
+      "differences": [],
+      "error": null,
+      "expected": {
+        "comparison_status": "needs_confirmation",
+        "issue_codes": [
+          "EVIDENCE_PENDING"
+        ]
+      },
+      "id": "same-query-failed",
+      "input": {
+        "basis": null,
+        "payload": {
+          "association_note": "",
+          "association_ok": true,
+          "context": {
+            "engine_version": "compare-wrapper-only",
+            "input_hash": "",
+            "input_revision": 1,
+            "item_id": "same-query-failed",
+            "mock_scenario": null,
+            "prompt_version": "not-used-model-not-called",
+            "result_mode": "mock",
+            "rules_version": "p16-compare-1.0.0",
+            "run_id": "synthetic-fixed-run",
+            "task_id": "synthetic-task",
+            "version_id": "p16-synthetic-postcompare-1.0.0"
+          },
+          "recommendation": {
+            "candidates": [],
+            "confidence": null,
+            "confidence_note": "Synthetic fixture; no model called and no calibrated probability",
+            "evidence": [],
+            "evidence_status": "query_failed",
+            "gaps": [],
+            "suggested_hs": "8544422900"
+          },
+          "supplier_hs_format_valid": true,
+          "supplier_hs_raw": "8544422900",
+          "supplier_hs_validity_note": ""
+        },
+        "source_mode": "none"
+      },
+      "input_sha256": "84d75c7b6e02d6a5ba8ea5cddd9c8e12bac7acb1f524704fa8dd4079cf88e3b3",
+      "output": {
+        "comparison_status": "needs_confirmation",
+        "issues": [
+          {
+            "code": "EVIDENCE_PENDING",
+            "field": null,
+            "message": "依据未取得或版本待核，不能据此判无风险",
+            "missing": null,
+            "suggested_role": "expert"
+          }
+        ],
+        "reason": "缺少决定性事实或证据，需补充资料后再比较"
+      },
+      "output_sha256": "6a3fa0f3ea773611d0bd9989f684e401344537481eeab6ef2687a2f6d8f86aae",
+      "source_issues": {
+        "authority": "none-synthetic-not-business-basis",
+        "issue_codes": [
+          "EVIDENCE_PENDING"
+        ],
+        "limitations": [
+          "All evidence is synthetic; no real HS classification is evaluated",
+          "No-source comparison does not verify original code validity"
+        ],
+        "mode": "none",
+        "original_validity": "not_verified",
+        "recommendation_evidence_count": 0,
+        "recommendation_evidence_status": "query_failed",
+        "synthetic": true
+      },
+      "synthetic": true,
+      "technical_passed": true
+    },
+    {
+      "actual": {
+        "comparison_status": "needs_confirmation",
+        "issue_codes": [
+          "EVIDENCE_PENDING"
+        ]
+      },
+      "description": "证据未查到不等于错码",
+      "differences": [],
+      "error": null,
+      "expected": {
+        "comparison_status": "needs_confirmation",
+        "issue_codes": [
+          "EVIDENCE_PENDING"
+        ]
+      },
+      "id": "same-not-found",
+      "input": {
+        "basis": null,
+        "payload": {
+          "association_note": "",
+          "association_ok": true,
+          "context": {
+            "engine_version": "compare-wrapper-only",
+            "input_hash": "",
+            "input_revision": 1,
+            "item_id": "same-not-found",
+            "mock_scenario": null,
+            "prompt_version": "not-used-model-not-called",
+            "result_mode": "mock",
+            "rules_version": "p16-compare-1.0.0",
+            "run_id": "synthetic-fixed-run",
+            "task_id": "synthetic-task",
+            "version_id": "p16-synthetic-postcompare-1.0.0"
+          },
+          "recommendation": {
+            "candidates": [],
+            "confidence": null,
+            "confidence_note": "Synthetic fixture; no model called and no calibrated probability",
+            "evidence": [],
+            "evidence_status": "not_found",
+            "gaps": [],
+            "suggested_hs": "8544422900"
+          },
+          "supplier_hs_format_valid": true,
+          "supplier_hs_raw": "8544422900",
+          "supplier_hs_validity_note": ""
+        },
+        "source_mode": "none"
+      },
+      "input_sha256": "71a37381729e0a1b30d83d43fff6a0e9f6c8c72729cbca73706032373d67c4c7",
+      "output": {
+        "comparison_status": "needs_confirmation",
+        "issues": [
+          {
+            "code": "EVIDENCE_PENDING",
+            "field": null,
+            "message": "依据未取得或版本待核，不能据此判无风险",
+            "missing": null,
+            "suggested_role": "expert"
+          }
+        ],
+        "reason": "缺少决定性事实或证据，需补充资料后再比较"
+      },
+      "output_sha256": "6a3fa0f3ea773611d0bd9989f684e401344537481eeab6ef2687a2f6d8f86aae",
+      "source_issues": {
+        "authority": "none-synthetic-not-business-basis",
+        "issue_codes": [
+          "EVIDENCE_PENDING"
+        ],
+        "limitations": [
+          "All evidence is synthetic; no real HS classification is evaluated",
+          "No-source comparison does not verify original code validity"
+        ],
+        "mode": "none",
+        "original_validity": "not_verified",
+        "recommendation_evidence_count": 0,
+        "recommendation_evidence_status": "not_found",
+        "synthetic": true
+      },
+      "synthetic": true,
+      "technical_passed": true
+    },
+    {
+      "actual": {
+        "comparison_status": "needs_confirmation",
+        "issue_codes": [
+          "EVIDENCE_PENDING"
+        ]
+      },
+      "description": "版本待核不判一致",
+      "differences": [],
+      "error": null,
+      "expected": {
+        "comparison_status": "needs_confirmation",
+        "issue_codes": [
+          "EVIDENCE_PENDING"
+        ]
+      },
+      "id": "same-version-unverified",
+      "input": {
+        "basis": null,
+        "payload": {
+          "association_note": "",
+          "association_ok": true,
+          "context": {
+            "engine_version": "compare-wrapper-only",
+            "input_hash": "",
+            "input_revision": 1,
+            "item_id": "same-version-unverified",
+            "mock_scenario": null,
+            "prompt_version": "not-used-model-not-called",
+            "result_mode": "mock",
+            "rules_version": "p16-compare-1.0.0",
+            "run_id": "synthetic-fixed-run",
+            "task_id": "synthetic-task",
+            "version_id": "p16-synthetic-postcompare-1.0.0"
+          },
+          "recommendation": {
+            "candidates": [],
+            "confidence": null,
+            "confidence_note": "Synthetic fixture; no model called and no calibrated probability",
+            "evidence": [],
+            "evidence_status": "version_unverified",
+            "gaps": [],
+            "suggested_hs": "8544422900"
+          },
+          "supplier_hs_format_valid": true,
+          "supplier_hs_raw": "8544422900",
+          "supplier_hs_validity_note": ""
+        },
+        "source_mode": "none"
+      },
+      "input_sha256": "7c1f0839d484c5254a866d1d30bd9215c597d3fd8c9e974a875835eba98ee36f",
+      "output": {
+        "comparison_status": "needs_confirmation",
+        "issues": [
+          {
+            "code": "EVIDENCE_PENDING",
+            "field": null,
+            "message": "依据未取得或版本待核，不能据此判无风险",
+            "missing": null,
+            "suggested_role": "expert"
+          }
+        ],
+        "reason": "缺少决定性事实或证据，需补充资料后再比较"
+      },
+      "output_sha256": "6a3fa0f3ea773611d0bd9989f684e401344537481eeab6ef2687a2f6d8f86aae",
+      "source_issues": {
+        "authority": "none-synthetic-not-business-basis",
+        "issue_codes": [
+          "EVIDENCE_PENDING"
+        ],
+        "limitations": [
+          "All evidence is synthetic; no real HS classification is evaluated",
+          "No-source comparison does not verify original code validity"
+        ],
+        "mode": "none",
+        "original_validity": "not_verified",
+        "recommendation_evidence_count": 0,
+        "recommendation_evidence_status": "version_unverified",
+        "synthetic": true
+      },
+      "synthetic": true,
+      "technical_passed": true
+    },
+    {
+      "actual": {
+        "comparison_status": "needs_confirmation",
+        "issue_codes": [
+          "EVIDENCE_UNVERIFIED"
+        ]
+      },
+      "description": "不可定位的合成证据不足",
+      "differences": [],
+      "error": null,
+      "expected": {
+        "comparison_status": "needs_confirmation",
+        "issue_codes": [
+          "EVIDENCE_UNVERIFIED"
+        ]
+      },
+      "id": "empty-locator",
+      "input": {
+        "basis": null,
+        "payload": {
+          "association_note": "",
+          "association_ok": true,
+          "context": {
+            "engine_version": "compare-wrapper-only",
+            "input_hash": "",
+            "input_revision": 1,
+            "item_id": "empty-locator",
+            "mock_scenario": null,
+            "prompt_version": "not-used-model-not-called",
+            "result_mode": "mock",
+            "rules_version": "p16-compare-1.0.0",
+            "run_id": "synthetic-fixed-run",
+            "task_id": "synthetic-task",
+            "version_id": "p16-synthetic-postcompare-1.0.0"
+          },
+          "recommendation": {
+            "candidates": [],
+            "confidence": null,
+            "confidence_note": "Synthetic fixture; no model called and no calibrated probability",
+            "evidence": [
+              {
+                "document": "SYNTHETIC-TECHNICAL-ONLY",
+                "effective_from": null,
+                "effective_to": null,
+                "evidence_id": "synthetic-evidence-0",
+                "excerpt": null,
+                "issued_at": null,
+                "locator": " ",
+                "note": "Only exercises post-recommendation comparison logic",
+                "query": null,
+                "retrieved_at": "2026-01-01T00:00:00+00:00",
+                "scope": null,
+                "source_type": "synthetic",
+                "status": "obtained",
+                "title": "SYNTHETIC technical evidence, not real law",
+                "url": null
+              }
+            ],
+            "evidence_status": "obtained",
+            "gaps": [],
+            "suggested_hs": "8544422900"
+          },
+          "supplier_hs_format_valid": true,
+          "supplier_hs_raw": "8544422900",
+          "supplier_hs_validity_note": ""
+        },
+        "source_mode": "none"
+      },
+      "input_sha256": "abf730ae935440e8dbcc66ee538f4548cb23f7922ae29e50a0fc1434813f91ba",
+      "output": {
+        "comparison_status": "needs_confirmation",
+        "issues": [
+          {
+            "code": "EVIDENCE_UNVERIFIED",
+            "field": null,
+            "message": "推荐依据缺少定位或状态未核实",
+            "missing": null,
+            "suggested_role": "expert"
+          }
+        ],
+        "reason": "缺少决定性事实或证据，需补充资料后再比较"
+      },
+      "output_sha256": "769ff0ba985d80b548346c89049144fd742b7e3414ae3327017e1392091447e5",
+      "source_issues": {
+        "authority": "none-synthetic-not-business-basis",
+        "issue_codes": [
+          "EVIDENCE_UNVERIFIED"
+        ],
+        "limitations": [
+          "All evidence is synthetic; no real HS classification is evaluated",
+          "No-source comparison does not verify original code validity"
+        ],
+        "mode": "none",
+        "original_validity": "not_verified",
+        "recommendation_evidence_count": 1,
+        "recommendation_evidence_status": "obtained",
+        "synthetic": true
+      },
+      "synthetic": true,
+      "technical_passed": true
+    },
+    {
+      "actual": {
+        "comparison_status": "needs_confirmation",
+        "issue_codes": [
+          "EVIDENCE_UNVERIFIED"
+        ]
+      },
+      "description": "单条依据未核实不能判一致",
+      "differences": [],
+      "error": null,
+      "expected": {
+        "comparison_status": "needs_confirmation",
+        "issue_codes": [
+          "EVIDENCE_UNVERIFIED"
+        ]
+      },
+      "id": "evidence-state-unverified",
+      "input": {
+        "basis": null,
+        "payload": {
+          "association_note": "",
+          "association_ok": true,
+          "context": {
+            "engine_version": "compare-wrapper-only",
+            "input_hash": "",
+            "input_revision": 1,
+            "item_id": "evidence-state-unverified",
+            "mock_scenario": null,
+            "prompt_version": "not-used-model-not-called",
+            "result_mode": "mock",
+            "rules_version": "p16-compare-1.0.0",
+            "run_id": "synthetic-fixed-run",
+            "task_id": "synthetic-task",
+            "version_id": "p16-synthetic-postcompare-1.0.0"
+          },
+          "recommendation": {
+            "candidates": [],
+            "confidence": null,
+            "confidence_note": "Synthetic fixture; no model called and no calibrated probability",
+            "evidence": [
+              {
+                "document": "SYNTHETIC-TECHNICAL-ONLY",
+                "effective_from": null,
+                "effective_to": null,
+                "evidence_id": "synthetic-evidence-0",
+                "excerpt": null,
+                "issued_at": null,
+                "locator": "fixture-row-1-not-a-real-clause",
+                "note": "Only exercises post-recommendation comparison logic",
+                "query": null,
+                "retrieved_at": "2026-01-01T00:00:00+00:00",
+                "scope": null,
+                "source_type": "synthetic",
+                "status": "version_unverified",
+                "title": "SYNTHETIC technical evidence, not real law",
+                "url": null
+              }
+            ],
+            "evidence_status": "obtained",
+            "gaps": [],
+            "suggested_hs": "8544422900"
+          },
+          "supplier_hs_format_valid": true,
+          "supplier_hs_raw": "8544422900",
+          "supplier_hs_validity_note": ""
+        },
+        "source_mode": "none"
+      },
+      "input_sha256": "c51da2faff45dbac86d8a9d30268502fc3f67be6e17b2e24e7b30ebebf67cf0b",
+      "output": {
+        "comparison_status": "needs_confirmation",
+        "issues": [
+          {
+            "code": "EVIDENCE_UNVERIFIED",
+            "field": null,
+            "message": "推荐依据缺少定位或状态未核实",
+            "missing": null,
+            "suggested_role": "expert"
+          }
+        ],
+        "reason": "缺少决定性事实或证据，需补充资料后再比较"
+      },
+      "output_sha256": "769ff0ba985d80b548346c89049144fd742b7e3414ae3327017e1392091447e5",
+      "source_issues": {
+        "authority": "none-synthetic-not-business-basis",
+        "issue_codes": [
+          "EVIDENCE_UNVERIFIED"
+        ],
+        "limitations": [
+          "All evidence is synthetic; no real HS classification is evaluated",
+          "No-source comparison does not verify original code validity"
+        ],
+        "mode": "none",
+        "original_validity": "not_verified",
+        "recommendation_evidence_count": 1,
+        "recommendation_evidence_status": "obtained",
+        "synthetic": true
+      },
+      "synthetic": true,
+      "technical_passed": true
+    },
+    {
+      "actual": {
+        "comparison_status": "needs_confirmation",
+        "issue_codes": [
+          "SUGGESTED_HS_INVALID"
+        ]
+      },
+      "description": "非法推荐编码不比较",
+      "differences": [],
+      "error": null,
+      "expected": {
+        "comparison_status": "needs_confirmation",
+        "issue_codes": [
+          "SUGGESTED_HS_INVALID"
+        ]
+      },
+      "id": "invalid-recommendation",
+      "input": {
+        "basis": null,
+        "payload": {
+          "association_note": "",
+          "association_ok": true,
+          "context": {
+            "engine_version": "compare-wrapper-only",
+            "input_hash": "",
+            "input_revision": 1,
+            "item_id": "invalid-recommendation",
+            "mock_scenario": null,
+            "prompt_version": "not-used-model-not-called",
+            "result_mode": "mock",
+            "rules_version": "p16-compare-1.0.0",
+            "run_id": "synthetic-fixed-run",
+            "task_id": "synthetic-task",
+            "version_id": "p16-synthetic-postcompare-1.0.0"
+          },
+          "recommendation": {
+            "candidates": [],
+            "confidence": null,
+            "confidence_note": "Synthetic fixture; no model called and no calibrated probability",
+            "evidence": [
+              {
+                "document": "SYNTHETIC-TECHNICAL-ONLY",
+                "effective_from": null,
+                "effective_to": null,
+                "evidence_id": "synthetic-evidence-0",
+                "excerpt": null,
+                "issued_at": null,
+                "locator": "fixture-row-1-not-a-real-clause",
+                "note": "Only exercises post-recommendation comparison logic",
+                "query": null,
+                "retrieved_at": "2026-01-01T00:00:00+00:00",
+                "scope": null,
+                "source_type": "synthetic",
+                "status": "obtained",
+                "title": "SYNTHETIC technical evidence, not real law",
+                "url": null
+              }
+            ],
+            "evidence_status": "obtained",
+            "gaps": [],
+            "suggested_hs": "bad"
+          },
+          "supplier_hs_format_valid": true,
+          "supplier_hs_raw": "8544422900",
+          "supplier_hs_validity_note": ""
+        },
+        "source_mode": "none"
+      },
+      "input_sha256": "478cb622638544e3a777f3f7992f4fb497f456b726fbe86eff13e350f62c616d",
+      "output": {
+        "comparison_status": "needs_confirmation",
+        "issues": [
+          {
+            "code": "SUGGESTED_HS_INVALID",
+            "field": null,
+            "message": "推荐编码非完整 10 位 ASCII 数字，不能比较",
+            "missing": null,
+            "suggested_role": "operator"
+          }
+        ],
+        "reason": "缺少决定性事实或证据，需补充资料后再比较"
+      },
+      "output_sha256": "43c7a27aa2df562e35d59e66faf8da28f5bce2a69b8b49da1ca08355f8373bff",
+      "source_issues": {
+        "authority": "none-synthetic-not-business-basis",
+        "issue_codes": [
+          "SUGGESTED_HS_INVALID"
+        ],
+        "limitations": [
+          "All evidence is synthetic; no real HS classification is evaluated",
+          "No-source comparison does not verify original code validity"
+        ],
+        "mode": "none",
+        "original_validity": "not_verified",
+        "recommendation_evidence_count": 1,
+        "recommendation_evidence_status": "obtained",
+        "synthetic": true
+      },
+      "synthetic": true,
+      "technical_passed": true
+    },
+    {
+      "actual": {
+        "comparison_status": "needs_confirmation",
+        "issue_codes": [
+          "SUPPLIER_HS_SUBHEADING_ONLY"
+        ]
+      },
+      "description": "8位子目不是错码也不是完整码",
+      "differences": [],
+      "error": null,
+      "expected": {
+        "comparison_status": "needs_confirmation",
+        "issue_codes": [
+          "SUPPLIER_HS_SUBHEADING_ONLY"
+        ]
+      },
+      "id": "supplier-eight-digits",
+      "input": {
+        "basis": null,
+        "payload": {
+          "association_note": "",
+          "association_ok": true,
+          "context": {
+            "engine_version": "compare-wrapper-only",
+            "input_hash": "",
+            "input_revision": 1,
+            "item_id": "supplier-eight-digits",
+            "mock_scenario": null,
+            "prompt_version": "not-used-model-not-called",
+            "result_mode": "mock",
+            "rules_version": "p16-compare-1.0.0",
+            "run_id": "synthetic-fixed-run",
+            "task_id": "synthetic-task",
+            "version_id": "p16-synthetic-postcompare-1.0.0"
+          },
+          "recommendation": {
+            "candidates": [],
+            "confidence": null,
+            "confidence_note": "Synthetic fixture; no model called and no calibrated probability",
+            "evidence": [
+              {
+                "document": "SYNTHETIC-TECHNICAL-ONLY",
+                "effective_from": null,
+                "effective_to": null,
+                "evidence_id": "synthetic-evidence-0",
+                "excerpt": null,
+                "issued_at": null,
+                "locator": "fixture-row-1-not-a-real-clause",
+                "note": "Only exercises post-recommendation comparison logic",
+                "query": null,
+                "retrieved_at": "2026-01-01T00:00:00+00:00",
+                "scope": null,
+                "source_type": "synthetic",
+                "status": "obtained",
+                "title": "SYNTHETIC technical evidence, not real law",
+                "url": null
+              }
+            ],
+            "evidence_status": "obtained",
+            "gaps": [],
+            "suggested_hs": "8544422900"
+          },
+          "supplier_hs_format_valid": true,
+          "supplier_hs_raw": "85444229",
+          "supplier_hs_validity_note": ""
+        },
+        "source_mode": "none"
+      },
+      "input_sha256": "99c0a706bc595ea89b680e55afd896f0a6c830cc983e122da3461105ec4957ce",
+      "output": {
+        "comparison_status": "needs_confirmation",
+        "issues": [
+          {
+            "code": "SUPPLIER_HS_SUBHEADING_ONLY",
+            "field": "supplier_hs_raw",
+            "message": "原码仅为 8 位税目/子目，不等于错码，需确认完整申报编码",
+            "missing": null,
+            "suggested_role": "operator"
+          }
+        ],
+        "reason": "缺少决定性事实或证据，需补充资料后再比较"
+      },
+      "output_sha256": "cae3b8f3afd43c7b5b51888e276bd3de66a91ce2ca039d42c0d78a5646fa70ea",
+      "source_issues": {
+        "authority": "none-synthetic-not-business-basis",
+        "issue_codes": [
+          "SUPPLIER_HS_SUBHEADING_ONLY"
+        ],
+        "limitations": [
+          "All evidence is synthetic; no real HS classification is evaluated",
+          "No-source comparison does not verify original code validity"
+        ],
+        "mode": "none",
+        "original_validity": "not_verified",
+        "recommendation_evidence_count": 1,
+        "recommendation_evidence_status": "obtained",
+        "synthetic": true
+      },
+      "synthetic": true,
+      "technical_passed": true
+    },
+    {
+      "actual": {
+        "comparison_status": "needs_confirmation",
+        "issue_codes": [
+          "SUGGESTED_HS_INVALID"
+        ]
+      },
+      "description": "推荐8位不能当完整编码比较",
+      "differences": [],
+      "error": null,
+      "expected": {
+        "comparison_status": "needs_confirmation",
+        "issue_codes": [
+          "SUGGESTED_HS_INVALID"
+        ]
+      },
+      "id": "recommendation-eight-digits",
+      "input": {
+        "basis": null,
+        "payload": {
+          "association_note": "",
+          "association_ok": true,
+          "context": {
+            "engine_version": "compare-wrapper-only",
+            "input_hash": "",
+            "input_revision": 1,
+            "item_id": "recommendation-eight-digits",
+            "mock_scenario": null,
+            "prompt_version": "not-used-model-not-called",
+            "result_mode": "mock",
+            "rules_version": "p16-compare-1.0.0",
+            "run_id": "synthetic-fixed-run",
+            "task_id": "synthetic-task",
+            "version_id": "p16-synthetic-postcompare-1.0.0"
+          },
+          "recommendation": {
+            "candidates": [],
+            "confidence": null,
+            "confidence_note": "Synthetic fixture; no model called and no calibrated probability",
+            "evidence": [
+              {
+                "document": "SYNTHETIC-TECHNICAL-ONLY",
+                "effective_from": null,
+                "effective_to": null,
+                "evidence_id": "synthetic-evidence-0",
+                "excerpt": null,
+                "issued_at": null,
+                "locator": "fixture-row-1-not-a-real-clause",
+                "note": "Only exercises post-recommendation comparison logic",
+                "query": null,
+                "retrieved_at": "2026-01-01T00:00:00+00:00",
+                "scope": null,
+                "source_type": "synthetic",
+                "status": "obtained",
+                "title": "SYNTHETIC technical evidence, not real law",
+                "url": null
+              }
+            ],
+            "evidence_status": "obtained",
+            "gaps": [],
+            "suggested_hs": "85444229"
+          },
+          "supplier_hs_format_valid": true,
+          "supplier_hs_raw": "8544422900",
+          "supplier_hs_validity_note": ""
+        },
+        "source_mode": "none"
+      },
+      "input_sha256": "73eabae72136a58a8f521e9f0942e9814489991cfb6ad2698f9592f41770fa72",
+      "output": {
+        "comparison_status": "needs_confirmation",
+        "issues": [
+          {
+            "code": "SUGGESTED_HS_INVALID",
+            "field": null,
+            "message": "推荐编码非完整 10 位 ASCII 数字，不能比较",
+            "missing": null,
+            "suggested_role": "operator"
+          }
+        ],
+        "reason": "缺少决定性事实或证据，需补充资料后再比较"
+      },
+      "output_sha256": "43c7a27aa2df562e35d59e66faf8da28f5bce2a69b8b49da1ca08355f8373bff",
+      "source_issues": {
+        "authority": "none-synthetic-not-business-basis",
+        "issue_codes": [
+          "SUGGESTED_HS_INVALID"
+        ],
+        "limitations": [
+          "All evidence is synthetic; no real HS classification is evaluated",
+          "No-source comparison does not verify original code validity"
+        ],
+        "mode": "none",
+        "original_validity": "not_verified",
+        "recommendation_evidence_count": 1,
+        "recommendation_evidence_status": "obtained",
+        "synthetic": true
+      },
+      "synthetic": true,
+      "technical_passed": true
+    },
+    {
+      "actual": {
+        "comparison_status": "supplier_invalid",
+        "issue_codes": [
+          "SUPPLIER_HS_INVALID"
+        ]
+      },
+      "description": "非ASCII数字原码不能洗白",
+      "differences": [],
+      "error": null,
+      "expected": {
+        "comparison_status": "supplier_invalid",
+        "issue_codes": [
+          "SUPPLIER_HS_INVALID"
+        ]
+      },
+      "id": "supplier-unicode-digits",
+      "input": {
+        "basis": null,
+        "payload": {
+          "association_note": "",
+          "association_ok": true,
+          "context": {
+            "engine_version": "compare-wrapper-only",
+            "input_hash": "",
+            "input_revision": 1,
+            "item_id": "supplier-unicode-digits",
+            "mock_scenario": null,
+            "prompt_version": "not-used-model-not-called",
+            "result_mode": "mock",
+            "rules_version": "p16-compare-1.0.0",
+            "run_id": "synthetic-fixed-run",
+            "task_id": "synthetic-task",
+            "version_id": "p16-synthetic-postcompare-1.0.0"
+          },
+          "recommendation": {
+            "candidates": [],
+            "confidence": null,
+            "confidence_note": "Synthetic fixture; no model called and no calibrated probability",
+            "evidence": [
+              {
+                "document": "SYNTHETIC-TECHNICAL-ONLY",
+                "effective_from": null,
+                "effective_to": null,
+                "evidence_id": "synthetic-evidence-0",
+                "excerpt": null,
+                "issued_at": null,
+                "locator": "fixture-row-1-not-a-real-clause",
+                "note": "Only exercises post-recommendation comparison logic",
+                "query": null,
+                "retrieved_at": "2026-01-01T00:00:00+00:00",
+                "scope": null,
+                "source_type": "synthetic",
+                "status": "obtained",
+                "title": "SYNTHETIC technical evidence, not real law",
+                "url": null
+              }
+            ],
+            "evidence_status": "obtained",
+            "gaps": [],
+            "suggested_hs": "8544422900"
+          },
+          "supplier_hs_format_valid": true,
+          "supplier_hs_raw": "８５４４４２２９００",
+          "supplier_hs_validity_note": ""
+        },
+        "source_mode": "none"
+      },
+      "input_sha256": "17759271e9b38b553b2b3cb69ff931e80640ca7cfc7e6ec90676e604b062ce96",
+      "output": {
+        "comparison_status": "supplier_invalid",
+        "issues": [
+          {
+            "code": "SUPPLIER_HS_INVALID",
+            "field": "supplier_hs_raw",
+            "message": "原 HS 格式异常",
+            "missing": null,
+            "suggested_role": null
+          },
+          {
+            "code": "SUPPLIER_HS_INVALID",
+            "field": "supplier_hs_raw",
+            "message": "原 HS 格式或已证实有效性异常",
+            "missing": null,
+            "suggested_role": null
+          }
+        ],
+        "reason": "原 HS 不是 10 位 ASCII 数字；原文保留，不补零或猜测"
+      },
+      "output_sha256": "421ab0c0a95812cceff5cbe329dc549c53842a495acaeb388ce937cd23b47602",
+      "source_issues": {
+        "authority": "none-synthetic-not-business-basis",
+        "issue_codes": [
+          "SUPPLIER_HS_INVALID"
+        ],
+        "limitations": [
+          "All evidence is synthetic; no real HS classification is evaluated",
+          "No-source comparison does not verify original code validity"
+        ],
+        "mode": "none",
+        "original_validity": "not_verified",
+        "recommendation_evidence_count": 1,
+        "recommendation_evidence_status": "obtained",
+        "synthetic": true
+      },
+      "synthetic": true,
+      "technical_passed": true
+    },
+    {
+      "actual": {
+        "comparison_status": "needs_confirmation",
+        "issue_codes": [
+          "HS_CODE_NOT_FOUND",
+          "SUPPLIER_HS_VALIDITY_PENDING"
+        ]
+      },
+      "description": "内存合成来源查无不宣称原码无效",
+      "differences": [],
+      "error": null,
+      "expected": {
+        "comparison_status": "needs_confirmation",
+        "issue_codes": [
+          "HS_CODE_NOT_FOUND",
+          "SUPPLIER_HS_VALIDITY_PENDING"
+        ]
+      },
+      "id": "source-not-found",
+      "input": {
+        "basis": {
+          "declaration_date": "2026-05-20",
+          "note": "synthetic technical test constant; not a business declaration date",
+          "tariff_version": "synthetic-2026"
+        },
+        "payload": {
+          "association_note": "",
+          "association_ok": true,
+          "context": {
+            "engine_version": "compare-wrapper-only",
+            "input_hash": "",
+            "input_revision": 1,
+            "item_id": "source-not-found",
+            "mock_scenario": null,
+            "prompt_version": "not-used-model-not-called",
+            "result_mode": "mock",
+            "rules_version": "p16-compare-1.0.0",
+            "run_id": "synthetic-fixed-run",
+            "task_id": "synthetic-task",
+            "version_id": "p16-synthetic-postcompare-1.0.0"
+          },
+          "recommendation": {
+            "candidates": [],
+            "confidence": null,
+            "confidence_note": "Synthetic fixture; no model called and no calibrated probability",
+            "evidence": [
+              {
+                "document": "SYNTHETIC-TECHNICAL-ONLY",
+                "effective_from": null,
+                "effective_to": null,
+                "evidence_id": "synthetic-evidence-0",
+                "excerpt": null,
+                "issued_at": null,
+                "locator": "fixture-row-1-not-a-real-clause",
+                "note": "Only exercises post-recommendation comparison logic",
+                "query": null,
+                "retrieved_at": "2026-01-01T00:00:00+00:00",
+                "scope": null,
+                "source_type": "synthetic",
+                "status": "obtained",
+                "title": "SYNTHETIC technical evidence, not real law",
+                "url": null
+              }
+            ],
+            "evidence_status": "obtained",
+            "gaps": [],
+            "suggested_hs": "8544422900"
+          },
+          "supplier_hs_format_valid": true,
+          "supplier_hs_raw": "8544422900",
+          "supplier_hs_validity_note": ""
+        },
+        "source_mode": "not_found"
+      },
+      "input_sha256": "1eaef712ffd620b40e46eaf62a6a8a7fe6a9177b0c5a3d8be3ab8f3ba707d572",
+      "output": {
+        "comparison_status": "needs_confirmation",
+        "issues": [
+          {
+            "code": "HS_CODE_NOT_FOUND",
+            "field": "supplier_hs_raw",
+            "message": "税则版本 synthetic-2026 未收录编码 8544422900；这是查无此码，不等于编码无效或已作废",
+            "missing": "synthetic-2026 版税则记录",
+            "suggested_role": "expert"
+          },
+          {
+            "code": "SUPPLIER_HS_VALIDITY_PENDING",
+            "field": "supplier_hs_raw",
+            "message": "原码有效性尚未核实；查无、来源失败或版本待核不等于无效",
+            "missing": null,
+            "suggested_role": "expert"
+          }
+        ],
+        "reason": "缺少决定性事实或证据，需补充资料后再比较"
+      },
+      "output_sha256": "1d1260721914bc21f1ed38228934e8b8c9136fc635e028dce9a0a5baae9ae036",
+      "source_issues": {
+        "authority": "none-synthetic-not-business-basis",
+        "issue_codes": [
+          "HS_CODE_NOT_FOUND",
+          "SUPPLIER_HS_VALIDITY_PENDING"
+        ],
+        "limitations": [
+          "All evidence is synthetic; no real HS classification is evaluated",
+          "No-source comparison does not verify original code validity"
+        ],
+        "mode": "not_found",
+        "original_validity": "pending",
+        "recommendation_evidence_count": 1,
+        "recommendation_evidence_status": "obtained",
+        "synthetic": true
+      },
+      "synthetic": true,
+      "technical_passed": true
+    },
+    {
+      "actual": {
+        "comparison_status": "needs_confirmation",
+        "issue_codes": [
+          "HS_QUERY_FAILED",
+          "SUPPLIER_HS_VALIDITY_PENDING"
+        ]
+      },
+      "description": "注入内存来源失败，不读文件",
+      "differences": [],
+      "error": null,
+      "expected": {
+        "comparison_status": "needs_confirmation",
+        "issue_codes": [
+          "HS_QUERY_FAILED",
+          "SUPPLIER_HS_VALIDITY_PENDING"
+        ]
+      },
+      "id": "source-query-failed",
+      "input": {
+        "basis": {
+          "declaration_date": "2026-05-20",
+          "note": "synthetic technical test constant; not a business declaration date",
+          "tariff_version": "synthetic-2026"
+        },
+        "payload": {
+          "association_note": "",
+          "association_ok": true,
+          "context": {
+            "engine_version": "compare-wrapper-only",
+            "input_hash": "",
+            "input_revision": 1,
+            "item_id": "source-query-failed",
+            "mock_scenario": null,
+            "prompt_version": "not-used-model-not-called",
+            "result_mode": "mock",
+            "rules_version": "p16-compare-1.0.0",
+            "run_id": "synthetic-fixed-run",
+            "task_id": "synthetic-task",
+            "version_id": "p16-synthetic-postcompare-1.0.0"
+          },
+          "recommendation": {
+            "candidates": [],
+            "confidence": null,
+            "confidence_note": "Synthetic fixture; no model called and no calibrated probability",
+            "evidence": [
+              {
+                "document": "SYNTHETIC-TECHNICAL-ONLY",
+                "effective_from": null,
+                "effective_to": null,
+                "evidence_id": "synthetic-evidence-0",
+                "excerpt": null,
+                "issued_at": null,
+                "locator": "fixture-row-1-not-a-real-clause",
+                "note": "Only exercises post-recommendation comparison logic",
+                "query": null,
+                "retrieved_at": "2026-01-01T00:00:00+00:00",
+                "scope": null,
+                "source_type": "synthetic",
+                "status": "obtained",
+                "title": "SYNTHETIC technical evidence, not real law",
+                "url": null
+              }
+            ],
+            "evidence_status": "obtained",
+            "gaps": [],
+            "suggested_hs": "8544422900"
+          },
+          "supplier_hs_format_valid": true,
+          "supplier_hs_raw": "8544422900",
+          "supplier_hs_validity_note": ""
+        },
+        "source_mode": "query_failed"
+      },
+      "input_sha256": "24be3fe0bfbaf5bdf5f81aaa29a5835c4925d774d56d39721ca5af6fbd890a90",
+      "output": {
+        "comparison_status": "needs_confirmation",
+        "issues": [
+          {
+            "code": "HS_QUERY_FAILED",
+            "field": "supplier_hs_raw",
+            "message": "税则来源不可用：税则查询发生未预期异常（OSError）；这不等于查无此码，需修复存储后重试",
+            "missing": "可用的税则来源",
+            "suggested_role": "operator"
+          },
+          {
+            "code": "SUPPLIER_HS_VALIDITY_PENDING",
+            "field": "supplier_hs_raw",
+            "message": "原码有效性尚未核实；查无、来源失败或版本待核不等于无效",
+            "missing": null,
+            "suggested_role": "expert"
+          }
+        ],
+        "reason": "缺少决定性事实或证据，需补充资料后再比较"
+      },
+      "output_sha256": "e44c3015f0a6bbf6a8a420ad6c2d9a20fd7f2198ae4bbd3cbf2b064f58562e7b",
+      "source_issues": {
+        "authority": "none-synthetic-not-business-basis",
+        "issue_codes": [
+          "HS_QUERY_FAILED",
+          "SUPPLIER_HS_VALIDITY_PENDING"
+        ],
+        "limitations": [
+          "All evidence is synthetic; no real HS classification is evaluated",
+          "No-source comparison does not verify original code validity"
+        ],
+        "mode": "query_failed",
+        "original_validity": "pending",
+        "recommendation_evidence_count": 1,
+        "recommendation_evidence_status": "obtained",
+        "synthetic": true
+      },
+      "synthetic": true,
+      "technical_passed": true
+    },
+    {
+      "actual": {
+        "comparison_status": "needs_confirmation",
+        "issue_codes": [
+          "HS_VERSION_UNVERIFIED",
+          "SUPPLIER_HS_VALIDITY_PENDING"
+        ]
+      },
+      "description": "来源缺查询基准不填本机日期",
+      "differences": [],
+      "error": null,
+      "expected": {
+        "comparison_status": "needs_confirmation",
+        "issue_codes": [
+          "HS_VERSION_UNVERIFIED",
+          "SUPPLIER_HS_VALIDITY_PENDING"
+        ]
+      },
+      "id": "source-version-unverified",
+      "input": {
+        "basis": {
+          "declaration_date": null,
+          "note": "",
+          "tariff_version": null
+        },
+        "payload": {
+          "association_note": "",
+          "association_ok": true,
+          "context": {
+            "engine_version": "compare-wrapper-only",
+            "input_hash": "",
+            "input_revision": 1,
+            "item_id": "source-version-unverified",
+            "mock_scenario": null,
+            "prompt_version": "not-used-model-not-called",
+            "result_mode": "mock",
+            "rules_version": "p16-compare-1.0.0",
+            "run_id": "synthetic-fixed-run",
+            "task_id": "synthetic-task",
+            "version_id": "p16-synthetic-postcompare-1.0.0"
+          },
+          "recommendation": {
+            "candidates": [],
+            "confidence": null,
+            "confidence_note": "Synthetic fixture; no model called and no calibrated probability",
+            "evidence": [
+              {
+                "document": "SYNTHETIC-TECHNICAL-ONLY",
+                "effective_from": null,
+                "effective_to": null,
+                "evidence_id": "synthetic-evidence-0",
+                "excerpt": null,
+                "issued_at": null,
+                "locator": "fixture-row-1-not-a-real-clause",
+                "note": "Only exercises post-recommendation comparison logic",
+                "query": null,
+                "retrieved_at": "2026-01-01T00:00:00+00:00",
+                "scope": null,
+                "source_type": "synthetic",
+                "status": "obtained",
+                "title": "SYNTHETIC technical evidence, not real law",
+                "url": null
+              }
+            ],
+            "evidence_status": "obtained",
+            "gaps": [],
+            "suggested_hs": "8544422900"
+          },
+          "supplier_hs_format_valid": true,
+          "supplier_hs_raw": "8544422900",
+          "supplier_hs_validity_note": ""
+        },
+        "source_mode": "version_unverified"
+      },
+      "input_sha256": "e87b836d2ab411a18557ecb1b693c3480bec17480dbe84f2c333b7a057ec1c39",
+      "output": {
+        "comparison_status": "needs_confirmation",
+        "issues": [
+          {
+            "code": "HS_VERSION_UNVERIFIED",
+            "field": "query_basis",
+            "message": "未能核实编码 8544422900 在适用税则版本中的状态：未提供查询基准（申报日期或税则版本）；系统不代填拟申报日期；不能宣称该码不存在",
+            "missing": "申报日期或税则版本",
+            "suggested_role": "expert"
+          },
+          {
+            "code": "SUPPLIER_HS_VALIDITY_PENDING",
+            "field": "supplier_hs_raw",
+            "message": "原码有效性尚未核实；查无、来源失败或版本待核不等于无效",
+            "missing": null,
+            "suggested_role": "expert"
+          }
+        ],
+        "reason": "缺少决定性事实或证据，需补充资料后再比较"
+      },
+      "output_sha256": "af96eb83cf5d17382939b7210ac91305c4d89f7479618ea5573309b87f3fc826",
+      "source_issues": {
+        "authority": "none-synthetic-not-business-basis",
+        "issue_codes": [
+          "HS_VERSION_UNVERIFIED",
+          "SUPPLIER_HS_VALIDITY_PENDING"
+        ],
+        "limitations": [
+          "All evidence is synthetic; no real HS classification is evaluated",
+          "No-source comparison does not verify original code validity"
+        ],
+        "mode": "version_unverified",
+        "original_validity": "pending",
+        "recommendation_evidence_count": 1,
+        "recommendation_evidence_status": "obtained",
+        "synthetic": true
+      },
+      "synthetic": true,
+      "technical_passed": true
+    }
+  ],
+  "cases_sha256": "9f2b5a5728439b352766e319fb9211ca9d2961ebb7a2993284bbacdcff29aae7",
+  "evaluation_scope": "post_recommendation_compare_wrapper_only",
+  "hash_specification": "SHA-256 UTF-8 JSON; sorted keys; compact separators; ensure_ascii=false; no NaN",
+  "input_sha256": "d2f2602aa6e2084984e4e65fc80fd12b83d07f442aa691ebf9e250bb5e8a2594",
+  "limitations": [
+    "No actual model was called; recommendation outputs are fixed synthetic fixtures.",
+    "Technical pass counts are NOT business accuracy or model classification accuracy.",
+    "Synthetic evidence never establishes real legal, tariff, validity or declaration support.",
+    "Real model integration, reviewed de-identified business evaluation and quality gate remain pending.",
+    "No network, database, real .env, business service or persistence is used by this runner."
+  ],
+  "model_not_called": true,
+  "output_sha256": "af8d7ed402e2ec3197a01b35b06885b00753f9ba05290ba80b28ccbc38a0c7dc",
+  "quality_gate_pending": true,
+  "report_schema_version": "p16.technical-report.1",
+  "summary": {
+    "actual_status_counts": {
+      "association_error": 2,
+      "consistent": 1,
+      "inconsistent": 1,
+      "needs_confirmation": 15,
+      "supplier_invalid": 3,
+      "supplier_missing": 2
+    },
+    "expected_status_counts": {
+      "association_error": 2,
+      "consistent": 1,
+      "inconsistent": 1,
+      "needs_confirmation": 15,
+      "supplier_invalid": 3,
+      "supplier_missing": 2
+    },
+    "technical_failed": 0,
+    "technical_passed": 24,
+    "technical_success": true,
+    "total": 24
+  },
+  "synthetic": true,
+  "technical_only": true,
+  "versions": {
+    "contract": "1.1.0",
+    "engine": "compare_original_checked",
+    "model": "not_called",
+    "priority_rules": "d4-0.1",
+    "prompt": "not_used",
+    "rules": "p16-compare-1.0.0",
+    "source_schema": "p14.tariff.1",
+    "suite": "p16-synthetic-postcompare-1.0.0"
+  }
+}
