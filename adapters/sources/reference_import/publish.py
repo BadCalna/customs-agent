@@ -374,25 +374,29 @@ def _publish_lock(out_root: Path) -> Iterator[None]:
 
 
 def _active_release_id(out_root: Path) -> str | None:
-    """读取当前激活的 release_id；若 current.json 与 current 软链都存在但指向不同版本，报指针不一致。"""
+    """从单一权威指针 ``published/current`` 解析当前激活的 release_id。
+
+    ``current.json`` 通过软链 ``current/.current.json`` 派生自 ``current``；
+    若外部篡改导致 ``current.json`` 与 ``current`` 指向不同版本，立即报 PublishError。
+    """
 
     published_dir = out_root / "published"
     pointer = published_dir / "current.json"
     link = published_dir / "current"
+    link_id: str | None = None
+    if link.is_symlink():
+        link_id = Path(os.readlink(link)).name or None
     pointer_id: str | None = None
     if pointer.is_file():
         payload = read_json(pointer)
         if isinstance(payload, Mapping):
             pointer_id = visible_text(payload.get("release_id")) or None
-    link_id: str | None = None
-    if link.is_symlink():
-        link_id = Path(os.readlink(link)).name or None
     if pointer_id and link_id and pointer_id != link_id:
         raise PublishError(
             f"当前版本指针不一致：current.json 指向 {pointer_id}，"
             f"current 软链指向 {link_id}；请先用 activate 显式指定版本"
         )
-    return pointer_id or link_id
+    return link_id or pointer_id
 
 
 def _current_release_dir(out_root: Path) -> Path | None:
@@ -675,10 +679,22 @@ def _activate(out_root: Path, release_id: str) -> None:
         published_dir.mkdir(parents=True, exist_ok=True)
         pointer = published_dir / "current.json"
         link = published_dir / "current"
+        release_pointer = release_dir / ".current.json"
         temp_link = published_dir / f".current-{os.getpid()}-{uuid.uuid4().hex[:8]}"
+        temp_pointer_link = published_dir / f".current-json-{os.getpid()}-{uuid.uuid4().hex[:8]}"
+        pointer_rel_target = os.path.join("current", ".current.json")
 
-        old_pointer_bytes = pointer.read_bytes() if pointer.is_file() else None
+        old_release_pointer_bytes = (
+            release_pointer.read_bytes() if release_pointer.is_file() else None
+        )
         old_link_target = os.readlink(link) if link.is_symlink() else None
+        old_pointer_is_symlink = pointer.is_symlink()
+        old_pointer_link_target = os.readlink(pointer) if old_pointer_is_symlink else None
+        old_pointer_bytes = (
+            pointer.read_bytes()
+            if (not old_pointer_is_symlink and pointer.is_file())
+            else None
+        )
         pointer_payload = {
             "release_id": release_id,
             "release_fingerprint": release.get("release_fingerprint"),
@@ -687,18 +703,35 @@ def _activate(out_root: Path, release_id: str) -> None:
             "activated_at": utc_now(),
         }
         try:
-            # 先原子切换 current 软链，再原子写 current.json；任一步失败均回滚两端，
-            # 防止中断后出现 current.json 与 current 软链指向不同版本。
-            if temp_link.exists() or temp_link.is_symlink():
-                temp_link.unlink()
-            os.symlink(os.path.join("releases", release_id), temp_link)
-            os.replace(temp_link, link)
-            write_json_atomic(pointer, pointer_payload)
-        except BaseException:
+            # 1. 先在目标 release 目录内写好 .current.json（未切换 current 前对外不可见）。
+            write_json_atomic(release_pointer, pointer_payload)
+            # 2. 确保 published/current.json 是指向 current/.current.json 的派生软链。
+            if not (old_pointer_is_symlink and old_pointer_link_target == pointer_rel_target):
+                if temp_pointer_link.exists() or temp_pointer_link.is_symlink():
+                    temp_pointer_link.unlink(missing_ok=True)
+                os.symlink(pointer_rel_target, temp_pointer_link)
+                os.replace(temp_pointer_link, pointer)
+            # 3. 单一权威提交点：原子替换 published/current → releases/<release_id>。
+            #    切换瞬间 current 与 current.json 同步指向新版本，不存在双版本窗口。
             if temp_link.exists() or temp_link.is_symlink():
                 temp_link.unlink(missing_ok=True)
+            os.symlink(os.path.join("releases", release_id), temp_link)
+            os.replace(temp_link, link)
+        except BaseException as exc:
+            temp_link.unlink(missing_ok=True)
+            temp_pointer_link.unlink(missing_ok=True)
+            _restore_file_bytes(release_pointer, old_release_pointer_bytes)
             _restore_symlink(link, old_link_target)
-            _restore_file_bytes(pointer, old_pointer_bytes)
+            if old_pointer_is_symlink:
+                _restore_symlink(pointer, old_pointer_link_target)
+            elif old_pointer_bytes is not None:
+                if pointer.is_symlink():
+                    pointer.unlink(missing_ok=True)
+                _restore_file_bytes(pointer, old_pointer_bytes)
+            elif old_link_target is None:
+                pointer.unlink(missing_ok=True)
+            if isinstance(exc, OSError) and not isinstance(exc, PublishError):
+                raise PublishError(f"激活 release 失败（{release_id}）：{exc}") from exc
             raise
 
 

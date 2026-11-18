@@ -27,6 +27,7 @@ from adapters.sources.reference_import.publish import (
     PublishError,
     PublishRequest,
     activate_release,
+    dataset_paths,
     list_releases,
     publish_release,
 )
@@ -614,7 +615,7 @@ class Pr34ReviewFixesTest(P23TestCase):
         self.assertTrue(second_pub.release["content_changed"])
 
     def test_interrupted_activation_keeps_current_json_and_symlink_consistent(self):
-        """#34-4：激活过程中断（软链替换失败或写指针失败）都必须回滚，不得产生两个当前版本。"""
+        """#34-4：激活过程中断（软链替换失败或写指针失败）都必须转为 PublishError 并保持单一当前版本。"""
 
         out_root = self.root / "out"
         _, m1 = self._real_batch("a1", name="旧版本")
@@ -639,26 +640,48 @@ class Pr34ReviewFixesTest(P23TestCase):
         pointer = out_root / "published" / "current.json"
         link = out_root / "published" / "current"
 
-        # 场景 1：创建/替换软链失败 → current.json 与 current 软链都必须保持指向旧版
-        with patch.object(publish_module.os, "symlink", side_effect=OSError("模拟软链中断")):
-            with self.assertRaises(OSError):
-                activate_release(out_root, second.release_id)
-        self.assertEqual(json.loads(pointer.read_text(encoding="utf-8"))["release_id"], first.release_id)
-        self.assertEqual(Path(os.readlink(link)).name, first.release_id)
+        def assert_all_readers_point_to(expected_release_id: str) -> None:
+            self.assertEqual(
+                json.loads(pointer.read_text(encoding="utf-8"))["release_id"],
+                expected_release_id,
+            )
+            self.assertEqual(Path(os.readlink(link)).name, expected_release_id)
+            active_items = [item["release_id"] for item in list_releases(out_root) if item["active"]]
+            self.assertEqual(active_items, [expected_release_id])
+            paths = dataset_paths(out_root)
+            self.assertTrue(all(expected_release_id in p for p in paths.values()))
 
-        # 场景 2：软链已切到新版后，写 current.json 失败 → 软链必须回滚回旧版
+        # 场景 1：创建软链失败 → 抛 PublishError，所有读取入口保持旧版
+        with patch.object(publish_module.os, "symlink", side_effect=OSError("模拟软链中断")):
+            with self.assertRaises(PublishError):
+                activate_release(out_root, second.release_id)
+        assert_all_readers_point_to(first.release_id)
+
+        # 场景 2：os.replace 替换软链失败 → 抛 PublishError，所有读取入口保持旧版
+        orig_replace = publish_module.os.replace
+
+        def fail_on_link_replace(src, dst):
+            if Path(dst).name == "current":
+                raise OSError("模拟软链原子替换中断")
+            return orig_replace(src, dst)
+
+        with patch.object(publish_module.os, "replace", side_effect=fail_on_link_replace):
+            with self.assertRaises(PublishError):
+                activate_release(out_root, second.release_id)
+        assert_all_readers_point_to(first.release_id)
+
+        # 场景 3：写目标 release 的 .current.json 失败 → 抛 PublishError，所有读取入口保持旧版
         orig_write = publish_module.write_json_atomic
 
         def fail_on_pointer(path: Path, payload):
-            if Path(path).name == "current.json":
-                raise OSError("模拟写 current.json 中断")
+            if Path(path).name in ("current.json", ".current.json"):
+                raise OSError("模拟写指针元数据中断")
             return orig_write(path, payload)
 
         with patch.object(publish_module, "write_json_atomic", side_effect=fail_on_pointer):
-            with self.assertRaises(OSError):
+            with self.assertRaises(PublishError):
                 activate_release(out_root, second.release_id)
-        self.assertEqual(json.loads(pointer.read_text(encoding="utf-8"))["release_id"], first.release_id)
-        self.assertEqual(Path(os.readlink(link)).name, first.release_id)
+        assert_all_readers_point_to(first.release_id)
 
     def test_failed_verification_updates_on_disk_report_json_and_markdown(self):
         """#34-5：首次构建验证失败时，落盘的 report.json 与 report.md 也必须是 partial / 退出码 1。"""
