@@ -1,6 +1,6 @@
 {
-  "version": "1.0",
-  "date": "2026-11-14",
+  "version": "1.1",
+  "date": "2026-11-18",
   "status": "实施中",
   "shared_rules": "Agent协作与交接约定.md",
   "packages": [
@@ -1041,6 +1041,56 @@
       ],
       "verification_command": "make test TASK=P22",
       "status": "待开始"
+    },
+    {
+      "id": "P23",
+      "name": "官方参考数据导入流水线",
+      "owner": "导入执行 Agent；主控收口",
+      "old_task_ids": [],
+      "coding_dependencies": [
+        "P14",
+        "P17"
+      ],
+      "integration_dependencies": [
+        "P16",
+        "P18"
+      ],
+      "entry_conditions": [
+        "用户已提供官方原件（HS/要素/退税率工作簿、品目注释），并能给出 SHA-256 与来源声明。",
+        "P14/P17 的 JSON 契约与存储类已合并（origin/main@5fd0d4a）。"
+      ],
+      "inputs": [
+        "D4 第 6/7 节、D6 第 2.5/2.6 节、data/import-basis 批次说明、实际原件与页内来源声明。"
+      ],
+      "allowed_paths": [
+        "adapters/sources/reference_import/",
+        "adapters/sources/tariff_commentary.py",
+        "scripts/import_reference_data.py",
+        "data/import-basis/2026-11-17/reference-sources.json",
+        "tests/p23/",
+        "Makefile",
+        "docs/开发文档/Agent输入输出与证据约定.md",
+        "docs/开发文档/运行与交接说明.md",
+        "docs/数据源清单.md",
+        "docs/开发文档/交接/P23.md"
+      ],
+      "deliverables": [
+        "可重复运行的导入 CLI：原件盘点→来源清单→解析→转换→校验→导入报告→候选快照→查询验证→显式发布。",
+        "P14/P17 可读取的真实 JSON 快照、品目注释独立版本化快照与读取接口、发布指纹与回滚。",
+        "合成夹具测试、真实输入只读导入核对、导入与复核文档。"
+      ],
+      "acceptance": [
+        "真实原件只读导入且数量可核对，导入前后 SHA-256 不变；重复运行不产生重复记录。",
+        "编码前导零/8 位与 10 位层级/数值精度损坏、重复与冲突、非法日期、来源定位缺失都有明确状态与原因，退出码区分成功/部分拒绝/失败。",
+        "候选快照原子写入、业务指纹稳定、发布需显式执行并满足查询验证与复核门；未复核数据不得标 reviewed。",
+        "查询验证用真实存储类跑通命中/查无/版本待核/来源未配置等场景；未接入适配器的数据单独说明。"
+      ],
+      "handoff_documents": [
+        "输入：D4 §6/§7、D6 §2.5/§2.6、data/import-basis 批次说明。",
+        "更新：D4 §8、D6 §2.7、数据源清单 §9；回交：交接/P23.md。"
+      ],
+      "verification_command": "make test TASK=P23",
+      "status": "待合并"
     }
   ]
 }

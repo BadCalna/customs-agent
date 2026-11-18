@@ -312,6 +312,12 @@ def evaluate_row(run, item):
             "evidence_status": recommendation.evidence_status.value if recommendation.evidence_status else None,
             "evidence": [v.model_dump(mode="json") for v in recommendation.evidence],
             "issues": inline._merge_issues(recommendation.gaps, comparison.issues), **metadata}
+        # Match inline: history is post-recommendation internal reference only,
+        # never recommendation input or supplier-visible generic evidence.
+        history_source = inline.precheck_history_source()
+        history_reference = inline.precheck_history_reference(item, source=history_source)
+        if history_reference is not None:
+            result["history_reference"] = history_reference.model_dump(mode="json")
         return {"suggested_hs": recommendation.suggested_hs, "comparison_status": comparison.comparison_status.value,
                 "confidence": recommendation.confidence, "result": result}
     output = engine.expert_check(payload)

@@ -44,7 +44,9 @@ class SchemaDriftTest(SimpleTestCase):
         self.assertTrue(path.exists(), "缺少 contracts/openapi/v1.json")
         # get_openapi_schema 返回 pydantic 对象，先归一成 JSON 数据再比较。
         current = json.loads(json.dumps(api_v1.get_openapi_schema()))
-        self.assertEqual(json.loads(path.read_text(encoding="utf-8")), current)
+        published = json.loads(path.read_text(encoding="utf-8"))
+        self.assertEqual(published, current)
+        self.assertIn("/api/v1/versions/{version_id}/items/{item_id}/history-reference", published["paths"])
 
     def test_contract_version_constant(self):
         self.assertEqual(CONTRACT_VERSION, "1.2.0")

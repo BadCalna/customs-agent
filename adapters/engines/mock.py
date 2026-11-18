@@ -28,7 +28,7 @@ from .protocols import (
 
 ENGINE_VERSION = "mock-1.0.0"
 PROMPT_VERSION = "mock-none"
-RULES_VERSION = "d4-0.2"
+RULES_VERSION = "d4-0.3"
 
 # 明确标注为合成样例的编码，不能当作真实归类结论。
 SAMPLE_HS = "8544422900"
@@ -85,13 +85,23 @@ def compare_original(payload: CompareInput) -> CompareOutput:
             issues=[IssueEntry(code="SUPPLIER_HS_MISSING", message="供应商原 HS 为空", field="supplier_hs_raw")],
         )
     # Validate the raw value here, not just an optimistic caller-supplied flag.
-    # Both queue and inline engines share this priority boundary. Trimming is
-    # comparison-only: never normalize or overwrite Item.supplier_hs_raw.
-    if not payload.supplier_hs_format_valid or re.fullmatch(r"[0-9]{10}", raw) is None:
+    # Both queue and inline engines share this priority boundary. Eight-digit
+    # subheadings are incomplete, not malformed (P16); never pad them to ten.
+    # Trimming is comparison-only: never overwrite Item.supplier_hs_raw.
+    subheading = re.fullmatch(r"[0-9]{8}", raw) is not None
+    if not payload.supplier_hs_format_valid or (not subheading and re.fullmatch(r"[0-9]{10}", raw) is None):
         return CompareOutput(
             comparison_status=ComparisonStatus.SUPPLIER_INVALID,
             reason=payload.supplier_hs_validity_note or "原 HS 格式异常，原文保留",
             issues=[IssueEntry(code="SUPPLIER_HS_INVALID", message="原 HS 格式异常", field="supplier_hs_raw")],
+        )
+    if subheading:
+        return CompareOutput(
+            comparison_status=ComparisonStatus.NEEDS_CONFIRMATION,
+            reason="原码仅为 8 位税目/子目，需确认完整申报编码；不补零或判为错码",
+            issues=[IssueEntry(code="SUPPLIER_HS_SUBHEADING_ONLY", field="supplier_hs_raw",
+                               message="原码仅为 8 位税目/子目，不等于错码，需确认完整申报编码",
+                               suggested_role="operator")],
         )
     recommendation = payload.recommendation
     if recommendation.suggested_hs is None or recommendation.gaps:

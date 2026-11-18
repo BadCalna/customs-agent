@@ -17,11 +17,20 @@ def run_progress(run) -> RunProgress:
     return RunProgress(total=sum(counts.values()), **counts)
 
 
+def _visible_result(result, user):
+    payload = result or {}
+    if getattr(user, "role", None) == "supplier":
+        payload = dict(payload)
+        payload.pop("history_reference", None)
+        payload["evidence"] = [item for item in payload.get("evidence", []) if item.get("source_type") != "history"]
+    return payload
+
+
 def run_to_detail(run, user=None) -> RunDetail:
     items = []
     evidence: dict[str, EvidenceEntry] = {}
     for row in run.items.select_related("item").all():
-        result = row.result or {}
+        result = _visible_result(row.result, user)
         items.append(RunItemEntry(
             item_id=str(row.item_id),
             source_location=source_location(row.item),

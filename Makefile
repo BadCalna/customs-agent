@@ -6,7 +6,8 @@ BIND ?= 127.0.0.1:8000
 export TASK
 
 .PHONY: setup migrate seed-demo seed-contracts contracts demo-components workbench dev check test test-contracts worker dispatcher \
-        pg-init pg-start pg-stop pg-status db-backup db-copy check-postgres
+        pg-init pg-start pg-stop pg-status db-backup db-copy check-postgres \
+        reference-scan reference-import reference-publish reference-releases
 setup:
 	$(UV) sync --locked
 	$(PYTHON) -m config.bootstrap
@@ -98,3 +99,26 @@ check-postgres:
 	$(MANAGE) check
 	$(MANAGE) makemigrations --check --dry-run
 	$(MANAGE) test --noinput tests/p12 tests/p05 tests/p06 tests/p09 tests/p10
+
+# ---------------------------------------------------------------------------
+# P23：官方参考数据导入（真实数据与报告写入 Git 忽略的 .local/reference-import）
+# 不写业务数据库、不改 .env、不联网；发布只产出目录与指针。
+# ---------------------------------------------------------------------------
+REFERENCE_SOURCES ?= data/import-basis/2026-11-17/reference-sources.json
+REFERENCE_OUT ?= .local/reference-import
+reference-scan:
+	$(PYTHON) scripts/import_reference_data.py scan --sources $(REFERENCE_SOURCES) --out $(REFERENCE_OUT)/scan.json
+
+reference-import:
+	$(PYTHON) scripts/import_reference_data.py import --sources $(REFERENCE_SOURCES) --out-root $(REFERENCE_OUT)
+
+# 换版（覆盖已发布内容）必须显式声明：make reference-publish ... ALLOW_CHANGE=1 REASON="为什么换版"
+reference-publish:
+	@test -n "$(SNAPSHOT)" || { echo "用法：make reference-publish SNAPSHOT=$(REFERENCE_OUT)/candidates/<snapshot_id> [REVIEW=<复核文件>] [ALLOW_CHANGE=1 REASON=...]" >&2; exit 2; }
+	@test -z "$(ALLOW_CHANGE)" || test -n "$(REASON)" || { echo "ALLOW_CHANGE=1 必须同时给 REASON=..." >&2; exit 2; }
+	$(PYTHON) scripts/import_reference_data.py publish --snapshot "$(SNAPSHOT)" --out-root $(REFERENCE_OUT) \
+		$(if $(REVIEW),--review "$(REVIEW)") \
+		$(if $(ALLOW_CHANGE),--allow-content-change --reason "$(REASON)")
+
+reference-releases:
+	$(PYTHON) scripts/import_reference_data.py releases --out-root $(REFERENCE_OUT)

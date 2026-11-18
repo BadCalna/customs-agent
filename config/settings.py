@@ -53,6 +53,13 @@ if ENGINE_MODE == "openai":
     if not 1 <= CUSTOMS_AI_TIMEOUT_SECONDS <= 240:
         raise ImproperlyConfigured("CUSTOMS_AI_TIMEOUT_SECONDS 必须是 1 到 240 的整数")
 
+# 历史案例只作为参考证据；默认保持 JSON 兼容，实际部署显式选择 database。
+HISTORY_BACKEND = mode("CUSTOMS_HISTORY_BACKEND", "json", ("json", "database"))
+HISTORY_DATASET_KEY = os.environ.get("CUSTOMS_HISTORY_DATASET_KEY", "historical-success").strip()
+HISTORY_REFERENCE_ENABLED = os.environ.get("CUSTOMS_HISTORY_REFERENCE_ENABLED", "0").strip() == "1"
+if HISTORY_BACKEND == "database" and not HISTORY_DATASET_KEY:
+    raise ImproperlyConfigured("CUSTOMS_HISTORY_DATASET_KEY must not be empty for database history.")
+
 
 def byte_setting(name: str, default: int) -> int:
     """读取字节数配置；未设置用默认值，设置了但不是正整数时明确失败。"""
@@ -98,6 +105,7 @@ INSTALLED_APPS = [
     "apps.reviews",
     "apps.runs",
     "apps.notifications",
+    "apps.history_reference",
     "ninja",
     "apps.api",
     "django_rq",

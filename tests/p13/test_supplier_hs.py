@@ -27,7 +27,7 @@ class SupplierHsUploadWorkerTests(TestCase):
         # Include malformed non-ASCII/letter/overlong codes as well as the three
         # acceptance cases. Text cells preserve leading zeroes and whitespace.
         self.raw_codes = ["123456789", "", "0123456789", " 0123456789 ",
-                          "12345678901", "123456789A", "１２３４５６７８９０", "   "]
+                          "12345678901", "123456789A", "１２３４５６７８９０", "   ", "01234567"]
         package = build_package(
             declaration_rows=[["SYNTHETIC", str(i), f"合成部件{i}", raw,
                                "用途：合成测试", "13%"]
@@ -54,11 +54,12 @@ class SupplierHsUploadWorkerTests(TestCase):
             perform_work(str(run.pk))
             run.refresh_from_db()
             self.assertEqual(run.status, "succeeded")
-            self.assertEqual(run.engine_snapshot["rules_version"], "d4-0.2")
+            self.assertEqual(run.engine_snapshot["rules_version"], "d4-0.3")
             items = list(Item.objects.filter(version_id=result["version_id"]).order_by("source_row"))
             self.assertEqual([item.supplier_hs_raw for item in items], self.raw_codes)
             expected = ["supplier_invalid", "supplier_missing", expected_ten_digit, expected_ten_digit,
-                        "supplier_invalid", "supplier_invalid", "supplier_invalid", "supplier_missing"]
+                        "supplier_invalid", "supplier_invalid", "supplier_invalid", "supplier_missing",
+                        "needs_confirmation"]
             for item, status in zip(items, expected):
                 with self.subTest(raw=item.supplier_hs_raw, mode=mode):
                     row = run.items.get(item=item)
@@ -68,6 +69,8 @@ class SupplierHsUploadWorkerTests(TestCase):
                         self.assertIn("SUPPLIER_HS_INVALID", [issue["code"] for issue in row.result["issues"]])
                     elif status == "supplier_missing":
                         self.assertIn("SUPPLIER_HS_MISSING", [issue["code"] for issue in row.result["issues"]])
+                    elif len(item.supplier_hs_raw.strip()) == 8:
+                        self.assertIn("SUPPLIER_HS_SUBHEADING_ONLY", [issue["code"] for issue in row.result["issues"]])
                     elif mode == "live":
                         self.assertIn("EVIDENCE_PENDING", [issue["code"] for issue in row.result["issues"]])
             detail = self.client.get(f"/api/v1/runs/{run.pk}")
