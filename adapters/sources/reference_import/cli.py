@@ -388,6 +388,8 @@ def command_activate(args: argparse.Namespace) -> ExitCode:
         return ExitCode.FAILED
     _print(f"当前 release：{current['release_id']}")
     _print(f"本次激活事件：{current['activation_event_id']}")
+    if current.get("content_diff_warning"):
+        _print(f"差异警告：{current['content_diff_warning']}", file=sys.stderr)
     if current.get("audit_warning"):
         _print(f"审计警告：{current['audit_warning']}", file=sys.stderr)
         return ExitCode.PARTIAL

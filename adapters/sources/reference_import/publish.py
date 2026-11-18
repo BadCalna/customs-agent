@@ -218,6 +218,8 @@ def _apply_review(payload: Mapping[str, Any], review: ReviewRecord) -> dict[str,
 def _business_keys(payload: Mapping[str, Any]) -> dict[str, str]:
     """把一份数据集压成 ``业务键 → 内容指纹``，用于差异报告。"""
 
+    if not isinstance(payload, Mapping):
+        raise PublishError("发布数据不是对象，无法计算差异")
     keys: dict[str, str] = {}
     versions = payload.get("versions")
     if isinstance(versions, list):
@@ -277,8 +279,16 @@ def diff_snapshots(left: Path, right: Path) -> dict[str, Any]:
             }
             summary["changed"] = True
             continue
-        left_payload = read_json(left_path)
-        right_payload = read_json(right_path)
+        try:
+            left_payload = read_json(left_path)
+            right_payload = read_json(right_path)
+        except (OSError, ValueError, UnicodeError) as exc:
+            raise PublishError(f"差异计算失败：{label} 的发布数据不可读") from exc
+        for side, payload in (("左侧", left_payload), ("右侧", right_payload)):
+            if not isinstance(payload, Mapping):
+                raise PublishError(
+                    f"差异计算失败：{label} 的{side}发布数据不是对象"
+                )
         left_keys = _business_keys(left_payload)
         right_keys = _business_keys(right_payload)
         added = sorted(set(right_keys) - set(left_keys))
@@ -481,19 +491,45 @@ def _active_release_id(out_root: Path) -> str | None:
 
     link = out_root / "published" / "current"
     pointer = out_root / "published" / "current.json"
-    # 只校验派生路径的链接结构，不读取经 current 跳转的内容，避免双读竞态。
-    try:
-        pointer_target = os.readlink(pointer)
-    except OSError as exc:
-        if link.is_symlink():
-            raise PublishError("current.json 必须是 current/.current.json 的派生软链；可用 activate 修复") from exc
-    else:
-        if pointer_target != os.path.join("current", ".current.json"):
-            raise PublishError("current.json 的派生软链目标不合法；可用 activate 修复")
     try:
         target = os.readlink(link)
     except FileNotFoundError:
-        return None
+        # 首次发布是“先建 current.json、后切 current”。若指针已出现而 current 尚未
+        # 切好，属于发布进行中的瞬时窗口：短暂重试，而不是报“没有发布”或指针损坏。
+        try:
+            # 当前版本缺失，但还留着一个普通 JSON 指针：这是需要显式修复的遗留状态，
+            # 不能当成“从未发布”，否则会绕过换版门禁。
+            if pointer.exists() and not pointer.is_symlink():
+                raise PublishError(
+                    "current.json 必须是 current/.current.json 的派生软链；可用 activate 修复"
+                )
+            if pointer.is_symlink() and os.readlink(pointer) != os.path.join("current", ".current.json"):
+                raise PublishError("current.json 的派生软链目标不合法；可用 activate 修复")
+            releases_dir = out_root / "published" / "releases"
+            has_releases = releases_dir.is_dir() and any(
+                entry.is_dir() and not entry.name.startswith(".")
+                for entry in releases_dir.iterdir()
+            )
+            if pointer.is_symlink() or has_releases:
+                import time
+
+                for _ in range(5):
+                    time.sleep(0.01)
+                    try:
+                        target = os.readlink(link)
+                        break
+                    except FileNotFoundError:
+                        continue
+                    except OSError as exc:
+                        raise PublishError("current 必须是发布目录软链") from exc
+                else:
+                    return None
+            else:
+                return None
+        except PublishError:
+            raise
+        except OSError as exc:
+            raise PublishError("读取 current/current.json 指针失败") from exc
     except OSError as exc:
         raise PublishError("current 必须是发布目录软链") from exc
     release_id = Path(target).name
@@ -501,6 +537,14 @@ def _active_release_id(out_root: Path) -> str | None:
         raise PublishError("current 的发布目录目标不合法")
     release_dir = out_root / "published" / "releases" / release_id
     _release_metadata(release_dir, require_pointer=True)
+    # current.json 只是兼容派生路径。首次发布时它可能尚未创建（读取与发布切换重叠），
+    # 不能因此把已经可解析的 current 误报成“指针损坏”。它若存在，则必须是正确软链；
+    # 遗留的普通 JSON 文件仍要求显式 activate 修复。
+    if pointer.is_symlink():
+        if os.readlink(pointer) != os.path.join("current", ".current.json"):
+            raise PublishError("current.json 的派生软链目标不合法；可用 activate 修复")
+    elif pointer.exists():
+        raise PublishError("current.json 必须是 current/.current.json 的派生软链；可用 activate 修复")
     return release_id
 
 
@@ -785,15 +829,61 @@ def _activate(
         }
         # 显式 activate 仍可修复遗留双指针不一致：前驱以权威 current 软链为准。
         # publish 的前置门禁继续严格拒绝不一致，不因该恢复入口放宽。
-        if operation == "activate" and link.is_symlink():
-            previous_id = Path(os.readlink(link)).name
-            previous = releases_dir / previous_id
+        previous_source = "current"
+        previous_note = ""
+        if operation == "activate":
+            if link.is_symlink():
+                previous_id = Path(os.readlink(link)).name
+                previous = releases_dir / previous_id
+            else:
+                # 显式 activate 也承担修复遗留指针的职责。current 软链缺失时，
+                # 若 current.json 是普通 JSON 且指向存在版本，仍把它记为真实前驱，
+                # 不能把“修复指针”写成“无前驱”。
+                legacy_pointer = published_dir / "current.json"
+                previous = None
+                if legacy_pointer.is_file() and not legacy_pointer.is_symlink():
+                    try:
+                        legacy_payload = _read_release_json(legacy_pointer)
+                        legacy_id = visible_text(legacy_payload.get("release_id"))
+                        if legacy_id and _RELEASE_ID.fullmatch(legacy_id):
+                            candidate = releases_dir / legacy_id
+                            if candidate.is_dir():
+                                previous = candidate
+                                previous_source = "legacy_current_json"
+                            else:
+                                previous_note = f"遗留 current.json 指向不存在的版本：{legacy_id}"
+                        else:
+                            previous_note = "遗留 current.json 缺少合法 release_id"
+                    except PublishError as exc:
+                        previous_note = f"遗留 current.json 不可读：{exc}"
+                if previous is None and not previous_note:
+                    previous_note = "current 软链缺失，按无前驱处理"
         else:
             previous = _current_release_dir(out_root)
+            previous_source = "current"
+        diff_status = "computed"
+        diff_error = ""
         if content_diff is None:
-            content_diff = diff_snapshots(previous, release_dir) if previous else {}
-        if content_changed is None:
+            if previous is None:
+                content_diff = {}
+                content_changed = False
+                diff_status = "no_previous"
+            else:
+                try:
+                    content_diff = diff_snapshots(previous, release_dir)
+                    content_changed = bool(content_diff.get("changed"))
+                except (PublishError, OSError, ValueError, UnicodeError, KeyError, TypeError, IndexError, AttributeError) as exc:
+                    # 显式回滚的语义是“切到已校验的目标版本”，不能因为当前版本自身损坏就
+                    # 让操作员无路可退；差异算不出来就记录原因，切换仍按目标完整性放行。
+                    content_diff = {}
+                    content_changed = None
+                    diff_status = "unavailable"
+                    diff_error = f"{type(exc).__name__}: {exc}"
+        if content_changed is None and diff_status == "computed":
             content_changed = bool(content_diff.get("changed"))
+        # 目标校验与差异计算之间可能被外部改动；切换前再核一次目标完整性，
+        # 防止把已损坏的目标切为当前版本。差异不可算只降级差异，不降低目标要求。
+        _validate_activation_target(release_dir)
         event_id = f"activation-{uuid.uuid4().hex}"
         activation = {
             "schema_version": "p23.activation.1",
@@ -805,8 +895,14 @@ def _activate(
             "reason": reason,
             "content_changed": content_changed,
             "content_diff": content_diff,
+            "content_diff_status": diff_status,
+            "previous_source": previous_source,
             "requested_at": utc_now(),
         }
+        if diff_error:
+            activation["content_diff_error"] = diff_error
+        if previous_note:
+            activation["previous_note"] = previous_note
         # 意图先追加落盘，结果另存；强制退出时无结果的事件明确表示结果尚未确认。
         try:
             write_json_atomic(published_dir / "activations" / f"{event_id}.json", activation)
@@ -882,6 +978,8 @@ def activate_release(out_root: str | Path, release_id: str) -> dict[str, Any]:
             root / "published" / "releases" / release_id / ".current.json"
         ))
         current["activation_event_id"] = event["event_id"]
+        if event.get("content_diff_status") == "unavailable":
+            current["content_diff_warning"] = event.get("content_diff_error", "")
         if result.get("audit_warning"):
             current["audit_warning"] = result["audit_warning"]
         return current
