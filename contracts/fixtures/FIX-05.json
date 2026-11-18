@@ -334,7 +334,7 @@
     "rules_version": "d4-0.1",
     "run_id": "252d68f5-c774-4ae6-887b-d6c50b561fe6",
     "started_at": "2026-11-17T09:28:03.228166+00:00",
-    "status": "succeeded",
+    "status": "failed",
     "submission_id": null,
     "task_id": "403b3e26-e7bc-4b50-bd42-97a24a721ec9",
     "version_id": "c48496bc-5e2a-4ab2-888a-b1342d95fb6e"

@@ -73,7 +73,10 @@
       "type": "object"
     },
     "result_mode": {
-      "const": "mock",
+      "enum": [
+        "mock",
+        "live"
+      ],
       "title": "Result Mode",
       "type": "string"
     },
