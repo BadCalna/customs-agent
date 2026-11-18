@@ -358,10 +358,12 @@ class ExportTests(unittest.TestCase):
         bad_drawing_id = drawing_raw.replace(' id="1"', "", 1).encode()
         bad_drawing_col = drawing_raw.replace("<xdr:col>5</xdr:col>", "<xdr:col/>", 1).encode()
         bad_row_ht = img_sheet_raw.replace('<row r="2"', '<row r="2" ht="1e308"', 1).encode()
+        bad_col_width = img_sheet_raw.replace("<sheetData>", '<sheetFormatPr defaultColWidth="2e307"/><sheetData>', 1).encode()
         for changes in (
             {"xl/drawings/drawing1.xml": bad_drawing_id},
             {"xl/drawings/drawing1.xml": bad_drawing_col},
             {img_sheet_part: bad_row_ht},
+            {img_sheet_part: bad_col_width},
         ):
             mutated = _zip_replace(base_images, changes)
             chosen = replace(selection(mutated), lines=img_lines)

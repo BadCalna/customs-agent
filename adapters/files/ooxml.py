@@ -635,7 +635,7 @@ class Workbook:
                         raw = (e.text or "").strip()
                         if not raw:
                             continue
-                        if not re.fullmatch(r"-?[0-9]+", raw):
+                        if not re.fullmatch(r"-?[0-9]{1,20}", raw):
                             raise OoxmlError(
                                 "invalid_drawing_coordinate",
                                 f"绘图坐标不是整数：{part} ({raw!r})",
