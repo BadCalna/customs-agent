@@ -22,7 +22,9 @@ def require_completed_imports(file_root=None, *, file_hashes=None):
         )
 
     root = Path(file_root if file_root is not None else settings.CUSTOMS_FILE_ROOT)
-    for job in ImportJob.objects.select_related("version").iterator():
+    # Legacy succeeded records retain the existing attachment-manifest checks;
+    # superseded records need stronger proof because their incoming/ state is omitted.
+    for job in ImportJob.objects.filter(status=ImportJob.Status.SUPERSEDED).select_related("version").iterator():
         path = job.version.storage_path
         suffix = Path(path).suffix.lower()
         expected = storage.version_original_relative_path(

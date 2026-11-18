@@ -53,7 +53,7 @@ scripts/database/copy_sqlite_to_pg.sh /absolute/path/source.sqlite3 \
 1. 通过 SQLite backup API、只读源连接生成独占快照，包含 WAL 中已提交的行；不复制活动数据库文件、不改源库。
 2. 在补迁移**之前**拒绝当前代码不认识的已应用迁移、非空表和业务列；在副本上补齐本分支迁移。使用带未合并模型字段的工作台 WIP 库时，需先集成对应业务分支，不能忽略字段迁移。
 3. 用 Django registry 选择全部 managed 模型，包含 P06 `ImportJob`/`TaskClaim`、用户组、管理员日志和会话。生成元数据 ContentType/Permission 由 migrate 创建，引用用自然键解析；不能由当前代码重建的自定义或旧元数据即使没有被引用也拒绝迁移，避免静默丢弃。所有 M2M 关系随 fixture 保留。
-4. 先拒绝所有 `ImportJob.status != succeeded` 的未完成导入，再检查附件非空路径是受控文件根内的可读文件；在接触目标 PG 前保存 `source-files.json`（路径/大小/SHA-256）。失败导入即使正式路径为空，仍可能依赖 `incoming/` 原件或发布回执，不能当作零附件成功；未知状态也拒绝。缺失、目录、路径越界及符号链接逃逸均失败，不能警告后继续。
+4. 先拒绝 `staged`、`failed` 和未知导入状态；已被新版本成功替代的 `superseded` 须核对该版本正式原件的内容寻址路径及 SHA-256。`succeeded` 保留既有附件清单核验口径，兼容历史合成记录的空路径。再检查附件引用并在接触目标 PG 前保存 `source-files.json`（路径/大小/SHA-256）。未完成导入仍可能依赖 `incoming/` 原件或回执，不能当作零附件成功；缺失、目录、路径越界及符号链接逃逸均失败。
 5. 要求目标迁移齐全，ContentType/Permission 必须与当前 migrate 的完整基线精确一致（含权限名称）；拒绝旧、自定义、缺失或改名的元数据和所有非空业务表。先检查全部目标附件冲突，再向显式目标根独占发布源清单中的实体：同内容可复用，内容不同不覆盖，源/目标不能互相嵌套；目标未指定时使用 `CUSTOMS_FILE_ROOT`，源根不可省略或猜测。只迁移数据库引用的实体；P22 完整备份另保存未引用的正式文件，`incoming/` 始终不随迁移或完整备份搬运。
 6. fixture 按外键/M2M/自然键依赖排序，Task 在 TaskAssignment 之前；双向外键形成的分量保持稳定顺序，交给 `loaddata` 的延迟约束在事务末检查。严格导入，不忽略未知字段；校正全部模型整数主键序列。
 7. 比较所有模型及自动 M2M 表的行数和内容摘要，核对必填/可空外键。规范化 JSON 类型、UUID、微秒和时区，完整保留浮点精度；生成元数据 FK 比自然键，自动 through 表比关系而不比生成 ID。分别重算源、目标根的原件/图片大小及 SHA-256，两边必须与导入前清单一致。
@@ -76,7 +76,7 @@ scripts/database/copy_sqlite_to_pg.sh /absolute/path/source.sqlite3 \
 .venv-customs/bin/python scripts/database/verify_copy.py --skip-source
 ```
 
-`--skip-source` 不证明源/目标等价。附件报告先拒绝未完成导入，再统计非空引用；只有导入全部成功时，老合成样例的空路径才可按无正式文件处理。完整文件目录的恢复由下面的 P22 工具核验。
+`--skip-source` 不证明源/目标等价。附件报告先执行同一导入原件门禁，再统计非空引用；`superseded` 版本的原件必须随迁移保留并核对。完整文件目录的恢复由下面的 P22 工具核验。
 
 ## 数据库 + 附件完整备份恢复
 
