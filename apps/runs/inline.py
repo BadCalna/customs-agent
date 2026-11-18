@@ -23,6 +23,7 @@ from adapters.engines.protocols import (
 )
 from apps.api.schemas import ResultMode
 from apps.reviews.models import Item, Submission, Task
+from apps.reviews.services.history_reference import precheck_history_reference
 
 from .models import Run, RunItem
 
@@ -196,6 +197,12 @@ def execute_precheck(version, scenarios: dict[str, str] | None = None, triggered
             "input_hash": recommend_input.context.input_hash,
             "mock_scenario": scenario,
         }
+        # 历史源仅追加参考证据；不进独立推荐输入，也不回写建议HS或比较结论。
+        history_reference = precheck_history_reference(item)
+        if history_reference is not None:
+            # 历史参考只持久化给内部审计；不追加到通用 evidence，避免供应商
+            # 通过 item/run 只读序列化看到跨供应商合同/报关来源。
+            row.result["history_reference"] = history_reference.model_dump(mode="json")
         row.save()
     return _finish_run(run)
 

@@ -367,6 +367,19 @@ def default_records_path() -> Path:
     return Path(override).expanduser() if override else DEFAULT_RECORDS_PATH
 
 
+def default_history_store() -> HistoryRecordStore:
+    """由应用显式配置选择存储；数据库故障不回退为合成 JSON。"""
+    from django.conf import settings
+
+    backend = getattr(settings, "HISTORY_BACKEND", "json")
+    if backend == "database":
+        from apps.history_reference.store import DatabaseHistoryStore
+        return DatabaseHistoryStore(dataset_key=getattr(settings, "HISTORY_DATASET_KEY", "historical-success"))
+    if backend != "json":
+        raise ValueError(f"unsupported HISTORY_BACKEND: {backend}")
+    return JsonHistoryStore(default_records_path())
+
+
 class JsonHistoryStore:
     """本地 JSON 存储（默认实现）。
 
@@ -648,7 +661,7 @@ class HistorySearchSource:
         elif store is not None:
             self._store = store
         else:
-            self._store = JsonHistoryStore(default_records_path())
+            self._store = default_history_store()
         if limit < 1:
             raise ValueError("limit 必须 >= 1")
         if not 0 <= min_score <= 1:
