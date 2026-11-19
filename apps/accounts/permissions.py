@@ -122,7 +122,10 @@ def get_visible_message(user, message_id):
     """站内消息只对收件人本人可见；他人消息与不存在的消息同样返回 404。"""
     _require_authenticated(user)
     message_model = apps.get_model("notifications", "Message")
-    message = message_model.objects.filter(pk=message_id, recipient=user).first()
+    try:
+        message = message_model.objects.filter(pk=message_id, recipient=user).first()
+    except (ValidationError, ValueError, TypeError) as exc:
+        raise Http404("消息不存在或不在可见范围") from exc
     if message is None:
         raise Http404("消息不存在或不在可见范围")
     return message

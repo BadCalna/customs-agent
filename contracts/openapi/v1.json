@@ -2213,6 +2213,163 @@
         "title": "LoginIn",
         "type": "object"
       },
+      "MessageOut": {
+        "properties": {
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "decision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision Id"
+          },
+          "is_read": {
+            "title": "Is Read",
+            "type": "boolean"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "message_id": {
+            "title": "Message Id",
+            "type": "string"
+          },
+          "read_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Read At"
+          },
+          "submission_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Submission Id"
+          },
+          "target_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Url"
+          },
+          "task_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Id"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version Id"
+          }
+        },
+        "required": [
+          "message_id",
+          "task_id",
+          "version_id",
+          "submission_id",
+          "decision_id",
+          "kind",
+          "title",
+          "body",
+          "is_read",
+          "read_at",
+          "created_at",
+          "target_url"
+        ],
+        "title": "MessageOut",
+        "type": "object"
+      },
+      "MessagePage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MessageOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "unread_count": {
+            "default": 0,
+            "title": "Unread Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "MessagePage",
+        "type": "object"
+      },
+      "MessageReadIn": {
+        "additionalProperties": false,
+        "properties": {
+          "is_read": {
+            "const": true,
+            "title": "Is Read",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "is_read"
+        ],
+        "title": "MessageReadIn",
+        "type": "object"
+      },
       "OkOut": {
         "properties": {
           "status": {
@@ -3481,22 +3638,72 @@
     },
     "/api/v1/messages": {
       "get": {
-        "operationId": "apps_api_not_implemented_pending_GET__messages",
-        "parameters": [],
+        "operationId": "apps_notifications_api_list_messages",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limit"
+            }
+          },
+          {
+            "in": "query",
+            "name": "unread_only",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Unread Only",
+              "type": "boolean"
+            }
+          }
+        ],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessagePage"
+                }
+              }
+            },
             "description": "OK"
           }
         },
-        "summary": "Pending Get  Messages",
+        "summary": "List Messages",
         "tags": [
-          "未实现端点"
+          "本人消息"
         ]
       }
     },
     "/api/v1/messages/{message_id}": {
       "patch": {
-        "operationId": "apps_api_not_implemented_pending_PATCH__messages_message_id",
+        "operationId": "apps_notifications_api_read_message",
         "parameters": [
           {
             "in": "path",
@@ -3508,14 +3715,31 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MessageReadIn"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageOut"
+                }
+              }
+            },
             "description": "OK"
           }
         },
-        "summary": "Pending Patch  Messages Message Id",
+        "summary": "Read Message",
         "tags": [
-          "未实现端点"
+          "本人消息"
         ]
       }
     },

@@ -86,7 +86,7 @@
     "task_stage": "awaiting_confirmation",
     "version_id": "c48496bc-5e2a-4ab2-888a-b1342d95fb6e"
   },
-  "contract_version": "1.2.0",
+  "contract_version": "1.3.0",
   "notes": "执行成功但业务待确认；suggested_hs 为 null，issues 指出缺什么、由谁补充。",
   "scenario": "FIX-02",
   "title": "缺关键事实"

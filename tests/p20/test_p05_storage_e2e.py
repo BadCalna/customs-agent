@@ -563,7 +563,7 @@ class RealStorageImageTemplateExportTests(TestCase):
         for path in (self.root).rglob("*"):
             if path.is_file() and path.suffix != ".lock":
                 self.assertIn(f"tasks/{self.version.task_id}/versions/{self.version.pk}/",
-                              str(path.relative_to(self.root)), f"存储里出现意外文件：{path}")
+                              path.relative_to(self.root).as_posix(), f"存储里出现意外文件：{path}")
 
     def test_both_exports_read_the_stored_original_of_a_many_sheet_workbook(self):
         from adapters.files.ooxml import Workbook

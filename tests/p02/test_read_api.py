@@ -183,14 +183,13 @@ class ReadApiTest(TestCase):
         self.assertEqual(Run.objects.count(), run_count)
         self.assertEqual(Task.objects.get(pk=self.main.pk).revision, revision)
 
-    def test_pending_endpoints_are_explicit_501(self):
+    def test_delivered_messages_and_upload_replace_pending_endpoints(self):
         self.login()
         # P09（确认/提交）与 P10（决定/退回/历史）已交付，改由 tests/p09、tests/p10 覆盖；
         # 这里只锁仍然待交付的端点，避免把已实现端点当成占位。
         response = self.get("/api/v1/messages")
-        self.assertEqual(response.status_code, 501)
-        self.assertEqual(response.json()["error"]["code"], "not_implemented")
-        self.assertEqual(response.json()["error"]["details"]["owner"], "P19")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"items": [], "next_cursor": None, "unread_count": 0})
 
         response = self.client.post("/api/v1/tasks", {}, content_type="application/json", **self.csrf_headers())
         # P06 已接管上传；缺少 multipart 文件是结构化校验失败。

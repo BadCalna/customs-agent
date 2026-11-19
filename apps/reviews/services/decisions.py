@@ -162,6 +162,8 @@ def decide(user, submission_id: str, payload, idempotency_key: str | None = None
     )
 
     response = decision_to_out(decision, submission, task).model_dump(mode="json")
+    from apps.notifications.services import notify_decision
+    notify_decision(decision)
     idempotency.store(user, ACTION, idempotency_key, payload, response, target_id=str(submission.pk))
     return response
 

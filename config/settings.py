@@ -32,6 +32,7 @@ def mode(name, default, choices):
 PAGE_DATA_MODE = mode("CUSTOMS_PAGE_MODE", "live", ("live", "fixture"))
 ENGINE_MODE = mode("CUSTOMS_ENGINE_MODE", "mock", ("mock", "openai"))
 EXECUTOR_MODE = mode("CUSTOMS_EXECUTOR_MODE", "inline", ("inline", "rq"))
+NOTIFICATION_MODE = mode("CUSTOMS_NOTIFICATION_MODE", "mock", ("mock", "disabled"))
 CUSTOMS_AI_API_BASE = os.environ.get("CUSTOMS_AI_API_BASE", "").strip().rstrip("/")
 CUSTOMS_AI_API_KEY = os.environ.get("CUSTOMS_AI_API_KEY", "").strip()
 CUSTOMS_AI_MODEL = os.environ.get("CUSTOMS_AI_MODEL", "").strip()

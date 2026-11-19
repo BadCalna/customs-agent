@@ -2,7 +2,7 @@
 
 - 业务员退回复用独立的 ``task.return`` 动作（D3 第 9 节，Jay 2026-11-15 确认单列）；
 - 存在待专家审核的提交时不允许业务员直接退回，避免出现"提交在审、任务又被退回"的双轨；
-- 退回不创建版本、不导出文件、不发通知（B05：导出不等于退回或已发送）。
+- 退回不创建版本、不导出文件；P19 同事务登记站内提醒，mock 投递不代表已外发。
 """
 from django.db import transaction
 
@@ -72,13 +72,15 @@ def return_version(user, task_id: str, payload, idempotency_key: str | None = No
     task.stage = Task.Stage.RETURNED
     task.revision += 1
     task.save(update_fields=["stage", "revision", "updated_at"])
-    AuditEvent.objects.create(
+    event = AuditEvent.objects.create(
         task=task, version=version, actor=user,
         action="task.returned", stage="business_return",
         reason=payload.reason or "",
         details={"return_to": "supplier", "issue_ids": [str(row.pk) for row in rows]},
     )
 
+    from apps.notifications.services import notify_return
+    notify_return(event)
     response = TaskReturnOut(
         task_id=str(task.pk), version_id=str(version.pk),
         stage=task.stage, task_revision=task.revision,

@@ -5,7 +5,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const source = fs.readFileSync(path.join(__dirname, '../../web/production.js'), 'utf8')
-  .replace(/^import .*;\r?\n/m, '')
+  .replace(/^import .*;\r?\n/gm, '')
   .replace('const api = createClient({mode: "live"});', 'const api = globalThis.TEST_API;');
 assert.match(source, /const api = globalThis\.TEST_API;/);
 
@@ -95,6 +95,8 @@ async function harness() {
     decideSubmission: async (id, payload, key) => { decisions.push({id, payload, key}); },
   };
   const context = {TEST_API: api, crypto, FormData: TestFormData,
+    createMessageList: () => ({load: async () => {}, destroy() {}}),
+    location: {search: ''}, URLSearchParams,
     document: {querySelector: selector => selector === '#decision-form' ? form : element(selector),
       addEventListener: (name, handler) => handlers.set(name, handler)},
     setTimeout: handler => {

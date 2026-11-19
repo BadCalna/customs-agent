@@ -64,10 +64,12 @@ from apps.reviews.serializers import item_to_card, item_to_list_entry, task_to_d
 from apps.runs.models import Run
 from apps.runs.schemas import AttemptEntry, PrecheckIn, RetryIn, RunCreated, RunDetail, RunItemEntry
 from apps.runs.serializers import run_to_detail
+from apps.notifications.schemas import MessageOut, MessagePage, MessageReadIn
 
 from apps.reviews.import_schemas import ImportOut, ImportDetail, ClaimableEntry, ClaimablePage, ClaimOut
 
 SCHEMAS = {
+    "messages": [MessageOut, MessagePage, MessageReadIn],
     "imports": [ImportOut, ImportDetail, ClaimableEntry, ClaimablePage, ClaimOut],
     "common": [ErrorEnvelope, SourceLocation, StageValue, IssueEntry, EvidenceEntry, ImageEntry, RunProgress],
     "expert": [ExpertFinding, ExpertCheckRef],
@@ -103,7 +105,7 @@ SCHEMAS = {
 
 def dump(path: Path, payload):
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline="\n")
 
 
 class Command(BaseCommand):

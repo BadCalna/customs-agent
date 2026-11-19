@@ -49,7 +49,7 @@ class SchemaDriftTest(SimpleTestCase):
         self.assertIn("/api/v1/versions/{version_id}/items/{item_id}/history-reference", published["paths"])
 
     def test_contract_version_constant(self):
-        self.assertEqual(CONTRACT_VERSION, "1.2.0")
+        self.assertEqual(CONTRACT_VERSION, "1.3.0")
 
 
 class EnumAlignmentTest(SimpleTestCase):

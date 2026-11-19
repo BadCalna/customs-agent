@@ -12,7 +12,7 @@ class ProductionFrontendTests(SimpleTestCase):
     def test_production_page_behaviors(self):
         script = Path(__file__).with_name("frontend.test.mjs")
         result = subprocess.run(
-            [shutil.which("node"), "--test", str(script)],
+            [shutil.which("node"), "--test-reporter=tap", "--test", str(script)],
             capture_output=True, text=True, timeout=30,
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)

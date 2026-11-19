@@ -1,0 +1,15 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "is_read": {
+      "const": true,
+      "title": "Is Read",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "is_read"
+  ],
+  "title": "MessageReadIn",
+  "type": "object"
+}
