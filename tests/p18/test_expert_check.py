@@ -166,35 +166,81 @@ class TestExpertCheckConstructionInvariants(SimpleTestCase):
             )
 
     def test_matched_forbidden_when_source_not_usable_or_expert_required(self):
+        ev = EvidenceEntry(
+            evidence_id="ev-1",
+            source_type="official_tax",
+            title="税率表",
+            status=EvidenceStatus.OBTAINED,
+            document="官方税率表",
+            locator="条目 1",
+        )
         with self.assertRaises(ValidationError):
             AspectEvaluation(
                 aspect="regulatory",
-                finding=ExpertFinding(aspect="regulatory", verdict=ExpertVerdict.MATCHED, reason="伪正向"),
+                finding=ExpertFinding(aspect="regulatory", verdict=ExpertVerdict.MATCHED, reason="伪正向", evidence_ids=["ev-1"]),
                 reason_codes=[],
                 issues=[],
+                evidence=[ev],
                 source_usable=False,
                 expert_review_required=False,
             )
         with self.assertRaises(ValidationError):
             AspectEvaluation(
                 aspect="tax",
-                finding=ExpertFinding(aspect="tax", verdict=ExpertVerdict.MATCHED, reason="仍需专家"),
+                finding=ExpertFinding(aspect="tax", verdict=ExpertVerdict.MATCHED, reason="仍需专家", evidence_ids=["ev-1"]),
                 reason_codes=[],
                 issues=[],
+                evidence=[ev],
                 source_usable=True,
                 expert_review_required=True,
             )
+        with self.assertRaises(ValidationError):
+            AspectEvaluation(
+                aspect="images",
+                finding=ExpertFinding(aspect="images", verdict=ExpertVerdict.MATCHED, reason="无证据判相符", evidence_ids=[]),
+                reason_codes=[],
+                issues=[],
+                evidence=[],
+                source_usable=True,
+                expert_review_required=False,
+            )
 
     def test_assembly_rejects_dangling_evidence_and_target_hs_mutation(self):
+        tax_ev = EvidenceEntry(
+            evidence_id="ev-tax-1",
+            source_type="official_tax",
+            title="税率表",
+            status=EvidenceStatus.OBTAINED,
+            document="官方税率表",
+            locator="条目 1",
+        )
+        reg_ev = EvidenceEntry(
+            evidence_id="ev-reg-1",
+            source_type="official_regulatory",
+            title="监管表",
+            status=EvidenceStatus.OBTAINED,
+            document="官方监管表",
+            locator="条目 1",
+        )
+        elem_ev = EvidenceEntry(
+            evidence_id="ev-elem-1",
+            source_type="official_declaration",
+            title="申报要素表",
+            status=EvidenceStatus.OBTAINED,
+            document="官方申报要素表",
+            locator="条目 1",
+        )
         valid_tax = AspectEvaluation(
             aspect="tax",
-            finding=ExpertFinding(aspect="tax", verdict=ExpertVerdict.MATCHED, reason="已核", evidence_ids=[]),
+            finding=ExpertFinding(aspect="tax", verdict=ExpertVerdict.MATCHED, reason="已核", evidence_ids=["ev-tax-1"]),
+            evidence=[tax_ev],
             source_usable=True,
             expert_review_required=False,
         )
         valid_reg = AspectEvaluation(
             aspect="regulatory",
-            finding=ExpertFinding(aspect="regulatory", verdict=ExpertVerdict.MATCHED, reason="已核", evidence_ids=[]),
+            finding=ExpertFinding(aspect="regulatory", verdict=ExpertVerdict.MATCHED, reason="已核", evidence_ids=["ev-reg-1"]),
+            evidence=[reg_ev],
             source_usable=True,
             expert_review_required=False,
         )
@@ -232,7 +278,13 @@ class TestExpertCheckConstructionInvariants(SimpleTestCase):
                 aspects=[
                     AspectEvaluation(
                         aspect="elements",
-                        finding=ExpertFinding(aspect="elements", verdict=ExpertVerdict.MATCHED, reason="已核"),
+                        finding=ExpertFinding(
+                            aspect="elements",
+                            verdict=ExpertVerdict.MATCHED,
+                            reason="已核",
+                            evidence_ids=["ev-elem-1"],
+                        ),
+                        evidence=[elem_ev],
                         source_usable=True,
                         expert_review_required=False,
                     ),

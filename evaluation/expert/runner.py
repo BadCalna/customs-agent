@@ -67,7 +67,7 @@ from adapters.sources.tax_lookup import (
     TaxRateRecord,
     TaxRateSource,
 )
-from apps.api.schemas import ExpertVerdict
+from apps.api.schemas import EvidenceEntry, EvidenceStatus, ExpertVerdict
 
 from .cases import (
     SUITE_VERSION,
@@ -579,6 +579,19 @@ def run_case(case: ExpertEvalCase) -> tuple[ExpertCheckOutput, dict[str, str]]:
     if case.tariff_version:
         attributes["tariff_version"] = case.tariff_version
 
+    image_evidence = [
+        EvidenceEntry(
+            evidence_id=f"img-fact:{img.source_cell}:{img.image_id}",
+            source_type="image_fact",
+            title=f"申报表附图 {img.source_cell}",
+            status=EvidenceStatus.OBTAINED,
+            document="申报要素表（技术评估模拟）.xlsx",
+            locator=f"cell {img.source_cell}",
+            query={"image_id": img.image_id, "source_cell": img.source_cell},
+        )
+        for img in case.images
+        if img.status == "available"
+    ]
     payload = ExpertCheckInput(
         submitted_hs=case.submitted_hs,
         supplier_tax_rate_raw=case.supplier_tax_rate_raw,
@@ -595,6 +608,7 @@ def run_case(case: ExpertEvalCase) -> tuple[ExpertCheckOutput, dict[str, str]]:
             )
             for img in case.images
         ],
+        evidence=image_evidence,
         submission_id=f"eval-sub-{case.id}",
         context=ExecutionContext(
             item_id=f"eval-item-{case.id}",
@@ -654,6 +668,8 @@ def _check_case_invariants(case: ExpertEvalCase, output: ExpertCheckOutput, actu
     for finding in output.findings:
         if not finding.reason.strip():
             failures.append(f"empty_reason:{finding.aspect}")
+        if finding.verdict is ExpertVerdict.MATCHED and not finding.evidence_ids:
+            failures.append(f"matched_without_evidence:{finding.aspect}")
         for ev_id in finding.evidence_ids:
             entry = evidence_by_id.get(ev_id)
             if entry is None or not entry.document.strip() or not entry.locator.strip():

@@ -42,6 +42,7 @@ from adapters.sources.hs_lookup import (
     QueryBasis,
     QueryStatus,
     _strip_invisible,
+    classify_hs_format,
 )
 from adapters.sources.regulatory_lookup import (
     Direction,
@@ -67,7 +68,7 @@ from apps.api.schemas import (
     ResultMode,
 )
 
-from .protocols import ExpertCheckInput, ExpertCheckOutput
+from .protocols import ExpertCheckInput, ExpertCheckOutput, ImageFact
 
 ENGINE_VERSION = "expert-check-0.1.0"
 PROMPT_VERSION = "expert-check-json-1"
@@ -146,6 +147,8 @@ class AspectEvaluation(BaseModel):
                     f"{self.aspect} 未满足 usable 且非 expert（usable={self.source_usable}, "
                     f"expert_review_required={self.expert_review_required}），禁止判 matched"
                 )
+            if not self.finding.evidence_ids:
+                raise ValueError(f"{self.aspect} 判 matched 时必须绑定至少一条可回查的有效证据")
         else:
             cleaned_codes = [_strip_invisible(c) for c in self.reason_codes]
             if not cleaned_codes or any(not c for c in cleaned_codes):
@@ -595,6 +598,54 @@ def _derive_elements_aspect(
     )
 
 
+def _contains_token(text: str, token: str) -> bool:
+    cleaned = _strip_invisible(token)
+    if not cleaned:
+        return False
+    return re.search(rf"(?<![A-Za-z0-9_-]){re.escape(cleaned)}(?![A-Za-z0-9_-])", text) is not None
+
+
+def _evidence_binds_image(entry: EvidenceEntry, img: ImageFact) -> bool:
+    """检查证据条目是否状态有效、可定位，且绑定到当前可用附图。"""
+    if entry.source_type not in {"image_fact", "declaration_image", "attachment"}:
+        return False
+    if entry.status is not EvidenceStatus.OBTAINED:
+        return False
+    if not (_strip_invisible(entry.evidence_id) and _strip_invisible(entry.document) and _strip_invisible(entry.locator)):
+        return False
+
+    q = entry.query if isinstance(entry.query, Mapping) else None
+    if q is not None:
+        q_img_id = q.get("image_id")
+        if q_img_id is not None and str(q_img_id) != img.image_id:
+            return False
+        q_cell = q.get("source_cell")
+        if (
+            q_cell is not None
+            and _strip_invisible(img.source_cell)
+            and str(q_cell).strip().upper() != img.source_cell.strip().upper()
+        ):
+            return False
+        if q_img_id is not None and str(q_img_id) == img.image_id:
+            return True
+
+    locator = entry.locator or ""
+    if _strip_invisible(img.image_id) and (
+        _contains_token(entry.evidence_id, img.image_id) or _contains_token(locator, img.image_id)
+    ):
+        return True
+
+    if _strip_invisible(img.source_cell):
+        cell_upper = img.source_cell.strip().upper()
+        if _contains_token(locator.upper(), cell_upper) or _contains_token(entry.evidence_id.upper(), cell_upper):
+            embedded_ids = re.findall(r"img[-_][A-Za-z0-9_-]+", entry.evidence_id, re.IGNORECASE)
+            if embedded_ids and img.image_id not in embedded_ids:
+                return False
+            return True
+
+    return False
+
+
 def _derive_images_aspect(
     payload: ExpertCheckInput,
     *,
@@ -602,13 +653,6 @@ def _derive_images_aspect(
     model_failed: bool = False,
 ) -> AspectEvaluation:
     """图片只支持可见事实；read_failed 与 absent 分开且绝不推断材质、工艺或税率。"""
-    image_evidence = [
-        entry for entry in payload.evidence
-        if _strip_invisible(entry.document) and _strip_invisible(entry.locator)
-        and entry.source_type in {"image_fact", "declaration_image", "attachment"}
-    ]
-    image_eids = [entry.evidence_id for entry in image_evidence]
-
     failed = [img for img in payload.images if img.status not in ("available", "absent")]
     if failed:
         cells = "、".join(img.source_cell for img in failed if img.source_cell) or "未知单元格"
@@ -659,6 +703,16 @@ def _derive_images_aspect(
             expert_review_required=True,
         )
 
+    image_evidence = [
+        entry for entry in payload.evidence
+        if any(_evidence_binds_image(entry, img) for img in available)
+    ]
+    image_eids = [entry.evidence_id for entry in image_evidence]
+    all_available_have_evidence = all(
+        any(_evidence_binds_image(entry, img) for entry in image_evidence)
+        for img in available
+    )
+
     missing_desc = [img for img in available if not _strip_invisible(img.visible_description)]
     if missing_desc:
         issue = _issue(
@@ -676,6 +730,53 @@ def _derive_images_aspect(
                 evidence_ids=image_eids,
             ),
             reason_codes=["IMAGE_FACTS_UNVERIFIED"],
+            issues=[issue],
+            evidence=image_evidence,
+            evidence_status=EvidenceStatus.OBTAINED if image_evidence else None,
+            source_usable=False,
+            expert_review_required=True,
+        )
+
+    hs_format = classify_hs_format(payload.submitted_hs)
+    if hs_format.state is HsFormatState.SUBHEADING_ONLY:
+        issue = _issue(
+            "IMAGE_SUBHEADING_ONLY",
+            "提交编码仅为 8 位税目/子目，不能作为完整 10 位申报编码的图片核对依据，须转专家确认完整编码",
+            field="submitted_hs",
+            role="expert",
+        )
+        return AspectEvaluation(
+            aspect="images",
+            finding=ExpertFinding(
+                aspect="images",
+                verdict=ExpertVerdict.UNKNOWN,
+                reason="提交码仅为 8 位子目，不可作为图片核对依据，保持未核实",
+                evidence_ids=image_eids,
+            ),
+            reason_codes=["IMAGE_SUBHEADING_ONLY"],
+            issues=[issue],
+            evidence=image_evidence,
+            evidence_status=EvidenceStatus.OBTAINED if image_evidence else None,
+            source_usable=False,
+            expert_review_required=True,
+        )
+
+    if hs_format.state is not HsFormatState.VALID:
+        issue = _issue(
+            "IMAGE_HS_INCOMPLETE",
+            "提交编码格式不完整或无效，无法按完整 10 位申报编码核对附图，保持未核实",
+            field="submitted_hs",
+            role="expert",
+        )
+        return AspectEvaluation(
+            aspect="images",
+            finding=ExpertFinding(
+                aspect="images",
+                verdict=ExpertVerdict.UNKNOWN,
+                reason="提交码格式不完整或无效，图片分项保持未核实",
+                evidence_ids=image_eids,
+            ),
+            reason_codes=["IMAGE_HS_INCOMPLETE"],
             issues=[issue],
             evidence=image_evidence,
             evidence_status=EvidenceStatus.OBTAINED if image_evidence else None,
@@ -702,24 +803,6 @@ def _derive_images_aspect(
             issues=[issue],
             evidence=image_evidence,
             evidence_status=EvidenceStatus.QUERY_FAILED,
-            source_usable=False,
-            expert_review_required=True,
-        )
-
-    if len(payload.submitted_hs) == 8:
-        issue = _issue("IMAGE_8_DIGIT_HS", "8位编码，图片分项一律待专家核实", field="images", role="expert")
-        return AspectEvaluation(
-            aspect="images",
-            finding=ExpertFinding(
-                aspect="images",
-                verdict=ExpertVerdict.UNKNOWN,
-                reason="8位编码，图片分项一律待专家核实",
-                evidence_ids=image_eids,
-            ),
-            reason_codes=["IMAGE_8_DIGIT_HS"],
-            issues=[issue],
-            evidence=image_evidence,
-            evidence_status=EvidenceStatus.OBTAINED if image_evidence else None,
             source_usable=False,
             expert_review_required=True,
         )
@@ -785,17 +868,22 @@ def _derive_images_aspect(
             expert_review_required=True,
         )
 
-    if len(payload.submitted_hs) == 8:
-        issue = _issue("IMAGE_8_DIGIT_HS", "8位编码，图片分项一律待专家核实", field="images", role="expert")
+    if not image_evidence or not all_available_have_evidence:
+        issue = _issue(
+            "IMAGE_EVIDENCE_MISSING",
+            "附图可见事实缺少可绑定当前附图、可定位且状态有效的图片证据，不能判相符，保持未核实",
+            field="images",
+            role="expert",
+        )
         return AspectEvaluation(
             aspect="images",
             finding=ExpertFinding(
                 aspect="images",
                 verdict=ExpertVerdict.UNKNOWN,
-                reason="8位编码，图片分项一律待专家核实",
+                reason="附图缺少可绑定当前附图、可定位且状态有效的图片证据，保持未核实",
                 evidence_ids=image_eids,
             ),
-            reason_codes=["IMAGE_8_DIGIT_HS"],
+            reason_codes=["IMAGE_EVIDENCE_MISSING"],
             issues=[issue],
             evidence=image_evidence,
             evidence_status=EvidenceStatus.OBTAINED if image_evidence else None,
@@ -814,7 +902,7 @@ def _derive_images_aspect(
         reason_codes=[],
         issues=[],
         evidence=image_evidence,
-        evidence_status=EvidenceStatus.OBTAINED if image_evidence else None,
+        evidence_status=EvidenceStatus.OBTAINED,
         source_usable=True,
         expert_review_required=False,
     )
@@ -1043,16 +1131,11 @@ class ExpertCheckEngine:
             declared=dict(declared_elements or {}),
             declared_raw=payload.elements_text,
         )
-        raw = self.elements_source.check(query)
+        expected_query = query.model_dump()
+        raw = self.elements_source.check(query.model_copy(deep=True))
         result = DeclarationElementsResult.model_validate(raw.model_dump())
-        if result.query is None or result.query.hs_code_raw != payload.submitted_hs:
-            raise ValueError("P14 要素响应编码与提交码不匹配")
-        if result.query.basis.model_dump() != basis.model_dump():
-            raise ValueError("P14 要素响应查询基准不匹配")
-        if result.query.declared_raw != payload.elements_text:
-            raise ValueError("P14 要素响应申报原文不匹配")
-        if result.query.declared != dict(declared_elements or {}):
-            raise ValueError("P14 要素响应申报要素不匹配")
+        if result.query is None or result.query.model_dump() != expected_query:
+            raise ValueError("P14 要素响应查询参数与本次请求不匹配")
         if result.schema_record is not None and (
             result.schema_record.hs_code != result.format.normalized
             or (result.version.version and result.schema_record.version != result.version.version)
@@ -1064,12 +1147,11 @@ class ExpertCheckEngine:
         if self.hs_source is None:
             return None
         query = HsQuery(hs_code_raw=payload.submitted_hs, basis=basis.model_copy(deep=True))
-        raw = self.hs_source.lookup(query)
+        expected_query = query.model_dump()
+        raw = self.hs_source.lookup(query.model_copy(deep=True))
         result = HsLookupResult.model_validate(raw.model_dump())
-        if result.query is None or result.query.hs_code_raw != payload.submitted_hs:
-            raise ValueError("P14 HS 响应编码与提交码不匹配")
-        if result.query.basis.model_dump() != basis.model_dump():
-            raise ValueError("P14 HS 响应查询基准不匹配")
+        if result.query is None or result.query.model_dump() != expected_query:
+            raise ValueError("P14 HS 响应查询参数与本次请求不匹配")
         if result.code is not None and (
             result.code.code != result.format.normalized
             or (result.version.version and result.code.version != result.version.version)
@@ -1089,16 +1171,11 @@ class ExpertCheckEngine:
             basis=basis.model_copy(deep=True),
             original_rate_raw=payload.supplier_tax_rate_raw,
         )
-        raw = self.tax_source.lookup(query)
+        expected_query = query.model_dump()
+        raw = self.tax_source.lookup(query.model_copy(deep=True))
         result = TaxRateResult.model_validate(raw.model_dump())
-        if result.query is None or result.query.hs_code_raw != payload.submitted_hs:
-            raise ValueError("P17 退税响应编码与提交码不匹配")
-        if result.query.basis.model_dump() != basis.model_dump():
-            raise ValueError("P17 退税响应查询基准不匹配")
-        if result.query.original_rate_raw != payload.supplier_tax_rate_raw:
-            raise ValueError("P17 退税响应原税率原文不匹配")
-        if result.query.rebate_code != rebate_code:
-            raise ValueError("P17 退税响应退税代码不匹配")
+        if result.query is None or result.query.model_dump() != expected_query:
+            raise ValueError("P17 退税响应查询参数与本次请求不匹配")
         if result.record is not None and (
             result.record.hs_code != result.format.normalized
             or (result.version.version and result.record.version != result.version.version)
@@ -1117,12 +1194,11 @@ class ExpertCheckEngine:
             direction=direction,
             basis=basis.model_copy(deep=True),
         )
-        raw = self.regulatory_source.lookup(query)
+        expected_query = query.model_dump()
+        raw = self.regulatory_source.lookup(query.model_copy(deep=True))
         result = RegulatoryResult.model_validate(raw.model_dump())
-        if result.query is None or result.query.hs_code_raw != payload.submitted_hs:
-            raise ValueError("P17 监管响应编码与提交码不匹配")
-        if result.query.direction is not direction or result.query.basis.model_dump() != basis.model_dump():
-            raise ValueError("P17 监管响应方向或查询基准不匹配")
+        if result.query is None or result.query.model_dump() != expected_query:
+            raise ValueError("P17 监管响应查询参数与本次请求不匹配")
         if result.record is not None and (
             result.record.hs_code != result.format.normalized
             or (result.version.version and result.record.version != result.version.version)
@@ -1192,8 +1268,10 @@ class ExpertCheckEngine:
     ) -> tuple[ModelExpertJudgment | None, bool]:
         if self.model is None:
             return None, False
+        hs_valid = classify_hs_format(payload.submitted_hs).state is HsFormatState.VALID
         has_describable_images = (
-            bool(payload.images)
+            hs_valid
+            and bool(payload.images)
             and all(img.status == "available" and bool(_strip_invisible(img.visible_description)) for img in payload.images)
         )
         elements_can_semantic_check = (
