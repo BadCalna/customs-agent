@@ -189,7 +189,8 @@ class SkillPrecheckAdapter(PrecheckEngine):
                 self._check_text(item, hidden)
 
     def _sanitize_path(self, path: str) -> str:
-        if re.search(r"(/[\w.-]+){2,}", path):
+        # Detect POSIX paths, UNC paths, and Windows absolute paths
+        if re.search(r"(?:/|\\)(?:[\w.-]+(?:/|\\)+)+[\w.-]*|^(?:[A-Za-z]:\\|\\\\|/)", path, re.IGNORECASE):
             return "anonymous_reference"
         return path
 
