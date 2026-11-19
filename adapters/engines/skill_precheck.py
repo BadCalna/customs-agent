@@ -188,9 +188,15 @@ class SkillPrecheckAdapter(PrecheckEngine):
             for item in value:
                 self._check_text(item, hidden)
 
+    def _sanitize_path(self, path: str) -> str:
+        if re.search(r"(/[\w.-]+){2,}", path):
+            return "anonymous_reference"
+        return path
+
     def _entry(self, entry, dataset, version, *, scope):
         return {"evidence_id": entry.evidence_id, "source_type": entry.source_type,
-                "document": entry.document, "locator": entry.locator,
+                "document": self._sanitize_path(entry.document),
+                "locator": self._sanitize_path(entry.locator),
                 "excerpt": entry.excerpt, "retrieved_at": entry.retrieved_at,
                 "effective_from": entry.effective_from, "effective_to": entry.effective_to,
                 "version": version, "status": entry.status.value, "dataset": _dataset(dataset),
@@ -388,6 +394,10 @@ class SkillPrecheckAdapter(PrecheckEngine):
                         item.pop("url", None)
                         item["classification_support"] = False
                         item["source_type"] = item.get("dataset", {}).get("source_type", "official_tariff")
+                        if "document" in item:
+                            item["document"] = self._sanitize_path(item["document"])
+                        if "locator" in item:
+                            item["locator"] = self._sanitize_path(item["locator"])
                 entries.extend(deepcopy(commentary.get("evidence", [])))
             index = {}
             for entry in entries:
