@@ -1,6 +1,8 @@
 import {createClient} from "/app/assets/api.js";
+import {createMessageList} from "/app/assets/components/message-list.js";
 
 const api = createClient({mode: "live"});
+let messages = null, messageOwner = null;
 const $ = selector => document.querySelector(selector);
 const esc = value => String(value ?? "").replace(/[&<>"']/g, char =>
   ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[char]));
@@ -47,6 +49,24 @@ function showSession() {
   $("#workspace").hidden = !state.me;
   $("#upload-area").hidden = state.me?.role !== "supplier";
   $("#claim-area").hidden = state.me?.role !== "operator";
+  $("#messages-toggle").hidden = !state.me;
+  const owner = state.me?.id || state.me?.username || null;
+  if (!owner || owner !== messageOwner) {
+    messages?.destroy(); messages = null; messageOwner = owner;
+    $("#messages-area").hidden = true;
+    $("#messages-toggle").setAttribute?.("aria-expanded", "false");
+    $("#messages-count").textContent = "0";
+  }
+  if (owner && !messages && api.listMessages && api.markMessageRead) {
+    messages = createMessageList($("#messages-area"), {client: api,
+      onCount: count => {$("#messages-count").textContent = String(count);},
+      onError: error => {if (error?.status === 401) fail(error);},
+      onOpen: message => guarded(async () => {
+        if (!state.me || messageOwner !== owner) return;
+        await openTask(message.task_id, message.version_id);
+      })});
+    void messages.load();
+  }
   if (!state.me) {
     state.generation += 1;
     clearTimeout(state.timer);
@@ -80,6 +100,13 @@ async function loadTasks(append = false) {
   state.cursor = page.next_cursor;
   renderTaskList();
   if (state.me?.role === "operator" && !append) await loadClaims();
+}
+
+async function openRequestedVersion() {
+  if (typeof location === "undefined" || !state.me) return;
+  const params = new URLSearchParams(location.search);
+  const taskId = params.get("task"), versionId = params.get("version");
+  if (taskId) await openTask(taskId, versionId);
 }
 
 async function loadClaims(append = false) {
@@ -482,14 +509,23 @@ $("#login-form").addEventListener("submit", event => {
     showSession();
     notice("");
     await loadTasks();
+    await openRequestedVersion();
   });
 });
 $("#logout").addEventListener("click", () => guarded(async () => {
-  await api.logout();
+  messages?.destroy(); messages = null; messageOwner = null;
+  $("#messages-area").hidden = true;
+  try {await api.logout();} catch (error) {showSession();throw error;}
   state.me = null;
   showSession();
   notice("已退出");
 }));
+$("#messages-toggle").addEventListener("click", () => {
+  if (!state.me || !messages) return;
+  const host = $("#messages-area"); host.hidden = !host.hidden;
+  $("#messages-toggle").setAttribute?.("aria-expanded", String(!host.hidden));
+  if (!host.hidden) void messages.load();
+});
 $("#refresh").addEventListener("click", () => guarded(async () => {
   await loadTasks();
   if (state.task) await openTask(state.task.task_id, state.versionId, state.selectedItemId);
@@ -578,5 +614,5 @@ document.addEventListener("submit", event => {
 api.me().then(async me => {
   state.me = me;
   showSession();
-  if (me) await loadTasks();
+  if (me) {await loadTasks(); await openRequestedVersion();}
 }).catch(fail);

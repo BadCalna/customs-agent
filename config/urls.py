@@ -25,6 +25,7 @@ from apps.reviews.api.imports import router as imports_router
 from apps.reviews.api.read import router as reviews_read_router
 from apps.reviews.api.submissions import router as submissions_router
 from apps.runs.api import router as runs_router
+from apps.notifications.api import router as notifications_router
 
 api = NinjaAPI(title="关务审核 API", version="0.1.0")
 
@@ -51,6 +52,7 @@ api_v1.add_router("", history_router)
 api_v1.add_router("", history_reference_router)
 api_v1.add_router("", runs_router)
 api_v1.add_router("", exports_router)
+api_v1.add_router("", notifications_router)
 api_v1.add_router("", pending_router)
 
 urlpatterns = [

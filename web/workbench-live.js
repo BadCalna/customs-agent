@@ -7,6 +7,7 @@ import {createExportActions} from './components/export-actions.js';
 import {renderCommodityList} from './components/commodity-list.js';
 import {renderCommodityCard} from './components/commodity-card.js';
 import {createReviewActions} from './components/review-actions.js';
+import {createMessageList} from './components/message-list.js';
 
 /** Bind P11 to immutable review scope; browsing a commodity never replaces an expert draft. */
 export function createWorkbenchReview({host, client, getContext, getUser, getSession, refreshTask}) {
@@ -126,12 +127,12 @@ export function createWorkbenchReview({host, client, getContext, getUser, getSes
 
 export async function mountWorkbench(root) {
   const api = createClient({mode:'live'});
-  let user = null, context = null, tasks = null, progress = null, exports = null, review = null;
-  let unsubscribe = null, alive = true, session = 0, runKey = '', cardKey = undefined, submitIntent = null, submitting = false, pendingReconcile = false, selectionIntent = null, refreshTask = null;
+  let user = null, context = null, tasks = null, progress = null, exports = null, review = null, messages = null;
+  let unsubscribe = null, alive = true, session = 0, runKey = '', cardKey = undefined, submitIntent = null, submitting = false, pendingReconcile = false, selectionIntent = null, refreshTask = null, messageTarget = null, messageNavigation = 0;
   const $ = selector => root.querySelector(selector);
   function reset() {
-    session++; unsubscribe?.(); tasks?.destroy(); progress?.destroy(); exports?.destroy(); context?.destroy(); review?.destroy();
-    context=tasks=progress=exports=review=null;unsubscribe=null;runKey='';cardKey=undefined;submitIntent=null;submitting=false;pendingReconcile=false;selectionIntent=null;refreshTask=null;
+    session++; messageNavigation++; unsubscribe?.(); tasks?.destroy(); progress?.destroy(); exports?.destroy(); context?.destroy(); review?.destroy(); messages?.destroy(); messages=null;
+    context=tasks=progress=exports=review=null;unsubscribe=null;runKey='';cardKey=undefined;submitIntent=null;submitting=false;pendingReconcile=false;selectionIntent=null;refreshTask=null;messageTarget=null;
   }
   function gate(error = null) {
     reset(); user=null;
@@ -182,7 +183,7 @@ export async function mountWorkbench(root) {
       <label>执行记录<select id="wb-run"><option value="">${runs.length?'请选择执行记录':'本版本该阶段暂无执行'}</option>${runs.map(r=>`<option value="${esc(r.run_id)}" ${r.run_id===s.runId?'selected':''}>${esc(r.created_at)} · ${esc(r.status)} · ${esc(r.run_id.slice(0,8))}${r.is_current?' · 阶段有效':''}</option>`).join('')}</select></label>
       ${submission?`<label>专家决定<select id="wb-decision"><option value="">仅所选提交，不绑定决定</option>${(submission.decisions || []).map(d=>`<option value="${esc(d.decision_id)}" ${d.decision_id===s.decisionId?'selected':''}>${esc(d.action)} · ${esc(d.decision_id.slice(0,8))}</option>`).join('')}</select></label>`:''}
       <button class="btn" id="wb-refresh">刷新任务详情</button>`:s.taskId?'<button class="btn" id="wb-refresh">刷新任务详情</button>':'';
-    $('#wb-version')?.addEventListener('change',e=>void context.openVersion(e.target.value));
+    $('#wb-version')?.addEventListener('change',e=>{messageNavigation++;messageTarget=null;void context.openVersion(e.target.value);});
     $('#wb-kind')?.addEventListener('change',e=>context.chooseKind(e.target.value));
     $('#wb-run')?.addEventListener('change',e=>context.chooseRun(e.target.value));
     $('#wb-decision')?.addEventListener('change',e=>context.chooseDecision(e.target.value));
@@ -222,13 +223,41 @@ export async function mountWorkbench(root) {
   }
   async function workspace() {
     reset();const ticket=session;
-    root.innerHTML=`<header class="wb-header"><h1>关务审核工作台</h1><span>${esc(user.display_name||user.username)} · ${esc(user.role_label||user.role)}</span><a href="/uploads/">上传 / 认领</a><button class="btn" id="wb-logout">退出</button></header>
+    root.innerHTML=`<header class="wb-header"><h1>关务审核工作台</h1><span>${esc(user.display_name||user.username)} · ${esc(user.role_label||user.role)}</span><a href="/uploads/">上传 / 认领</a><button class="btn" id="wb-messages-toggle" aria-expanded="false" aria-controls="wb-messages">消息 <span id="wb-messages-count" class="p19-badge">0</span></button><button class="btn" id="wb-logout">退出</button></header>
+      <section id="wb-messages" hidden></section>
       <p class="wb-banner">真实会话与 API。AI 为 mock / inline；合成结果会醒目标注，不构成申报依据。后台队列与失败行重试待 P13 交付。</p>
       <main class="wb-layout"><aside id="wb-tasks"></aside><section class="wb-detail"><h1 id="wb-title">选择左侧任务</h1><div id="wb-context-error"></div><div id="wb-toolbar" class="wb-toolbar"></div><p id="wb-summary"></p>
       <div class="wb-results"><div id="wb-progress"></div><div id="wb-exports"></div></div>
       <div class="wb-goods"><section aria-label="本版本商品" id="wb-items"></section><section id="wb-card" tabindex="-1" aria-label="商品卡片"></section></div><p id="wb-source"></p>
       <button class="btn primary" id="wb-submit" hidden>提交本批次专家审核</button><p id="wb-write-note" role="status"></p><div id="wb-review"></div></section></main>`;
     context=createWorkbenchContext(client);
+    async function openMessageVersion(message) {
+      const request=++messageNavigation, ctx=context;
+      if(!alive || ticket!==session || !ctx || !message.task_id || !message.version_id)return;
+      const target=messageTarget={taskId:message.task_id,versionId:message.version_id};
+      await ctx.openTask(message.task_id);
+      if(!alive || ticket!==session || context!==ctx || request!==messageNavigation || messageTarget!==target)return;
+      const s=ctx.store.get();
+      if(s.taskId!==message.task_id)return;
+      if(s.error)throw s.error;
+      if(!s.task?.versions?.some(v=>v.version_id===message.version_id)
+          || !s.history?.versions?.some(v=>v.version_id===message.version_id)) {
+        const error=new Error('消息关联版本不存在或不可见；未跳转到其他版本。');
+        ctx.failTask(message.task_id,error);throw error;
+      }
+      await ctx.openVersion(message.version_id);
+    }
+    if(client.listMessages && client.markMessageRead) {
+      messages=createMessageList($('#wb-messages'),{client,onOpen:openMessageVersion,
+        onCount:count=>{if(alive&&ticket===session)$('#wb-messages-count').textContent=String(count);},
+        onError:error=>{expire(error);}});
+      void messages.load();
+    }
+    $('#wb-messages-toggle').onclick=()=>{
+      const host=$('#wb-messages');host.hidden=!host.hidden;
+      $('#wb-messages-toggle').setAttribute?.('aria-expanded',String(!host.hidden));
+      if(!host.hidden)void messages?.load();
+    };
     review=createWorkbenchReview({host:$('#wb-review'),client,getContext:()=>context,getUser:()=>user,getSession:()=>session,refreshTask:(id,opts)=>refreshCurrentTask(id,opts)});
     exports=createExportActions($('#wb-exports'),{client});
     progress=createRunProgress($('#wb-progress'),{client,onStateChange:p=>context?.acceptProgress(p),onSelectItem:async identity=>{
@@ -237,8 +266,15 @@ export async function mountWorkbench(root) {
     }});
     async function refreshCurrentTask(id, opts) {
       if (!alive || !context || ticket !== session) return;
+      messageNavigation++;
+      const pinned=messageTarget?.taskId===id ? messageTarget : null;
       await context.openTask(id, opts);
       if (!alive || !context || ticket !== session) return;
+      if(pinned && messageTarget===pinned && context.store.get().taskId===id) {
+        if(context.store.get().task?.versions?.some(v=>v.version_id===pinned.versionId)
+            && context.store.get().history?.versions?.some(v=>v.version_id===pinned.versionId)) await context.openVersion(pinned.versionId);
+        else context.failTask(id,new Error('消息关联版本不存在或不可见；未跳转到其他版本。'));
+      }
       if (pendingReconcile) {
         pendingReconcile = false;
         await reconcileSelection(tasks.getState().items);
@@ -247,6 +283,8 @@ export async function mountWorkbench(root) {
     refreshTask = refreshCurrentTask;
     async function reconcileSelection(items) {
       if (!alive || !tasks || !context || ticket !== session) return;
+      // An inbox link pins its historical version until the user selects a different task/version.
+      if(messageTarget && context.store.get().taskId===messageTarget.taskId)return;
       const listState = tasks.getState();
       if (!listState.selectedId) return;
       if (listState.selecting) { pendingReconcile = true; return; }
@@ -269,6 +307,8 @@ export async function mountWorkbench(root) {
     tasks=createTaskList($('#wb-tasks'),{
       client,
       onSelectionStart:id=>{
+        messageNavigation++;
+        messageTarget=null;
         if (!selectionIntent || selectionIntent.taskId !== id) selectionIntent = null;
         $('#wb-write-note').textContent='';context.beginTask(id);
       },
@@ -281,6 +321,7 @@ export async function mountWorkbench(root) {
       onSelectionSettled:async(settledId,{taskId,ok,error})=>{
         selectionIntent = null;
         if (!alive || !context || ticket !== session) return;
+        if(messageTarget && context.store.get().taskId===messageTarget.taskId)return;
         if (!ok) {
           pendingReconcile = false;
           if (settledId && settledId !== taskId) await refreshCurrentTask(settledId);
@@ -302,9 +343,14 @@ export async function mountWorkbench(root) {
     };
     await tasks.load();
     if(ticket!==session||!context)return;
-    const requested=new URLSearchParams(location.search).get('task');
+    const requestedParams=new URLSearchParams(location.search), requested=requestedParams.get('task');
     if(requested){
-      if(tasks.getState().items.some(t=>t.task_id===requested)) await tasks.selectTask(requested);
+      const versionId=requestedParams.get('version');
+      if(versionId) {
+        try {await openMessageVersion({task_id:requested,version_id:versionId});}
+        catch(error) {if(alive&&ticket===session&&context?.store.get().taskId===requested)context.failTask(requested,error);}
+      }
+      else if(tasks.getState().items.some(t=>t.task_id===requested)) await tasks.selectTask(requested);
       else await refreshCurrentTask(requested);
     }
   }

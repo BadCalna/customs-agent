@@ -90,11 +90,8 @@ make test TASK=P02     # 与上一条同入口，59 项
   另带 `X-Export-Run`（本次执行）与 `X-Result-Mode`（`mock`/`live`）响应头；
   结果集必须属于请求版本指定的执行，不属于即 422 `result_reference_mismatch`。
 
-显式 501（`error.code=not_implemented`，`details.owner` 标交付任务包，见 `apps/api/not_implemented.py`）：
-
-- `POST /versions/{version_id}/prechecks`（P13）
-- `POST /runs/{run_id}/retries`（P13）
-- `GET /messages`、`PATCH /messages/{message_id}`（P19）
+已由 P13 / P19 替换占位：`POST /versions/{version_id}/prechecks`、`POST /runs/{run_id}/retries`、
+`GET /messages`、`PATCH /messages/{message_id}`。当前无待实现的 501 占位端点。
 
 `Idempotency-Key` 的持久化幂等已随 P09/P10 落地（同 key 同对象重放、不同内容 409、不同目标冲突）；
 FIX-08 样例仍只描述错误形状，不代表所有写端点都已覆盖幂等。
@@ -122,3 +119,7 @@ P06（2026-11-17）增量发布：`schemas/imports/` 与 OpenAPI 已包含真实
   `needs_review=true` 而未纳入成功案例的记录数；默认检索排除待核异常记录，
   需要审计时可构造 `HistorySearchSource(include_needs_review=True)`。
 - 纯新增可选字段，未改既有字段、端点或 `CONTRACT_VERSION`（仍为 `1.1.0`）。
+
+## 1.3.0 变更（2026-11-19，P19）
+
+新增 schemas/messages 的 MessageOut、MessagePage、MessageReadIn；GET /messages 和 PATCH /messages/{id} 已由本人权限/CSRF保护的实现替换占位。列表额外返回 unread_count；只支持 is_read=true 幂等已读。新消息绑定固定版本/提交/决定，target_url不是新授权，目标仍由任务API校验。契约和既有FIX/DEMO的contract_version同步为1.3.0。真实DWS未接入，mock状态不可冒充送达；详见 docs/开发文档/交接/P19.md。

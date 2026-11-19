@@ -209,7 +209,9 @@ def create_submission(user, task_id: str, payload, idempotency_key: str | None =
     task.save(update_fields=["stage", "revision", "updated_at"])
 
     # 与提交同事务授权；默认专家不可用时整体回滚，不留下无人可审的 pending。
-    ensure_submission_expert(task, submission, actor=user)
+    expert, _ = ensure_submission_expert(task, submission, actor=user)
+    from apps.notifications.services import notify_submission
+    notify_submission(submission, expert)
 
     # D4 第 4 节：同事务登记待运行记录；执行在提交成功后进行，进程崩溃由 P13 重扫。
     Run.objects.filter(version=version, kind=Run.Kind.EXPERT_CHECK, is_current=True).update(is_current=False)

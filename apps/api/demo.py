@@ -69,6 +69,7 @@ def workbench_index(request):
 
 # Public static resources contain no data or demo accounts. APIs still enforce session/object scope.
 WORKBENCH_ASSETS = frozenset((
+    "components/message-list.js", "styles/messages.css",
     "api.js", "state.js", "workbench-context.js", "workbench-live.js", "styles.css",
     "components/task-list.js", "components/run-progress.js", "components/export-actions.js",
     "components/commodity-list.js", "components/commodity-card.js", "components/hs-comparison.js",
@@ -109,7 +110,7 @@ def production_index(request):
 
 
 def production_asset(request, path: str):
-    allowed = {"production.js", "production.css", "api.js"}
+    allowed = {"production.js", "production.css", "api.js", "components/message-list.js", "styles/messages.css"}
     if path not in allowed:
         raise Http404("资源不存在")
     return _production_file(path)

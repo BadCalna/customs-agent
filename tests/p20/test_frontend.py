@@ -28,7 +28,7 @@ class ExportFrontendTests(SimpleTestCase):
         if not NODE:
             self.fail("跑 P20 前端行为测试需要 Node；请安装 node 或把 NODE 放进 PATH")
         result = subprocess.run(
-            [NODE, "--test", "tests/p20/frontend.test.mjs"],
+            [NODE, "--test-reporter=tap", "--test", "tests/p20/frontend.test.mjs"],
             cwd=settings.BASE_DIR,
             capture_output=True,
             text=True,

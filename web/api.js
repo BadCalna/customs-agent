@@ -208,6 +208,8 @@ function createLiveAdapter(baseUrl) {
 
   return {
     mode: "live",
+    listMessages(params = {}) { return raw("GET", `/messages${query({cursor: params.cursor, limit: params.limit, unread_only: params.unread_only})}`); },
+    markMessageRead(messageId) { return write("PATCH", `/messages/${encodeURIComponent(messageId)}`, {is_read: true}); },
     getHistory(taskId) { return raw("GET", `/tasks/${encodeURIComponent(taskId)}/history`); },
     confirmItem(versionId, itemId, body) { return write("PATCH", `/versions/${encodeURIComponent(versionId)}/items/${encodeURIComponent(itemId)}/confirmation`, body); },
     submitTask(taskId, body, key) { return write("POST", `/tasks/${encodeURIComponent(taskId)}/submissions`, body, key); },
@@ -331,6 +333,12 @@ function createFixtureAdapter(url) {
 
   return {
     mode: "fixture",
+    async listMessages(params = {}) {
+      const data = await load(), all = Array.isArray(data.messages) ? data.messages : [];
+      return {...pageOf(all.filter(row => !params.unread_only || !row.is_read), params),
+        unread_count: all.filter(row => !row.is_read).length};
+    },
+    async markMessageRead() { throw new ApiError(501, "live_required", "真实消息已读仅支持 live API；样例状态未更改"); },
     async getHistory() { throw new ApiError(501, "live_required", "任务历史接线仅支持 live API"); },
     async confirmItem() { throw new ApiError(501, "live_required", "真实确认仅支持 live API"); },
     async submitTask() { throw new ApiError(501, "live_required", "真实提交仅支持 live API"); },
