@@ -706,6 +706,24 @@ def _derive_images_aspect(
             expert_review_required=True,
         )
 
+    if len(payload.submitted_hs) == 8:
+        issue = _issue("IMAGE_8_DIGIT_HS", "8位编码，图片分项一律待专家核实", field="images", role="expert")
+        return AspectEvaluation(
+            aspect="images",
+            finding=ExpertFinding(
+                aspect="images",
+                verdict=ExpertVerdict.UNKNOWN,
+                reason="8位编码，图片分项一律待专家核实",
+                evidence_ids=image_eids,
+            ),
+            reason_codes=["IMAGE_8_DIGIT_HS"],
+            issues=[issue],
+            evidence=image_evidence,
+            evidence_status=EvidenceStatus.OBTAINED if image_evidence else None,
+            source_usable=False,
+            expert_review_required=True,
+        )
+
     if model_answer is None:
         issue = _issue(
             "IMAGE_CHECK_MODEL_UNAVAILABLE",
@@ -760,6 +778,24 @@ def _derive_images_aspect(
                 evidence_ids=image_eids,
             ),
             reason_codes=["IMAGE_FACTS_INCONCLUSIVE"],
+            issues=[issue],
+            evidence=image_evidence,
+            evidence_status=EvidenceStatus.OBTAINED if image_evidence else None,
+            source_usable=False,
+            expert_review_required=True,
+        )
+
+    if len(payload.submitted_hs) == 8:
+        issue = _issue("IMAGE_8_DIGIT_HS", "8位编码，图片分项一律待专家核实", field="images", role="expert")
+        return AspectEvaluation(
+            aspect="images",
+            finding=ExpertFinding(
+                aspect="images",
+                verdict=ExpertVerdict.UNKNOWN,
+                reason="8位编码，图片分项一律待专家核实",
+                evidence_ids=image_eids,
+            ),
+            reason_codes=["IMAGE_8_DIGIT_HS"],
             issues=[issue],
             evidence=image_evidence,
             evidence_status=EvidenceStatus.OBTAINED if image_evidence else None,
@@ -1015,6 +1051,8 @@ class ExpertCheckEngine:
             raise ValueError("P14 要素响应查询基准不匹配")
         if result.query.declared_raw != payload.elements_text:
             raise ValueError("P14 要素响应申报原文不匹配")
+        if result.query.declared != dict(declared_elements or {}):
+            raise ValueError("P14 要素响应申报要素不匹配")
         if result.schema_record is not None and (
             result.schema_record.hs_code != result.format.normalized
             or (result.version.version and result.schema_record.version != result.version.version)
@@ -1059,6 +1097,8 @@ class ExpertCheckEngine:
             raise ValueError("P17 退税响应查询基准不匹配")
         if result.query.original_rate_raw != payload.supplier_tax_rate_raw:
             raise ValueError("P17 退税响应原税率原文不匹配")
+        if result.query.rebate_code != rebate_code:
+            raise ValueError("P17 退税响应退税代码不匹配")
         if result.record is not None and (
             result.record.hs_code != result.format.normalized
             or (result.version.version and result.record.version != result.version.version)
