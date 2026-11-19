@@ -1,0 +1,626 @@
+{
+  "report_schema_version": "p18-expert-eval-1.0.0",
+  "suite_id": "p18-synthetic-expert-1.0.0",
+  "suite_version": "p18-synthetic-expert-1.0.0",
+  "gold_standard": false,
+  "verification_scope": "technical_synthetic_verification",
+  "annotated_by": null,
+  "annotated_at": null,
+  "versions": {
+    "engine_version": "expert-check-0.1.0",
+    "prompt_version": "expert-check-json-1",
+    "rules_version": "d4-0.6-p14-p17-p18",
+    "prompt_sha256": "02e1adb669a7991e57d7ff89b4b4a66b6434cc621217ac07f8dbb528f28941da",
+    "cases_sha256": "3a4116aea0b57950a51609b23f6ae5241e025af58f4d4d892d27af2209663afa"
+  },
+  "execution_policy": {
+    "clock": "fixed:2026-05-20T00:00:00Z",
+    "engine_mode": "standalone-injected-sources",
+    "history_role": "reference_only",
+    "network": "disabled"
+  },
+  "case_count": 18,
+  "synthetic_case_count": 18,
+  "case_pass_count": 18,
+  "case_pass_rate": 1.0,
+  "metrics": {
+    "overall_aspect_total": 72,
+    "overall_aspect_accuracy": 1.0,
+    "per_aspect_accuracy": {
+      "elements": 1.0,
+      "images": 1.0,
+      "tax": 1.0,
+      "regulatory": 1.0
+    },
+    "expected_unknown_count": 29,
+    "correct_unknown_count": 29,
+    "unknown_coverage": 1.0,
+    "false_matched_on_unknown": 0,
+    "false_conflict_on_unknown": 0,
+    "expected_conflict_count": 4,
+    "correct_conflict_count": 4,
+    "conflict_recall": 1.0,
+    "false_matched_on_conflict": 0
+  },
+  "confusion_matrix": {
+    "axes": {
+      "rows": "expected",
+      "cols": "actual",
+      "labels": [
+        "matched",
+        "conflict",
+        "unknown"
+      ]
+    },
+    "overall": {
+      "matched": {
+        "matched": 39,
+        "conflict": 0,
+        "unknown": 0
+      },
+      "conflict": {
+        "matched": 0,
+        "conflict": 4,
+        "unknown": 0
+      },
+      "unknown": {
+        "matched": 0,
+        "conflict": 0,
+        "unknown": 29
+      }
+    },
+    "by_aspect": {
+      "elements": {
+        "matched": {
+          "matched": 12,
+          "conflict": 0,
+          "unknown": 0
+        },
+        "conflict": {
+          "matched": 0,
+          "conflict": 2,
+          "unknown": 0
+        },
+        "unknown": {
+          "matched": 0,
+          "conflict": 0,
+          "unknown": 4
+        }
+      },
+      "images": {
+        "matched": {
+          "matched": 3,
+          "conflict": 0,
+          "unknown": 0
+        },
+        "conflict": {
+          "matched": 0,
+          "conflict": 1,
+          "unknown": 0
+        },
+        "unknown": {
+          "matched": 0,
+          "conflict": 0,
+          "unknown": 14
+        }
+      },
+      "tax": {
+        "matched": {
+          "matched": 11,
+          "conflict": 0,
+          "unknown": 0
+        },
+        "conflict": {
+          "matched": 0,
+          "conflict": 1,
+          "unknown": 0
+        },
+        "unknown": {
+          "matched": 0,
+          "conflict": 0,
+          "unknown": 6
+        }
+      },
+      "regulatory": {
+        "matched": {
+          "matched": 13,
+          "conflict": 0,
+          "unknown": 0
+        },
+        "conflict": {
+          "matched": 0,
+          "conflict": 0,
+          "unknown": 0
+        },
+        "unknown": {
+          "matched": 0,
+          "conflict": 0,
+          "unknown": 5
+        }
+      }
+    }
+  },
+  "failed_cases": [],
+  "case_results": [
+    {
+      "id": "all-matched-official-sim",
+      "synthetic": true,
+      "passed": true,
+      "target_hs": "8482102000",
+      "suggested_hs": null,
+      "expected_verdicts": {
+        "elements": "matched",
+        "images": "matched",
+        "tax": "matched",
+        "regulatory": "matched"
+      },
+      "actual_verdicts": {
+        "elements": "matched",
+        "images": "matched",
+        "tax": "matched",
+        "regulatory": "matched"
+      },
+      "expected_evidence_status": "obtained",
+      "actual_evidence_status": "obtained",
+      "actual_issue_codes": [],
+      "failure_reasons": []
+    },
+    {
+      "id": "elements-insufficient-conflict",
+      "synthetic": true,
+      "passed": true,
+      "target_hs": "8482102000",
+      "suggested_hs": null,
+      "expected_verdicts": {
+        "elements": "conflict",
+        "images": "matched",
+        "tax": "matched",
+        "regulatory": "matched"
+      },
+      "actual_verdicts": {
+        "elements": "conflict",
+        "images": "matched",
+        "tax": "matched",
+        "regulatory": "matched"
+      },
+      "expected_evidence_status": "obtained",
+      "actual_evidence_status": "obtained",
+      "actual_issue_codes": [
+        "ELEMENT_MISSING"
+      ],
+      "failure_reasons": []
+    },
+    {
+      "id": "elements-semantic-conflict",
+      "synthetic": true,
+      "passed": true,
+      "target_hs": "8482102000",
+      "suggested_hs": "8536490090",
+      "expected_verdicts": {
+        "elements": "conflict",
+        "images": "matched",
+        "tax": "matched",
+        "regulatory": "matched"
+      },
+      "actual_verdicts": {
+        "elements": "conflict",
+        "images": "matched",
+        "tax": "matched",
+        "regulatory": "matched"
+      },
+      "expected_evidence_status": "obtained",
+      "actual_evidence_status": "obtained",
+      "actual_issue_codes": [
+        "EXPERT_ELEMENTS_SEMANTIC_CONFLICT"
+      ],
+      "failure_reasons": []
+    },
+    {
+      "id": "elements-conditional-unverified",
+      "synthetic": true,
+      "passed": true,
+      "target_hs": "8482102000",
+      "suggested_hs": null,
+      "expected_verdicts": {
+        "elements": "unknown",
+        "images": "unknown",
+        "tax": "matched",
+        "regulatory": "matched"
+      },
+      "actual_verdicts": {
+        "elements": "unknown",
+        "images": "unknown",
+        "tax": "matched",
+        "regulatory": "matched"
+      },
+      "expected_evidence_status": "obtained",
+      "actual_evidence_status": "obtained",
+      "actual_issue_codes": [
+        "ELEMENTS_UNVERIFIED",
+        "ELEMENT_CONDITION_UNVERIFIED",
+        "IMAGE_ABSENT"
+      ],
+      "failure_reasons": []
+    },
+    {
+      "id": "eight-digit-subheading-unknown",
+      "synthetic": true,
+      "passed": true,
+      "target_hs": "72081000",
+      "suggested_hs": null,
+      "expected_verdicts": {
+        "elements": "unknown",
+        "images": "unknown",
+        "tax": "unknown",
+        "regulatory": "unknown"
+      },
+      "actual_verdicts": {
+        "elements": "unknown",
+        "images": "unknown",
+        "tax": "unknown",
+        "regulatory": "unknown"
+      },
+      "expected_evidence_status": "obtained",
+      "actual_evidence_status": "obtained",
+      "actual_issue_codes": [
+        "ELEMENTS_SUBHEADING_ONLY",
+        "ELEMENT_HS_INCOMPLETE",
+        "HS_SUBHEADING_ONLY",
+        "IMAGE_ABSENT",
+        "REG_SUBHEADING_ONLY",
+        "TAX_RATE_CONFLICT",
+        "TAX_SUBHEADING_ONLY"
+      ],
+      "failure_reasons": []
+    },
+    {
+      "id": "images-read-failed-distinct",
+      "synthetic": true,
+      "passed": true,
+      "target_hs": "8482102000",
+      "suggested_hs": null,
+      "expected_verdicts": {
+        "elements": "matched",
+        "images": "unknown",
+        "tax": "matched",
+        "regulatory": "matched"
+      },
+      "actual_verdicts": {
+        "elements": "matched",
+        "images": "unknown",
+        "tax": "matched",
+        "regulatory": "matched"
+      },
+      "expected_evidence_status": "obtained",
+      "actual_evidence_status": "obtained",
+      "actual_issue_codes": [
+        "IMAGE_READ_FAILED"
+      ],
+      "failure_reasons": []
+    },
+    {
+      "id": "images-available-blank-description",
+      "synthetic": true,
+      "passed": true,
+      "target_hs": "8482102000",
+      "suggested_hs": null,
+      "expected_verdicts": {
+        "elements": "matched",
+        "images": "unknown",
+        "tax": "matched",
+        "regulatory": "matched"
+      },
+      "actual_verdicts": {
+        "elements": "matched",
+        "images": "unknown",
+        "tax": "matched",
+        "regulatory": "matched"
+      },
+      "expected_evidence_status": "obtained",
+      "actual_evidence_status": "obtained",
+      "actual_issue_codes": [
+        "IMAGE_FACTS_UNVERIFIED"
+      ],
+      "failure_reasons": []
+    },
+    {
+      "id": "images-visible-conflict",
+      "synthetic": true,
+      "passed": true,
+      "target_hs": "8482102000",
+      "suggested_hs": "8536490090",
+      "expected_verdicts": {
+        "elements": "matched",
+        "images": "conflict",
+        "tax": "matched",
+        "regulatory": "matched"
+      },
+      "actual_verdicts": {
+        "elements": "matched",
+        "images": "conflict",
+        "tax": "matched",
+        "regulatory": "matched"
+      },
+      "expected_evidence_status": "obtained",
+      "actual_evidence_status": "obtained",
+      "actual_issue_codes": [
+        "IMAGE_FACT_CONFLICT"
+      ],
+      "failure_reasons": []
+    },
+    {
+      "id": "tax-rate-conflict-9-vs-13",
+      "synthetic": true,
+      "passed": true,
+      "target_hs": "8482102000",
+      "suggested_hs": null,
+      "expected_verdicts": {
+        "elements": "matched",
+        "images": "unknown",
+        "tax": "conflict",
+        "regulatory": "matched"
+      },
+      "actual_verdicts": {
+        "elements": "matched",
+        "images": "unknown",
+        "tax": "conflict",
+        "regulatory": "matched"
+      },
+      "expected_evidence_status": "obtained",
+      "actual_evidence_status": "obtained",
+      "actual_issue_codes": [
+        "IMAGE_ABSENT",
+        "TAX_RATE_CONFLICT"
+      ],
+      "failure_reasons": []
+    },
+    {
+      "id": "tax-not-refundable-c18-unknown",
+      "synthetic": true,
+      "passed": true,
+      "target_hs": "8482102000",
+      "suggested_hs": null,
+      "expected_verdicts": {
+        "elements": "matched",
+        "images": "unknown",
+        "tax": "unknown",
+        "regulatory": "matched"
+      },
+      "actual_verdicts": {
+        "elements": "matched",
+        "images": "unknown",
+        "tax": "unknown",
+        "regulatory": "matched"
+      },
+      "expected_evidence_status": "obtained",
+      "actual_evidence_status": "obtained",
+      "actual_issue_codes": [
+        "IMAGE_ABSENT",
+        "TAX_CHECK_UNVERIFIED"
+      ],
+      "failure_reasons": []
+    },
+    {
+      "id": "tax-zero-rate-matched",
+      "synthetic": true,
+      "passed": true,
+      "target_hs": "7304190000",
+      "suggested_hs": null,
+      "expected_verdicts": {
+        "elements": "matched",
+        "images": "unknown",
+        "tax": "matched",
+        "regulatory": "matched"
+      },
+      "actual_verdicts": {
+        "elements": "matched",
+        "images": "unknown",
+        "tax": "matched",
+        "regulatory": "matched"
+      },
+      "expected_evidence_status": "obtained",
+      "actual_evidence_status": "obtained",
+      "actual_issue_codes": [
+        "IMAGE_ABSENT"
+      ],
+      "failure_reasons": []
+    },
+    {
+      "id": "tax-not-found-blank-no-zero",
+      "synthetic": true,
+      "passed": true,
+      "target_hs": "8482102000",
+      "suggested_hs": null,
+      "expected_verdicts": {
+        "elements": "matched",
+        "images": "unknown",
+        "tax": "unknown",
+        "regulatory": "matched"
+      },
+      "actual_verdicts": {
+        "elements": "matched",
+        "images": "unknown",
+        "tax": "unknown",
+        "regulatory": "matched"
+      },
+      "expected_evidence_status": "not_found",
+      "actual_evidence_status": "not_found",
+      "actual_issue_codes": [
+        "IMAGE_ABSENT",
+        "TAX_ORIGINAL_RATE_BLANK",
+        "TAX_RATE_NOT_FOUND"
+      ],
+      "failure_reasons": []
+    },
+    {
+      "id": "tax-conditions-not-declared-unknown",
+      "synthetic": true,
+      "passed": true,
+      "target_hs": "8482102000",
+      "suggested_hs": null,
+      "expected_verdicts": {
+        "elements": "matched",
+        "images": "unknown",
+        "tax": "unknown",
+        "regulatory": "matched"
+      },
+      "actual_verdicts": {
+        "elements": "matched",
+        "images": "unknown",
+        "tax": "unknown",
+        "regulatory": "matched"
+      },
+      "expected_evidence_status": "obtained",
+      "actual_evidence_status": "obtained",
+      "actual_issue_codes": [
+        "IMAGE_ABSENT",
+        "TAX_CONDITION_NOT_DECLARED"
+      ],
+      "failure_reasons": []
+    },
+    {
+      "id": "regulatory-measures-verified-matched",
+      "synthetic": true,
+      "passed": true,
+      "target_hs": "8482102000",
+      "suggested_hs": null,
+      "expected_verdicts": {
+        "elements": "matched",
+        "images": "unknown",
+        "tax": "matched",
+        "regulatory": "matched"
+      },
+      "actual_verdicts": {
+        "elements": "matched",
+        "images": "unknown",
+        "tax": "matched",
+        "regulatory": "matched"
+      },
+      "expected_evidence_status": "obtained",
+      "actual_evidence_status": "obtained",
+      "actual_issue_codes": [
+        "IMAGE_ABSENT"
+      ],
+      "failure_reasons": []
+    },
+    {
+      "id": "regulatory-dual-use-unknown",
+      "synthetic": true,
+      "passed": true,
+      "target_hs": "8482102000",
+      "suggested_hs": null,
+      "expected_verdicts": {
+        "elements": "matched",
+        "images": "unknown",
+        "tax": "matched",
+        "regulatory": "unknown"
+      },
+      "actual_verdicts": {
+        "elements": "matched",
+        "images": "unknown",
+        "tax": "matched",
+        "regulatory": "unknown"
+      },
+      "expected_evidence_status": "obtained",
+      "actual_evidence_status": "obtained",
+      "actual_issue_codes": [
+        "IMAGE_ABSENT",
+        "REG_DUAL_USE_UNVERIFIED"
+      ],
+      "failure_reasons": []
+    },
+    {
+      "id": "regulatory-direction-unknown",
+      "synthetic": true,
+      "passed": true,
+      "target_hs": "8482102000",
+      "suggested_hs": null,
+      "expected_verdicts": {
+        "elements": "matched",
+        "images": "unknown",
+        "tax": "matched",
+        "regulatory": "unknown"
+      },
+      "actual_verdicts": {
+        "elements": "matched",
+        "images": "unknown",
+        "tax": "matched",
+        "regulatory": "unknown"
+      },
+      "expected_evidence_status": "obtained",
+      "actual_evidence_status": "obtained",
+      "actual_issue_codes": [
+        "IMAGE_ABSENT",
+        "REG_DIRECTION_UNKNOWN"
+      ],
+      "failure_reasons": []
+    },
+    {
+      "id": "history-synthetic-cannot-upgrade",
+      "synthetic": true,
+      "passed": true,
+      "target_hs": "8482102000",
+      "suggested_hs": null,
+      "expected_verdicts": {
+        "elements": "unknown",
+        "images": "unknown",
+        "tax": "unknown",
+        "regulatory": "unknown"
+      },
+      "actual_verdicts": {
+        "elements": "unknown",
+        "images": "unknown",
+        "tax": "unknown",
+        "regulatory": "unknown"
+      },
+      "expected_evidence_status": "obtained",
+      "actual_evidence_status": "obtained",
+      "actual_issue_codes": [
+        "ELEMENTS_UNVERIFIED",
+        "ELEMENT_AUTHORITY_NOT_OFFICIAL",
+        "IMAGE_ABSENT",
+        "REG_AUTHORITY_NOT_OFFICIAL",
+        "TAX_AUTHORITY_NOT_OFFICIAL"
+      ],
+      "failure_reasons": []
+    },
+    {
+      "id": "source-exception-structured-query-failed",
+      "synthetic": true,
+      "passed": true,
+      "target_hs": "8482102000",
+      "suggested_hs": null,
+      "expected_verdicts": {
+        "elements": "unknown",
+        "images": "unknown",
+        "tax": "unknown",
+        "regulatory": "unknown"
+      },
+      "actual_verdicts": {
+        "elements": "unknown",
+        "images": "unknown",
+        "tax": "unknown",
+        "regulatory": "unknown"
+      },
+      "expected_evidence_status": "query_failed",
+      "actual_evidence_status": "query_failed",
+      "actual_issue_codes": [
+        "EXPERT_CHECK_INTERNAL_ERROR"
+      ],
+      "failure_reasons": []
+    }
+  ],
+  "threshold_verdict": {
+    "status": "pending_expert_gold_standard",
+    "gold_standard": false,
+    "customs_accuracy_verified": false,
+    "technical_checks_passed": true,
+    "reason": "当前报告包含合成技术验证样本（synthetic=true），未接入 Jay/关务专家 D-11 金标准标注，仅证实口径约束与适配器边界正确，严禁宣称真实关务准确率已达标。",
+    "thresholds": {
+      "min_unknown_coverage": 1.0,
+      "max_false_matched_on_unknown": 0,
+      "min_overall_accuracy": 0.85,
+      "min_conflict_recall": 0.8
+    }
+  }
+}
