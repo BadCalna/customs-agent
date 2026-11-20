@@ -12,7 +12,8 @@ from adapters.sources.reference_import.publish import (
 )
 from adapters.sources.reference_import.snapshot import SnapshotRequest, build_snapshot
 from tests.p23.builders import build_publish_batch, write_verification
-from tests.p23.support import P23TestCase
+from tests.p23.support import P23TestCase, active_pointer
+from tests.platform_files import create_directory_link
 
 
 class ActivationIntegrityTest(P23TestCase):
@@ -32,12 +33,12 @@ class ActivationIntegrityTest(P23TestCase):
         self.old, self.current = self.releases
 
     def assert_rejected_without_switch(self):
-        pointer = self.out / "published" / "current"
-        before = os.readlink(pointer)
+        pointer = active_pointer(self.out)
+        before = pointer.read_bytes() if publishing.POINTER_BACKEND == "atomic_json" else os.readlink(pointer)
         results = set((self.out / "published" / "activation-results").glob("*.json"))
         with self.assertRaises(PublishError):
             activate_release(self.out, self.old.release_id)
-        self.assertEqual(os.readlink(pointer), before)
+        self.assertEqual(pointer.read_bytes() if publishing.POINTER_BACKEND == "atomic_json" else os.readlink(pointer), before)
         self.assertEqual(json.loads((self.out / "published" / "current.json").read_text())[
             "release_id"], self.current.release_id)
         self.assertEqual(set((self.out / "published" / "activation-results").glob("*.json")), results,
@@ -111,8 +112,10 @@ class ActivationIntegrityTest(P23TestCase):
 
     def test_invalid_current_target_is_not_treated_as_unconfigured(self):
         link = self.out / "published" / "current"
-        link.unlink()
-        os.symlink("../../outside", link)
+        link.unlink(missing_ok=True)
+        outside = self.root / "outside"
+        outside.mkdir()
+        create_directory_link(link, outside)
         with self.assertRaises(PublishError):
             dataset_paths(self.out)
 
@@ -124,6 +127,31 @@ class ActivationIntegrityTest(P23TestCase):
                           if p.is_file()}, before)
 
     def read_during_switch(self, reader):
+        if publishing.POINTER_BACKEND == "atomic_json":
+            original = publishing._read_release_json
+            reads = []
+            switched = False
+            inside_switch = False
+
+            def interleaved_read(path):
+                nonlocal switched, inside_switch
+                value = original(path)
+                if Path(path) == active_pointer(self.out) and not inside_switch:
+                    reads.append(value)
+                    if not switched:
+                        switched = True
+                        inside_switch = True
+                        try:
+                            activate_release(self.out, self.old.release_id)
+                        finally:
+                            inside_switch = False
+                return value
+
+            with patch.object(publishing, "_read_release_json", side_effect=interleaved_read):
+                result = reader()
+            self.assertTrue(switched, "必须真实穿插一次正常激活")
+            self.assertEqual(len(reads), 1, "每次读取只可解析一次权威指针")
+            return result, reads
         original = publishing.os.readlink
         reads = []
         switched = False

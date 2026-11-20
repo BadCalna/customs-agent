@@ -25,7 +25,7 @@ class CommodityCardBehaviourTests(SimpleTestCase):
         if not node:
             self.fail("跑 P07 行为测试需要 Node；请安装 node 或把 P07_NODE 指向可执行文件")
         result = subprocess.run(
-            [node, "--test", NODE_TEST_FILE],
+            [node, "--test", "--test-reporter=tap", NODE_TEST_FILE],
             cwd=settings.BASE_DIR, capture_output=True, text=True, encoding="utf-8", timeout=60,
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)

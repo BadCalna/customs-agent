@@ -152,13 +152,17 @@ class TestExpertTriggerConsistency(TestCase):
         bundle = build_source_bundle(case)
         adapter = _InlineExpertAdapter(bundle.engine)
 
-        with patch("adapters.engines.mock.get_engine", return_value=adapter, create=True), patch(
+        # Registration and execution must use one identity: results inherit the frozen Run snapshot.
+        with patch("apps.runs.engine_config.get_engine", return_value=adapter), patch(
             "apps.runs.inline.get_engine", return_value=adapter
         ):
             sub_out = self._submit(idempotency_key="inline-real-1")
 
         run = Run.objects.get(task=self.task, kind=Run.Kind.EXPERT_CHECK, is_current=True)
         self.assertEqual(str(run.submission_id), str(sub_out["submission_id"]))
+        self.assertEqual(run.engine_snapshot["engine_version"], ENGINE_VERSION)
+        self.assertEqual(run.engine_snapshot["prompt_version"], PROMPT_VERSION)
+        self.assertEqual(run.engine_snapshot["rules_version"], RULES_VERSION)
         run_item = RunItem.objects.get(run=run, item=self.item)
         self.assertEqual(run_item.result.get("engine_version"), ENGINE_VERSION)
         self.assertEqual(run_item.result.get("prompt_version"), PROMPT_VERSION)

@@ -1,6 +1,6 @@
 {
   "version": "1.1",
-  "date": "2026-11-19",
+  "date": "2026-11-20",
   "status": "实施中",
   "shared_rules": "Agent协作与交接约定.md",
   "packages": [
@@ -996,7 +996,7 @@
         "更新：D5/验收记录及未解决问题；回交：交接/P21.md，供 P22 交接。"
       ],
       "verification_command": "make test TASK=P21",
-      "status": "待开始"
+      "status": "集成待验收；新增技术专项、真实本机队列和浏览器主流程已验证，Windows平台适配及安全边界专项已通过，扩大PostgreSQL回归1981项、0 failures/errors、6条件跳过、退出0，专业/人工签收待完成，见交接/P21.md（2026-11-20）"
     },
     {
       "id": "P22",

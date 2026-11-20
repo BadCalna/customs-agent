@@ -2,6 +2,7 @@
 """Create a consistent, exclusive SQLite snapshot, including committed WAL rows."""
 import sqlite3
 import sys
+from contextlib import closing
 from pathlib import Path
 
 
@@ -12,8 +13,11 @@ def snapshot(source: Path, target: Path):
     with target.open("xb"):
         pass
     try:
-        with sqlite3.connect(source.as_uri() + "?mode=ro", uri=True) as src:
-            with sqlite3.connect(target) as dst:
+        # sqlite3.Connection's context manager commits/rolls back transactions,
+        # but does not close the handle. Close both before returning so callers
+        # can move/remove the snapshot immediately on Windows as well.
+        with closing(sqlite3.connect(source.as_uri() + "?mode=ro", uri=True)) as src:
+            with closing(sqlite3.connect(target)) as dst, dst:
                 src.backup(dst)
     except BaseException:
         # Keep a failed snapshot for diagnosis; callers never consume it on failure.

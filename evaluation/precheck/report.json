@@ -2506,7 +2506,7 @@
   "synthetic": true,
   "technical_only": true,
   "versions": {
-    "contract": "1.2.0",
+    "contract": "1.3.0",
     "engine": "compare_original_checked",
     "model": "not_called",
     "priority_rules": "d4-0.3",

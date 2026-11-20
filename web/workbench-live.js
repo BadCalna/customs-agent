@@ -225,7 +225,7 @@ export async function mountWorkbench(root) {
     reset();const ticket=session;
     root.innerHTML=`<header class="wb-header"><h1>关务审核工作台</h1><span>${esc(user.display_name||user.username)} · ${esc(user.role_label||user.role)}</span><a href="/uploads/">上传 / 认领</a><button class="btn" id="wb-messages-toggle" aria-expanded="false" aria-controls="wb-messages">消息 <span id="wb-messages-count" class="p19-badge">0</span></button><button class="btn" id="wb-logout">退出</button></header>
       <section id="wb-messages" hidden></section>
-      <p class="wb-banner">真实会话与 API。AI 为 mock / inline；合成结果会醒目标注，不构成申报依据。后台队列与失败行重试待 P13 交付。</p>
+      <p class="wb-banner">按任务版本查看商品、审核记录和执行进度。模拟结果会明确标注，不能作为申报依据。</p>
       <main class="wb-layout"><aside id="wb-tasks"></aside><section class="wb-detail"><h1 id="wb-title">选择左侧任务</h1><div id="wb-context-error"></div><div id="wb-toolbar" class="wb-toolbar"></div><p id="wb-summary"></p>
       <div class="wb-results"><div id="wb-progress"></div><div id="wb-exports"></div></div>
       <div class="wb-goods"><section aria-label="本版本商品" id="wb-items"></section><section id="wb-card" tabindex="-1" aria-label="商品卡片"></section></div><p id="wb-source"></p>

@@ -16,8 +16,9 @@
 - 旧 release 目录不删除，``release.json`` 保留首次发布审计且永不改写；
   重复发布/显式回滚分别追加 ``activations/<event_id>.json`` 与
   ``activation-results/<event_id>.json``，本次理由、前驱和差异属于激活事件。
-- ``current`` 是唯一激活提交点，``current.json`` 是其派生链接；可随时
-  ``activate`` 回到之前的版本。
+- POSIX 的 ``current`` 软链是唯一激活提交点，``current.json`` 是其派生链接；
+  Windows 使用带版本标识的普通 ``current.json`` 原子指针，不创建软链。
+  读取方先解析一次指针，再读取固定 release；可随时 ``activate`` 回滚。
 
 **不修改 ``.env``，不切换运行环境的数据来源**：这里只产出目录与指针，
 环境变量由使用方自己指过来（D6 第 2.7 节）。
@@ -26,16 +27,19 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
-import fcntl
 import json
+import math
 import os
 import shutil
+import stat
 import threading
+import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterator, Iterable, Mapping
 
+from adapters.files.process_lock import acquire_exclusive, release_exclusive
 from adapters.sources.reference_import.model import (
     RELEASE_SCHEMA_VERSION,
     REVIEW_SCHEMA_VERSION,
@@ -53,6 +57,55 @@ from adapters.sources.reference_import.model import (
 
 class PublishError(RuntimeError):
     """发布被拒绝；调用方必须把原因原样报给使用者。"""
+
+
+POINTER_BACKEND = "atomic_json" if os.name == "nt" else "symlink"
+CURRENT_SCHEMA_VERSION = "p23.current.1"
+_DATASET_SCHEMAS = {
+    DatasetId.P14_TARIFF: "p14.tariff.1",
+    DatasetId.P14_ELEMENTS: "p14.elements.1",
+    DatasetId.P17_TAX_RATES: "p17.taxrate.1",
+    DatasetId.P17_REGULATORY: "p17.regulatory.1",
+    DatasetId.TARIFF_COMMENTARY: "p23.commentary.1",
+    DatasetId.REGULATORY_CODE_LEDGER: "p23.regulatory-codes.1",
+}
+_ACTIVATION_HOOK = None
+
+
+def _activation_checkpoint(stage: str) -> None:
+    """No-op unless a fault-injection test installs a process-local hook."""
+    if _ACTIVATION_HOOK is not None:
+        _ACTIVATION_HOOK(stage)
+
+
+def _is_link(path: Path) -> bool:
+    return path.is_symlink() or path.is_junction()
+
+
+def require_plain_path(path: str | Path) -> None:
+    """Reject redirection before resolving or writing any publication path.
+
+    Inspect every existing ancestor, including symlinks and all Windows reparse
+    tags. Nonexistent final components are allowed for newly created directories.
+    """
+    candidate = Path(path).absolute()
+    for entry in reversed((candidate, *candidate.parents)):
+        try:
+            info = entry.lstat()
+        except FileNotFoundError:
+            continue
+        except OSError as exc:
+            raise PublishError("发布路径不可检查") from exc
+        if (stat.S_ISLNK(info.st_mode)
+                or getattr(info, "st_file_attributes", 0) & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)):
+            raise PublishError("发布路径及祖先不得为软链、junction 或其他 reparse point")
+
+
+def _write_current_pointer(path: Path, payload: Mapping[str, Any]) -> None:
+    """Windows' sole commit operation: fsynced temporary file + atomic replace."""
+    write_json_atomic(path, {
+        "schema_version": CURRENT_SCHEMA_VERSION, "pointer_backend": "atomic_json", **payload,
+    })
 
 
 @dataclass(frozen=True)
@@ -115,10 +168,12 @@ def load_review(path: str | Path) -> ReviewRecord:
         raise PublishError(
             f"复核结论必须是 {'/'.join(_REVIEW_DECISIONS)} 之一，实际 {decision!r}"
         )
-    scope_raw = payload.get("scope") or []
+    scope_raw = payload.get("scope", [])
     if not isinstance(scope_raw, list):
         raise PublishError("复核文件的 scope 必须是数组")
-    scope = tuple(visible_text(item) for item in scope_raw if visible_text(item))
+    if any(not isinstance(item, str) or not visible_text(item) for item in scope_raw):
+        raise PublishError("复核文件的 scope 每项必须是非空数据类别")
+    scope = tuple(visible_text(item) for item in scope_raw)
     unknown = [
         item
         for item in scope
@@ -126,7 +181,7 @@ def load_review(path: str | Path) -> ReviewRecord:
     ]
     if unknown:
         raise PublishError("复核文件的 scope 含未知数据类别：" + "、".join(unknown))
-    confirmations_raw = payload.get("confirmations") or {}
+    confirmations_raw = payload.get("confirmations", {})
     if not isinstance(confirmations_raw, Mapping):
         raise PublishError("复核文件的 confirmations 必须是对象")
     confirmations: dict[str, bool] = {}
@@ -340,9 +395,34 @@ class PublishResult:
 
 def _verification_for(out_root: Path, snapshot_id: str) -> dict[str, Any] | None:
     path = out_root / "verification" / f"{snapshot_id}.json"
+    require_plain_path(path)
     if not path.is_file():
         return None
-    return read_json(path)
+    report = _read_release_json(path)
+    if (report.get("schema_version") != "p23.query-check.1"
+            or report.get("snapshot_dir") != snapshot_id):
+        raise PublishError("查询验证报告结构版本或快照身份不匹配")
+    checks = report.get("checks")
+    if not isinstance(checks, list) or not checks:
+        raise PublishError("查询验证报告必须包含非空 checks")
+    counts = {"pass": 0, "fail": 0, "skip": 0}
+    ids = set()
+    for check in checks:
+        if (not isinstance(check, dict) or not isinstance(check.get("id"), str)
+                or not check["id"].strip() or check["id"] in ids
+                or not isinstance(check.get("status"), str) or check["status"] not in counts):
+            raise PublishError("查询验证报告的检查身份/状态非法或重复")
+        ids.add(check["id"])
+        counts[check["status"]] += 1
+    declared = report.get("counts")
+    if (not isinstance(declared, dict) or set(declared) != set(counts)
+            or any(type(declared[key]) is not int or declared[key] != counts[key] for key in counts)):
+        raise PublishError("查询验证报告 counts 与实际检查不一致")
+    if (type(report.get("all_passed")) is not bool
+            or report["all_passed"] != (counts["fail"] == 0)
+            or (counts["pass"] == 0 and counts["fail"] == 0)):
+        raise PublishError("查询验证报告 all_passed 必须是与实际检查一致的布尔值")
+    return report
 
 
 _GLOBAL_LOCK = threading.Lock()
@@ -351,44 +431,61 @@ _LOCK_DEPTH: dict[tuple[int, Path], int] = {}
 
 
 @contextmanager
-def _publish_lock(out_root: Path) -> Iterator[None]:
+def _publish_lock(out_root: Path, *, timeout: float | None = 30.0) -> Iterator[None]:
     """跨线程 + 跨进程发布排他锁；同线程重入不自锁。"""
 
+    require_plain_path(out_root / "published" / ".publish.lock")
     key = out_root.resolve()
     ident = threading.get_ident()
+    if timeout is not None and (not math.isfinite(timeout) or timeout < 0):
+        raise ValueError("lock timeout must be finite and nonnegative, or None")
+    deadline = None if timeout is None else time.monotonic() + timeout
     with _GLOBAL_LOCK:
         rlock = _THREAD_LOCKS.setdefault(key, threading.RLock())
-    rlock.acquire()
+    thread_acquired = rlock.acquire() if timeout is None else rlock.acquire(timeout=timeout)
+    if not thread_acquired:
+        raise PublishError("等待发布线程锁超时")
     try:
         with _GLOBAL_LOCK:
             depth = _LOCK_DEPTH.get((ident, key), 0)
-            _LOCK_DEPTH[(ident, key)] = depth + 1
         lock_handle = None
-        if depth == 0:
-            published_dir = out_root / "published"
-            published_dir.mkdir(parents=True, exist_ok=True)
-            lock_path = published_dir / ".publish.lock"
-            lock_handle = lock_path.open("a+", encoding="utf-8")
-            fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX)
+        acquired = False
         try:
+            if depth == 0:
+                published_dir = out_root / "published"
+                published_dir.mkdir(parents=True, exist_ok=True)
+                lock_path = published_dir / ".publish.lock"
+                lock_handle = lock_path.open("a+b")
+                try:
+                    remaining = None if deadline is None else max(0.0, deadline - time.monotonic())
+                    acquire_exclusive(lock_handle.fileno(), timeout=remaining)
+                except (OSError, TimeoutError) as exc:
+                    raise PublishError("获取发布文件锁失败或超时") from exc
+                acquired = True
+            with _GLOBAL_LOCK:
+                _LOCK_DEPTH[(ident, key)] = depth + 1
             yield
         finally:
-            if lock_handle is not None:
-                try:
-                    fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
-                finally:
-                    lock_handle.close()
-            with _GLOBAL_LOCK:
-                remaining = _LOCK_DEPTH.get((ident, key), 1) - 1
-                if remaining <= 0:
-                    _LOCK_DEPTH.pop((ident, key), None)
-                else:
-                    _LOCK_DEPTH[(ident, key)] = remaining
+            try:
+                if lock_handle is not None:
+                    try:
+                        if acquired:
+                            release_exclusive(lock_handle.fileno())
+                    finally:
+                        lock_handle.close()
+            finally:
+                with _GLOBAL_LOCK:
+                    remaining = _LOCK_DEPTH.get((ident, key), 1) - 1
+                    if remaining <= 0:
+                        _LOCK_DEPTH.pop((ident, key), None)
+                    else:
+                        _LOCK_DEPTH[(ident, key)] = remaining
     finally:
         rlock.release()
 
 
 def _read_release_json(path: Path) -> dict[str, Any]:
+    require_plain_path(path)
     try:
         payload = read_json(path)
     except (OSError, ValueError, UnicodeError) as exc:
@@ -427,6 +524,9 @@ def _release_metadata(release_dir: Path, *, require_pointer: bool = False) -> di
 def _validate_activation_target(release_dir: Path) -> dict[str, Any]:
     """提交前校验完整发布物；不得把损坏版本通过 activate 绕过发布门。"""
 
+    require_plain_path(release_dir)
+    if _is_link(release_dir):
+        raise PublishError("release 目录不得为软链或 junction")
     release = _release_metadata(release_dir)
     if release.get("dataset_kind") != DatasetKind.REAL.value:
         raise PublishError("激活目标必须是真实数据发布")
@@ -464,6 +564,8 @@ def _validate_activation_target(release_dir: Path) -> dict[str, Any]:
                 raise PublishError(f"发布数据文件不可读：{name}（{exc}）") from exc
         except OSError as exc:
             raise PublishError(f"发布数据文件不可读：{name}") from exc
+        if payload.get("schema_version") != _DATASET_SCHEMAS[dataset]:
+            raise PublishError(f"发布数据 schema_version 不受支持：{name}")
         dataset_meta = payload.get("dataset")
         if not isinstance(dataset_meta, dict) or dataset_meta.get("synthetic") is not False:
             raise PublishError(f"发布数据性质与真实批次不匹配：{name}")
@@ -507,14 +609,14 @@ def _activation_result_requires_repair(result_file: Path) -> bool:
     return not isinstance(result_payload, Mapping) or result_payload.get("status") != "failed"
 
 
-def _has_prior_activation(out_root: Path) -> bool:
+def _has_prior_activation(out_root: Path, *, published_dir: Path | None = None) -> bool:
     """判断发布目录是否曾发生过激活（或存在遗留/未确认的激活指针）。
 
     若仅以 ``--no-activate`` 生成过 release 且从未激活过任何版本，
     ``current`` 按设计为空，不应把这种情况误判成“指针丢失或损坏”。
     """
 
-    published_dir = out_root / "published"
+    published_dir = published_dir if published_dir is not None else out_root / "published"
     pointer = published_dir / "current.json"
     if pointer.exists() or pointer.is_symlink():
         return True
@@ -554,11 +656,15 @@ def _has_prior_activation(out_root: Path) -> bool:
     return False
 
 
-def _active_release_id(out_root: Path) -> str | None:
+def _active_release_id(out_root: Path, *, published_dir: Path | None = None) -> str | None:
     """只解析一次 current，随后只读固定 release 目录，不再穿过 current.json。"""
 
-    link = out_root / "published" / "current"
-    pointer = out_root / "published" / "current.json"
+    require_plain_path(published_dir if published_dir is not None else out_root / "published")
+    if POINTER_BACKEND == "atomic_json":
+        return _active_json_release_id(out_root, published_dir=published_dir)
+    published_dir = published_dir if published_dir is not None else out_root / "published"
+    link = published_dir / "current"
+    pointer = published_dir / "current.json"
     try:
         target = os.readlink(link)
     except FileNotFoundError:
@@ -573,7 +679,7 @@ def _active_release_id(out_root: Path) -> str | None:
                 )
             if pointer.is_symlink() and os.readlink(pointer) != os.path.join("current", ".current.json"):
                 raise PublishError("current.json 的派生软链目标不合法；可用 activate 修复")
-            if pointer.is_symlink() or _has_prior_activation(out_root):
+            if pointer.is_symlink() or _has_prior_activation(out_root, published_dir=published_dir):
                 import time
 
                 for _ in range(5):
@@ -598,7 +704,7 @@ def _active_release_id(out_root: Path) -> str | None:
     release_id = Path(target).name
     if not _RELEASE_ID.fullmatch(release_id) or target != os.path.join("releases", release_id):
         raise PublishError("current 的发布目录目标不合法")
-    release_dir = out_root / "published" / "releases" / release_id
+    release_dir = published_dir / "releases" / release_id
     _release_metadata(release_dir, require_pointer=True)
     # current.json 只是兼容派生路径。首次发布时它可能尚未创建（读取与发布切换重叠），
     # 不能因此把已经可解析的 current 误报成“指针损坏”。它若存在，则必须是正确软链；
@@ -616,12 +722,62 @@ def _active_release_id(out_root: Path) -> str | None:
     return release_id
 
 
+def _active_json_release_id(out_root: Path, *, published_dir: Path | None = None) -> str | None:
+    """Windows: read one atomic pointer, then validate only its pinned release."""
+    published = published_dir if published_dir is not None else out_root / "published"
+    legacy = published / "current"
+    pointer = published / "current.json"
+    if legacy.exists() or _is_link(legacy):
+        raise PublishError("Windows current 旧软链/目录布局不受支持；请显式迁移后 activate")
+    if _is_link(pointer):
+        raise PublishError("Windows current.json 必须是普通原子指针文件；请 activate 修复")
+    if not pointer.exists():
+        return None
+    meta = _read_release_json(pointer)
+    if (meta.get("schema_version") != CURRENT_SCHEMA_VERSION
+            or meta.get("pointer_backend") != "atomic_json"):
+        raise PublishError("Legacy current.json 缺少原子指针版本；请 activate 显式修复")
+    release_id = meta.get("release_id")
+    if not isinstance(release_id, str) or not _RELEASE_ID.fullmatch(release_id):
+        raise PublishError("current.json 的 release_id 不合法")
+    release_dir = published / "releases" / release_id
+    try:
+        release = _validate_activation_target(release_dir)
+        _release_metadata(release_dir, require_pointer=True)
+    except PublishError as exc:
+        raise PublishError(f"当前已发布版本（{release_id}）损坏：{exc}；请 activate 恢复") from exc
+    for field_name in ("release_id", "release_fingerprint", "business_fingerprint", "review_status"):
+        if meta.get(field_name) != release.get(field_name):
+            raise PublishError(f"current.json 的 {field_name} 与发布元数据不匹配")
+    return release_id
+
+
 def _current_release_dir(out_root: Path) -> Path | None:
     release_id = _active_release_id(out_root)
     if not release_id:
         return None
     release_dir = out_root / "published" / "releases" / release_id
     return release_dir if release_dir.is_dir() else None
+
+
+def current_release_dir(out_root: str | Path) -> Path:
+    """Pin the active release once and validate its complete published contents.
+
+    Consumers must read returned immutable paths, not construct ``current/file``;
+    Windows intentionally exposes only a versioned atomic ``current.json``.
+    """
+    return published_release_dir(Path(out_root) / "published")
+
+
+def published_release_dir(published_dir: str | Path) -> Path:
+    """Pin exactly the configured published directory; never search sibling roots."""
+    published = Path(published_dir)
+    release_id = _active_release_id(published.parent, published_dir=published)
+    if release_id is None:
+        raise PublishError("还没有可读取的 current 发布指针")
+    release_dir = published / "releases" / release_id
+    _validate_activation_target(release_dir)
+    return release_dir
 
 
 def _previous_for_publish(out_root: Path) -> Path | None:
@@ -754,7 +910,7 @@ def publish_release(request: PublishRequest) -> PublishResult:
         raise PublishError(
             f"没有 {snapshot_id} 的查询验证报告：先跑 verify，未验证的快照不能发布"
         )
-    if not verification.get("all_passed", False):
+    if verification["all_passed"] is not True:
         failed = [
             item["id"] for item in verification.get("checks", []) if item["status"] == "fail"
         ]
@@ -792,6 +948,7 @@ def publish_release(request: PublishRequest) -> PublishResult:
     review_tag = "reviewed" if review is not None else "unreviewed"
     release_id = f"rel-{snapshot_id.split('-')[-1]}-{suffix}"
     releases_dir = out_root / "published" / "releases"
+    require_plain_path(releases_dir)
     release_dir = releases_dir / release_id
     temp_dir = releases_dir / f".tmp-{release_id}-{os.getpid()}-{uuid.uuid4().hex[:8]}"
     if temp_dir.exists():
@@ -923,7 +1080,7 @@ def _restore_symlink(link: Path, old_target: str | None) -> None:
         os.symlink(old_target, link)
 
 
-def _restore_file_bytes(path: Path, old_bytes: bytes | None) -> None:
+def _restore_file_bytes(path: Path, old_bytes: bytes | None, *, atomic_only: bool = False) -> None:
     for leftover in path.parent.glob(f".{path.name}.tmp-*"):
         leftover.unlink(missing_ok=True)
     if old_bytes is None:
@@ -934,10 +1091,15 @@ def _restore_file_bytes(path: Path, old_bytes: bytes | None) -> None:
         return
     restore_temp = path.with_name(f".{path.name}.restore-{os.getpid()}-{uuid.uuid4().hex[:8]}")
     try:
-        restore_temp.write_bytes(old_bytes)
+        with restore_temp.open("wb") as handle:
+            handle.write(old_bytes)
+            handle.flush()
+            os.fsync(handle.fileno())
         os.replace(restore_temp, path)
     except OSError:
         restore_temp.unlink(missing_ok=True)
+        if atomic_only:
+            raise
         path.write_bytes(old_bytes)
 
 
@@ -955,8 +1117,18 @@ def _activate(
         release = _validate_activation_target(release_dir)
         published_dir = out_root / "published"
         published_dir.mkdir(parents=True, exist_ok=True)
+        guarded_paths = [published_dir / "activations", published_dir / "activation-results"]
+        if POINTER_BACKEND == "atomic_json":
+            guarded_paths.append(published_dir / "current.json")
+        for guarded in guarded_paths:
+            require_plain_path(guarded)
         pointer = published_dir / "current.json"
         link = published_dir / "current"
+        if POINTER_BACKEND == "atomic_json":
+            if link.exists() or _is_link(link):
+                raise PublishError("Windows current 旧软链/目录布局不受支持；请显式迁移后 activate")
+            if _is_link(pointer) or (pointer.exists() and not pointer.is_file()):
+                raise PublishError("Windows current.json 必须是普通文件，拒绝跟随链接")
         release_pointer = release_dir / ".current.json"
         temp_link = published_dir / f".current-{os.getpid()}-{uuid.uuid4().hex[:8]}"
         temp_pointer_link = published_dir / f".current-json-{os.getpid()}-{uuid.uuid4().hex[:8]}"
@@ -985,7 +1157,21 @@ def _activate(
         previous_source = "current"
         previous_note = ""
         if operation == "activate":
-            if link.is_symlink():
+            if POINTER_BACKEND == "atomic_json":
+                previous = None
+                if pointer.is_file():
+                    try:
+                        previous_meta = _read_release_json(pointer)
+                        previous_id = visible_text(previous_meta.get("release_id"))
+                        if _RELEASE_ID.fullmatch(previous_id) and (releases_dir / previous_id).is_dir():
+                            previous = releases_dir / previous_id
+                            previous_source = ("current.json" if previous_meta.get("schema_version")
+                                               == CURRENT_SCHEMA_VERSION else "legacy_current_json")
+                        else:
+                            previous_note = "current.json 缺少存在的合法 release_id"
+                    except PublishError as exc:
+                        previous_note = f"current.json 不可读：{exc}"
+            elif link.is_symlink():
                 previous_id = Path(os.readlink(link)).name
                 previous = releases_dir / previous_id
             else:
@@ -1013,7 +1199,7 @@ def _activate(
                     previous_note = "current 软链缺失，按无前驱处理"
         else:
             previous = _current_release_dir(out_root)
-            previous_source = "current"
+            previous_source = "current.json" if POINTER_BACKEND == "atomic_json" else "current"
         diff_status = "computed"
         diff_error = ""
         if content_diff is None:
@@ -1070,18 +1256,25 @@ def _activate(
             # 已存在 release 中的元数据也不可改写：激活时刻属于事件，不属于 release。
             if not release_pointer.is_file():
                 write_json_atomic(release_pointer, pointer_payload)
+            if POINTER_BACKEND == "atomic_json":
+                # Windows has one ordinary-file commit point; immutable release paths
+                # replace POSIX's derived current/ and current.json symlink paths.
+                _activation_checkpoint("prepared")
+                _write_current_pointer(pointer, pointer_payload)
             # 2. 确保 published/current.json 是指向 current/.current.json 的派生软链。
-            if not (old_pointer_is_symlink and old_pointer_link_target == pointer_rel_target):
+            elif not (old_pointer_is_symlink and old_pointer_link_target == pointer_rel_target):
                 if temp_pointer_link.exists() or temp_pointer_link.is_symlink():
                     temp_pointer_link.unlink(missing_ok=True)
                 os.symlink(pointer_rel_target, temp_pointer_link)
                 os.replace(temp_pointer_link, pointer)
             # 3. 单一权威提交点：原子替换 published/current → releases/<release_id>。
             #    切换瞬间 current 与 current.json 同步指向新版本，不存在双版本窗口。
-            if temp_link.exists() or temp_link.is_symlink():
-                temp_link.unlink(missing_ok=True)
-            os.symlink(os.path.join("releases", release_id), temp_link)
-            os.replace(temp_link, link)
+            if POINTER_BACKEND != "atomic_json":
+                if temp_link.exists() or temp_link.is_symlink():
+                    temp_link.unlink(missing_ok=True)
+                os.symlink(os.path.join("releases", release_id), temp_link)
+                _activation_checkpoint("prepared")
+                os.replace(temp_link, link)
         except BaseException as exc:
             temp_link.unlink(missing_ok=True)
             temp_pointer_link.unlink(missing_ok=True)
@@ -1092,7 +1285,8 @@ def _activate(
             elif old_pointer_bytes is not None:
                 if pointer.is_symlink():
                     pointer.unlink(missing_ok=True)
-                _restore_file_bytes(pointer, old_pointer_bytes)
+                _restore_file_bytes(pointer, old_pointer_bytes,
+                                    atomic_only=POINTER_BACKEND == "atomic_json")
             elif old_link_target is None:
                 pointer.unlink(missing_ok=True)
             try:
@@ -1113,6 +1307,9 @@ def _activate(
             "status": "committed", "finished_at": utc_now(),
         }
         try:
+            # The pointer has committed. Failures from this point must never
+            # restore a version that readers may already have observed.
+            _activation_checkpoint("committed")
             write_json_atomic(
                 published_dir / "activation-results" / f"{event_id}.json", activation_result,
             )
@@ -1179,8 +1376,10 @@ def dataset_paths(out_root: str | Path, *, release_id: str | None = None) -> dic
         release_id = _active_release_id(root)
         if not release_id:
             raise PublishError("还没有发布任何 release：先 publish")
+    if not _RELEASE_ID.fullmatch(release_id):
+        raise PublishError("release_id 形态不合法")
     release_dir = root / "published" / "releases" / release_id
-    release = read_json(release_dir / "release.json")
+    release = _validate_activation_target(release_dir)
     return {
         name: str(release_dir / info["file"])
         for name, info in (release.get("files") or {}).items()
@@ -1193,6 +1392,9 @@ __all__ = [
     "PublishResult",
     "ReviewRecord",
     "activate_release",
+    "current_release_dir",
+    "published_release_dir",
+    "require_plain_path",
     "dataset_paths",
     "diff_snapshots",
     "list_releases",

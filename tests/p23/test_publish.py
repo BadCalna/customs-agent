@@ -77,6 +77,23 @@ class PublishGateTest(P23TestCase):
         self.assertIn("验证未通过", message)
         self.assertIn("p14.tariff.leading_zero_hit", message, "必须列出失败的检查 id")
 
+    def test_verification_shape_cannot_upgrade_failed_checks(self):
+        path = self.out_root / "verification" / f"{self.snapshot_id}.json"
+        original = json.loads(path.read_text(encoding="utf-8"))
+        variants = (
+            {"schema_version": "unknown.query-check.999"}, {"snapshot_dir": "another-snapshot"},
+            {"all_passed": "false"}, {"all_passed": 1}, {"checks": []},
+            {"counts": {"pass": 1, "fail": False, "skip": 0}},
+            {"checks": [{"id": "actually-failed", "status": "fail"}],
+             "counts": {"pass": 0, "fail": 1, "skip": 0}, "all_passed": True},
+        )
+        for overrides in variants:
+            with self.subTest(overrides=overrides):
+                path.write_text(json.dumps({**original, **overrides}), encoding="utf-8")
+                with self.assertRaises(PublishError):
+                    self.publish()
+                self.assertFalse((self.out_root / "published").exists())
+
     # --- 复核文件门
     def test_rejected_without_reviewed_by(self):
         path = self.review(reviewed_by="", name="no-reviewer.json")
@@ -117,6 +134,19 @@ class PublishGateTest(P23TestCase):
             self.publish(review_path=path)
         self.assertIn("scope", str(caught.exception))
         self.assertIn("p13_unknown", str(caught.exception))
+
+    def test_falsey_review_container_types_are_rejected(self):
+        for field in ("scope", "confirmations"):
+            for value in (False, 0, "", None, [""] if field == "scope" else []):
+                with self.subTest(field=field, value=value):
+                    path = self.review(name="invalid-review.json")
+                    payload = json.loads(path.read_text(encoding="utf-8"))
+                    payload[field] = value
+                    path.write_text(json.dumps(payload), encoding="utf-8")
+                    with self.assertRaises(PublishError) as caught:
+                        self.publish(review_path=path)
+                    self.assertIn(field, str(caught.exception))
+                    self.assertFalse((self.out_root / "published").exists())
 
     # --- 成功路径
     def test_publish_with_review_uses_reviewer_from_file(self):
@@ -223,9 +253,7 @@ class PublishGateTest(P23TestCase):
             (self.out_root / "published" / "current.json").read_text(encoding="utf-8")
         )
         self.assertEqual(current["release_id"], first.release_id)
-        link = self.out_root / "published" / "current"
-        self.assertTrue(link.is_symlink())
-        self.assertEqual(link.resolve(), (self.out_root / "published" / "releases" / first.release_id).resolve())
+        self.assert_current_layout(self.out_root, first)
         self.assertTrue((first.release_dir / "release.json").is_file())
         self.assertTrue((second_release.release_dir / "release.json").is_file())
 

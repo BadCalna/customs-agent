@@ -17,6 +17,7 @@ from adapters.sources.history_import import (
     _business_fingerprint, _enforce_stored_hs_review,
     _merge_consolidated_records, _merge_dataset_metadata, _merge_records,
 )
+from adapters.sources.history_publish import resolve_history_file
 from adapters.sources.history_search import (
     SCHEMA_VERSION, HistoryStoreError, _blocking_issue_codes, _needs_review,
     _snapshot_from_payload,
@@ -140,7 +141,9 @@ def import_history_snapshot(path, dataset_key, replace_changed=False, expected_c
     if vendor != "postgresql" and not (allow_sqlite and vendor == "sqlite"):
         raise HistoryImportError("历史数据库导入仅允许 PostgreSQL；SQLite 仅限显式测试")
     try:
-        data = Path(path).read_bytes()
+        # Pin one generation before reading. Parse and fingerprint those same
+        # bytes; Windows legacy flat files may intentionally retain old data.
+        data = resolve_history_file(Path(path)).read_bytes()
         payload = json.loads(data)
     except (OSError, ValueError, UnicodeError) as exc:
         raise HistoryImportError(f"输入快照不可读（{type(exc).__name__}）") from exc

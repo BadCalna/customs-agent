@@ -1,6 +1,9 @@
 """P05 存储配置：settings 落地、环境变量覆盖与解析失败明确报错。"""
 
+import json
 import os
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -15,13 +18,35 @@ from config.settings import byte_setting, path_setting
 class StorageSettingTests(unittest.TestCase):
     def test_settings_expose_storage_root_and_limits(self):
         self.assertIsInstance(settings.CUSTOMS_FILE_ROOT, Path)
-        self.assertEqual(
-            settings.CUSTOMS_FILE_ROOT,
-            Path(settings.BASE_DIR) / ".local" / "files",
+        # Test defaults independently of a caller's explicit storage/limit overrides.
+        # Import settings only: do not connect to a database or read the checkout's .env.
+        env = {key: value for key, value in os.environ.items()
+               if not key.startswith(("CUSTOMS_", "DJANGO_"))}
+        env.update(PYTHON_DOTENV_DISABLED="1", DJANGO_SECRET_KEY="p05-default-settings-test-only")
+        script = """
+import json
+from config import settings
+print(json.dumps({
+    "file_root": str(settings.CUSTOMS_FILE_ROOT),
+    "file_max_bytes": settings.CUSTOMS_FILE_MAX_BYTES,
+    "image_max_bytes": settings.CUSTOMS_IMAGE_MAX_BYTES,
+    "file_read_max_bytes": settings.CUSTOMS_FILE_READ_MAX_BYTES,
+}))
+"""
+        proc = subprocess.run(
+            [sys.executable, "-c", script], cwd=settings.BASE_DIR, env=env,
+            capture_output=True, text=True, encoding="utf-8", check=False,
         )
-        self.assertEqual(settings.CUSTOMS_FILE_MAX_BYTES, 100 * 1024 * 1024)
-        self.assertEqual(settings.CUSTOMS_IMAGE_MAX_BYTES, 20 * 1024 * 1024)
-        self.assertEqual(settings.CUSTOMS_FILE_READ_MAX_BYTES, 200 * 1024 * 1024)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(
+            json.loads(proc.stdout),
+            {
+                "file_root": str(Path(settings.BASE_DIR) / ".local" / "files"),
+                "file_max_bytes": 100 * 1024 * 1024,
+                "image_max_bytes": 20 * 1024 * 1024,
+                "file_read_max_bytes": 200 * 1024 * 1024,
+            },
+        )
 
     def test_byte_setting_accepts_env_override_and_default(self):
         with patch.dict(os.environ, {"CUSTOMS_FILE_MAX_BYTES": "2048"}):

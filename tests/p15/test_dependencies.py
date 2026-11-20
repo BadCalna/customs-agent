@@ -17,6 +17,8 @@ MODULE_PATHS = (
     BASE_DIR / "adapters" / "sources" / "history_import.py",
     BASE_DIR / "adapters" / "sources" / "history_consolidated.py",
     BASE_DIR / "adapters" / "sources" / "history_publish.py",
+    BASE_DIR / "adapters" / "sources" / "history_windows.py",
+    BASE_DIR / "adapters" / "files" / "process_lock.py",
 )
 
 #: history_search.py 的允许清单（保持严格：不因导入模块而放松）。
@@ -36,6 +38,7 @@ SEARCH_ALLOWED_TOP_LEVEL = {
     "pydantic",
     "django",  # 显式存储选择仅延迟读取settings，默认JSON行为保留。
     "apps",
+    "adapters",  # 本地发布指针 resolver；其平台实现也在本测试中检查。
 }
 
 #: history_import.py 的允许清单（标准库 + 本项目包 + Django 延迟配置）。
@@ -70,7 +73,13 @@ MODULE_ALLOWED = {
     BASE_DIR / "adapters" / "sources" / "history_consolidated.py": CONSOLIDATED_ALLOWED_TOP_LEVEL,
     BASE_DIR / "adapters" / "sources" / "history_publish.py": {
         "__future__", "os", "shutil", "stat", "time", "uuid", "contextlib", "hashlib",
-        "pathlib", "typing", "fcntl", "msvcrt",
+        "pathlib", "typing", "adapters",
+    },
+    BASE_DIR / "adapters" / "sources" / "history_windows.py": {
+        "__future__", "hashlib", "json", "os", "pathlib", "re", "stat", "adapters",
+    },
+    BASE_DIR / "adapters" / "files" / "process_lock.py": {
+        "__future__", "errno", "math", "os", "time", "fcntl", "msvcrt",
     },
 }
 

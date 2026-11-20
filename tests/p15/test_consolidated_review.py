@@ -1,6 +1,7 @@
 """Independent-review reproductions: no real business contents in fixtures."""
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import tempfile
@@ -12,9 +13,11 @@ from django.test import SimpleTestCase
 from adapters.files.ooxml import Workbook
 from adapters.sources.history_consolidated import ConsolidatedFormatError, detect_workbook_format
 from adapters.sources.history_import import import_history_templates, main
+from adapters.sources.history_publish import pin_history_output, resolve_history_file
 from tests.p04.fixtures import Package, png
 from tests.p15.consolidated_fixtures import BASE_ROW, CONSOLIDATED_HEADERS, build_consolidated_workbook
 from tests.p15.test_consolidated_import import _request, _records
+from tests.platform_files import create_directory_link
 
 
 class ReviewRegressions(SimpleTestCase):
@@ -51,7 +54,9 @@ class ReviewRegressions(SimpleTestCase):
                 status = main(["import", "--files", str(p), "--input-format", "auto",
                                "--mapping", str(mapping), "--dataset-kind", "synthetic", "--skip-validation"])
                 self.assertEqual(status, 0)
-                self.assertEqual(len(list(tmp.glob("data/private/p15-import/*/history_records.json"))), 1)
+                outputs = [d for d in tmp.glob("data/private/p15-import/*") if d.is_dir()]
+                self.assertEqual(len(outputs), 1)
+                self.assertTrue(resolve_history_file(outputs[0] / "history_records.json").is_file())
             finally:
                 os.chdir(previous)
 
@@ -141,13 +146,21 @@ class ReviewRegressions(SimpleTestCase):
             root = tmp / "images"
             root.mkdir()
             (root / "bad.png").write_bytes(b"not an image")
-            (tmp / "outside.png").write_bytes(png())
-            (root / "escape.png").symlink_to(tmp / "outside.png")
+            outside = tmp / "outside"
+            outside.mkdir()
+            (outside / "escape.png").write_bytes(png())
+            if os.name == "nt":
+                create_directory_link(root / "redirect", outside)
+                escaped = "redirect/escape.png"
+            else:
+                (root / "escape.png").symlink_to(outside / "escape.png")
+                escaped = "escape.png"
             p = build_consolidated_workbook(tmp / "in.xlsx", headers=CONSOLIDATED_HEADERS + ("图片路径",), rows=[
-                dict(BASE_ROW, image="bad.png"), dict(BASE_ROW, image="escape.png", declaration_no="SYN-2")])
+                dict(BASE_ROW, image="bad.png"), dict(BASE_ROW, image=escaped, declaration_no="SYN-2")])
             out = import_history_templates(_request(tmp, [p], image_root=root))
             statuses = [r["attributes"]["image_status"] for r in _records(out)]
             self.assertEqual(statuses, ["read_failed", "external_path_unsafe"])
+            self.assertEqual((outside / "escape.png").read_bytes(), png())
 
     def test_image_text_is_not_misclassified_as_external_path(self):
         with tempfile.TemporaryDirectory() as raw:
@@ -283,8 +296,17 @@ class ReviewRegressions(SimpleTestCase):
             tmp = Path(raw)
             p = build_consolidated_workbook(tmp / "in.xlsx")
             out = import_history_templates(_request(tmp, [p]))
-            old_generation = (out.out_dir / ".current").resolve()
+            old_generation = pin_history_output(out.out_dir)
             before = {f.name: f.read_bytes() for f in old_generation.iterdir() if f.is_file()}
             validate_history_queries(out.records_path, out_dir=out.out_dir)
-            self.assertNotEqual((out.out_dir / ".current").resolve(), old_generation)
+            new_generation = pin_history_output(out.out_dir)
+            self.assertNotEqual(new_generation, old_generation)
             self.assertEqual(before, {f.name: f.read_bytes() for f in old_generation.iterdir() if f.is_file()})
+            if os.name == "nt":
+                pointer = json.loads((out.out_dir / ".current.json").read_bytes())
+                self.assertEqual(pointer["schema"], "p15.current.1")
+                self.assertEqual(out.out_dir / ".snapshots" / pointer["generation"], new_generation)
+                self.assertEqual(pointer["files"], {
+                    f.name: hashlib.sha256(f.read_bytes()).hexdigest()
+                    for f in new_generation.iterdir() if f.is_file()
+                })

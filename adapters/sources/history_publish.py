@@ -4,7 +4,7 @@
 还能回滚，但进程被 ``SIGKILL`` 时可能停在"记录已换、报告未换"的中间态，留下
 撕裂输出。本模块用一次 generation 快照切换来消除该窗口：
 
-布局::
+POSIX 布局（保留稳定 symlink）::
 
     out_dir/
       history_records.json      -> .current/history_records.json   （稳定 symlink）
@@ -43,8 +43,11 @@
 但尚未提交的临时 generation/temp symlink 会在失败回滚时删除，崩溃遗留的
 ``.tmp-*`` 会在下一次发布取到锁后清扫。
 
-文件系统/权限不支持 symlink 时抛 :class:`PublishError` 并保留旧输出，不会退化成
-逐个 ``os.replace`` 的非原子发布。发布期间用 ``fcntl``/``msvcrt`` 文件锁串行化
+Windows 不要求 symlink 权限：使用 ``.current.json``（``p15.current.1``）记录
+generation 和完整文件 SHA256，以一次 ``os.replace`` 提交。旧平面文件原样保留，
+首次发布先固定 legacy 快照；真实读者通过 ``resolve_history_file`` 或
+``pin_history_output`` 读取不可变 generation，损坏指针/摘要不得回退旧文件。
+两种平台都不逐个覆盖当前输出。发布期间用 ``fcntl``/``msvcrt`` 文件锁串行化
 并发发布；提交本身不依赖锁，读者无需加锁。
 
 集成方式（调用方 ``adapters/sources/history_import.py`` 的薄包装）::
@@ -53,19 +56,18 @@
 
     def _publish_staging(staging, out_dir, files):
         try:
-            publish_staging(staging, out_dir, files)
+            return publish_staging(staging, out_dir, files)
         except PublishError as exc:
             raise ImportIncompleteError(f"发布输出失败，旧输出未改动：{exc}") from exc
 
 限制与约定：
 
-- 需要 symlink 支持（``.current`` 与顶层稳定链接都是 symlink）。不支持时明确
-  报错并保留旧输出，不会降级成逐文件覆盖。云同步目录（如 OneDrive）可能不
-  同步 symlink，正式输出建议放本地文件系统。
+- POSIX 需要 symlink 支持；Windows 使用独立 JSON 指针布局，两种指针不能混用。
+  Windows CLI 返回本次提交的快照路径；顶层旧平面文件不再代表最新版本。
 - 一个读者如果先 open ``history_records.json``、等提交发生后再 open
   ``import_report.json``，两次 open 会分别解析 ``.current``，可能跨 generation。
-  需要多文件一致性的读者应先解析一次 ``(out_dir / ".current").resolve()``，
-  再从该 generation 目录读取；已经打开的文件描述符不受切换影响。
+  需要多文件一致性的读者应先调用一次 ``pin_history_output(out_dir)``，再从返回
+  的 generation 目录读取；已经打开的文件描述符不受切换影响。
 - 测试故障注入：设置模块级 ``_FAULT_INJECTION_HOOK = fn``，发布过程会在
   ``images-before``/``images-after``/``legacy-ready``/``legacy-current-set``/
   ``legacy-replace-<i>``/``generation-ready``/``link-created-<i>``/
@@ -85,10 +87,11 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Callable, Iterator, Sequence
 
-__all__ = ["PublishError", "publish_staging"]
+__all__ = ["PublishError", "publish_staging", "pin_history_output", "resolve_history_file"]
 
 # 顶层稳定链接名与隐藏目录名。这些名字不允许出现在待发布文件相对路径中。
 CURRENT_LINK_NAME = ".current"
+CURRENT_POINTER_NAME = ".current.json"
 SNAPSHOTS_DIR_NAME = ".snapshots"
 IMAGES_DIR_NAME = "images"
 LOCK_FILE_NAME = ".publish.lock"
@@ -123,36 +126,19 @@ def _checkpoint(stage: str) -> None:
 
 
 # --------------------------------------------------------------------------- 平台锁
-if os.name == "nt":  # pragma: no cover - Windows 分支在 macOS/Linux 上不执行
-    import msvcrt
+from adapters.files.process_lock import acquire_exclusive, release_exclusive
 
-    _LOCK_AVAILABLE = True
-
-    def _acquire_lock(fd: int) -> None:
-        os.lseek(fd, 0, os.SEEK_SET)
-        msvcrt.locking(fd, msvcrt.LK_LOCK, 1)
-
-    def _release_lock(fd: int) -> None:
-        os.lseek(fd, 0, os.SEEK_SET)
-        msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
-
-else:
-    try:
-        import fcntl
-    except ImportError:  # pragma: no cover - 理论上的非 POSIX 平台
-        fcntl = None  # type: ignore[assignment]
-        _LOCK_AVAILABLE = False
-    else:
-        _LOCK_AVAILABLE = True
-
-    def _acquire_lock(fd: int) -> None:
-        fcntl.flock(fd, fcntl.LOCK_EX)
-
-    def _release_lock(fd: int) -> None:
-        fcntl.flock(fd, fcntl.LOCK_UN)
+_LOCK_AVAILABLE = True
 
 
-# --------------------------------------------------------------------------- 基础工具
+def _acquire_lock(fd: int) -> None:
+    acquire_exclusive(fd, timeout=30.0)
+
+
+def _release_lock(fd: int) -> None:
+    release_exclusive(fd)
+
+
 def _absolute(path: Path | str) -> Path:
     """规范化成绝对路径，但保留调用方给定的 symlink 语义（不 realpath）。"""
 
@@ -211,6 +197,11 @@ def _files_equal(first: Path, second: Path) -> bool:
         return False
 
 
+def _is_redirect(info: os.stat_result) -> bool:
+    """NTFS junctions are reparse points, even though S_ISLNK is false."""
+    return stat.S_ISLNK(info.st_mode) or bool(getattr(info, "st_file_attributes", 0) & 0x400)
+
+
 def _is_within(child: Path, root: Path) -> bool:
     try:
         return os.path.commonpath([os.fspath(child), os.fspath(root)]) == os.fspath(root)
@@ -263,7 +254,7 @@ def _collect_files(
             continue
         except OSError as exc:
             raise PublishError(f"无法读取待发布文件 {staged}: {exc}") from exc
-        if stat.S_ISLNK(info.st_mode):
+        if _is_redirect(info):
             raise PublishError(f"待发布文件是符号链接，拒绝跟随：{staged}")
         if not stat.S_ISREG(info.st_mode):
             continue
@@ -274,6 +265,11 @@ def _collect_files(
                 f"待发布文件不在暂存目录 {staging_abs} 内：{staged}"
             ) from exc
         rel = _validated_rel(rel, origin=str(staged))
+        ancestor = staging_abs
+        for part in rel.parts[:-1]:
+            ancestor /= part
+            if _is_redirect(ancestor.lstat()):
+                raise PublishError(f"待发布文件位于符号链接/reparse 目录，拒绝跟随：{staged}")
         if rel.parts[0] == IMAGES_DIR_NAME:
             if len(rel.parts) < 2:
                 raise PublishError(f"图片路径缺少文件名：{rel}")
@@ -305,7 +301,7 @@ def _ensure_real_dir(out_dir: Path, parts: Sequence[str]) -> Path:
                 info = os.lstat(current)
             except OSError as exc:
                 raise PublishError(f"无法创建输出目录 {current}: {exc}") from exc
-        if stat.S_ISLNK(info.st_mode):
+        if _is_redirect(info):
             raise PublishError(
                 f"输出路径 {current} 是符号链接，拒绝跟随（避免写出输出目录）"
             )
@@ -323,6 +319,8 @@ def _ensure_snapshots_dir(out_dir: Path) -> Path:
 
 
 def _open_lock_file(path: Path) -> int:
+    if os.path.lexists(path) and _is_redirect(path.lstat()):
+        raise PublishError("发布锁是符号链接/reparse，拒绝跟随")
     flags = os.O_RDWR | os.O_CREAT
     if hasattr(os, "O_NOFOLLOW"):
         flags |= os.O_NOFOLLOW
@@ -332,7 +330,9 @@ def _open_lock_file(path: Path) -> int:
         raise PublishError(f"无法打开发布锁 {path}: {exc}") from exc
     try:
         info = os.fstat(fd)
-        if not stat.S_ISREG(info.st_mode):
+        current = path.lstat()
+        if (_is_redirect(current) or not stat.S_ISREG(info.st_mode)
+                or (info.st_dev, info.st_ino) != (current.st_dev, current.st_ino)):
             raise PublishError(f"发布锁 {path} 不是普通文件")
     except Exception:
         os.close(fd)
@@ -393,7 +393,7 @@ def _sweep_stale_temps(out_dir: Path) -> None:
             _unlink_quietly(Path(entry.path))
     images_dir = out_dir / IMAGES_DIR_NAME
     try:
-        if images_dir.is_dir() and not images_dir.is_symlink():
+        if images_dir.is_dir() and not _is_redirect(images_dir.lstat()):
             for entry in _scandir_entries(images_dir):
                 if entry.name.startswith(".") and ".tmp-" in entry.name:
                     _unlink_quietly(Path(entry.path))
@@ -488,6 +488,9 @@ def _publish_images(out_dir: Path, images: dict[Path, Path]) -> None:
 def _read_current(out_dir: Path) -> Path | None:
     """读取并校验 ``.current``；返回对应 generation 目录。"""
 
+    if os.name == "nt":
+        from adapters.sources.history_windows import read_current
+        return read_current(out_dir)
     link = out_dir / CURRENT_LINK_NAME
     try:
         info = os.lstat(link)
@@ -763,7 +766,7 @@ def _check_records_baseline(out_dir: Path, expected: str | None) -> None:
 
     if expected is None:
         return
-    records = out_dir / "history_records.json"
+    records = resolve_history_file(out_dir / "history_records.json")
     try:
         info = os.lstat(records)
     except FileNotFoundError:
@@ -804,7 +807,7 @@ def publish_staging(
     files: Sequence[Path],
     *,
     expected_records_sha256: str | None = None,
-) -> None:
+) -> Path | None:
     """把暂存文件原子发布到 ``out_dir``；失败时旧输出保持完整可用。
 
     参数与旧 ``history_import._publish_staging`` 完全一致：``files`` 中位于
@@ -818,10 +821,14 @@ def publish_staging(
     不能直接重复发布旧 staging。调用方应对同一次 read_bytes() 的字节同时计算哈希
     和解析，不能在读取旧记录之后再独立重读计算哈希（否则仍可能丢更新）。
 
-    成功返回 ``None``。失败抛 :class:`PublishError`（``ValueError`` 子类）；
-    旧输出不受影响，不会降级成逐文件非原子替换。
+    Windows 成功返回本次提交的不可变 generation 路径，POSIX 保留 ``None`` 返回值。
+    提交前失败抛 :class:`PublishError`（``ValueError`` 子类），旧输出保持完整；
+    已完成原子替换后的中断保留新快照，不得把当前指针引用的文件当作失败产物删除。
     """
 
+    if os.name == "nt":
+        from adapters.sources.history_windows import publish
+        return publish(staging, out_dir, files, expected_records_sha256=expected_records_sha256)
     staging_abs = _absolute(Path(staging))
     out_abs = _absolute(Path(out_dir))
     if not staging_abs.is_dir():
@@ -864,3 +871,17 @@ def publish_staging(
                 f"{type(exc).__name__}: {exc}"
             ) from exc
     _checkpoint("after-commit")
+
+
+def pin_history_output(out_dir: Path) -> Path:
+    """Pin one immutable generation for all reads; legacy flat output stays readable."""
+    out_dir = _absolute(Path(out_dir))
+    return _read_current(out_dir) or out_dir
+
+
+def resolve_history_file(path: Path) -> Path:
+    """Resolve a public output name once; never fall back after a corrupt pointer."""
+    path = _absolute(Path(path))
+    if os.name == "nt" and os.path.lexists(path.parent / CURRENT_POINTER_NAME):
+        return pin_history_output(path.parent) / path.name
+    return path

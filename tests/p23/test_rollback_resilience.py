@@ -14,7 +14,7 @@ from adapters.sources.reference_import.publish import (
 )
 from adapters.sources.reference_import.snapshot import SnapshotRequest, build_snapshot
 from tests.p23.builders import build_publish_batch, write_verification
-from tests.p23.support import P23TestCase
+from tests.p23.support import P23TestCase, active_pointer, fail_activation_commit, force_current
 
 
 class RollbackResilienceTest(P23TestCase):
@@ -43,11 +43,15 @@ class RollbackResilienceTest(P23TestCase):
 
     def force_current(self, release):
         """测试内把 current 指回指定版本，绕开目标校验以构造“当前版本损坏”前置。"""
-        link = self.out / "published" / "current"
-        temp = self.out / "published" / ".test-current"
-        temp.unlink(missing_ok=True)
-        os.symlink(os.path.join("releases", release.release_id), temp)
-        os.replace(temp, link)
+        force_current(self.out, release)
+
+    def assert_corrupt_current_pointer_unchanged(self, before: bytes):
+        self.assertEqual((self.out / "published" / "current.json").read_bytes(), before)
+        if publishing.POINTER_BACKEND == "atomic_json":
+            with self.assertRaises(PublishError):
+                self.current_id()
+        else:
+            self.assertEqual(self.current_id(), self.b.release_id)
 
     def test_missing_current_file_still_allows_rollback(self):
         """B 缺数据文件时，A 仍通过校验并允许切回；缺件差异按“仅一侧存在”计算。"""
@@ -122,6 +126,13 @@ class RollbackResilienceTest(P23TestCase):
         """首次发布时 current.json 尚未创建、current 已可解析，不应报人工修复。"""
         pointer = self.out / "published" / "current.json"
         pointer.unlink()
+        if publishing.POINTER_BACKEND == "atomic_json":
+            self.assertIsNone(self.current_id(), "Windows has one pointer; its loss cannot be hidden by a second source")
+            with self.assertRaises(PublishError):
+                dataset_paths(self.out)
+            activate_release(self.out, self.b.release_id)
+            self.assertEqual(self.current_id(), self.b.release_id)
+            return
         self.assertEqual(self.current_id(), self.b.release_id)
         paths = dataset_paths(self.out)
         self.assertTrue(paths)
@@ -133,6 +144,12 @@ class RollbackResilienceTest(P23TestCase):
         """模拟首次发布：current 第一次不可见、重试期间出现，读取应成功。"""
         pointer = self.out / "published" / "current.json"
         pointer.unlink()
+        if publishing.POINTER_BACKEND == "atomic_json":
+            self.assertIsNone(publishing._active_release_id(self.out))
+            force_current(self.out, self.b)
+            self.assertEqual(publishing._active_release_id(self.out), self.b.release_id)
+            self.assert_current_layout(self.out, self.b)
+            return
         current = self.out / "published" / "current"
         real_readlink = os.readlink
         attempts = {"count": 0}
@@ -151,6 +168,13 @@ class RollbackResilienceTest(P23TestCase):
         """首次发布先建 current.json、后切 current 的瞬时窗口：短暂重试后成功。"""
         pointer = self.out / "published" / "current.json"
         current = self.out / "published" / "current"
+        if publishing.POINTER_BACKEND == "atomic_json":
+            temporary = pointer.with_name(".current.json.tmp-incomplete")
+            temporary.write_text('{"release_id":', encoding="utf-8")
+            self.assertEqual(self.current_id(), self.b.release_id)
+            self.assert_current_layout(self.out, self.b)
+            temporary.unlink()
+            return
         pointer.unlink()
         os.symlink(os.path.join("current", ".current.json"), pointer)
         real_readlink = os.readlink
@@ -174,8 +198,9 @@ class RollbackResilienceTest(P23TestCase):
 
     def test_publish_rejects_when_current_pointer_lost(self):
         """已发布 B 但 current 被删、current.json 悬空：内容不同的 C 不得绕过换版门禁。"""
-        (self.out / "published" / "current").unlink()
-        self.assertTrue((self.out / "published" / "current.json").is_symlink())
+        active_pointer(self.out).unlink()
+        if publishing.POINTER_BACKEND != "atomic_json":
+            self.assertTrue((self.out / "published" / "current.json").is_symlink())
         c_batch = build_publish_batch(self.root / "C", label="C", name_suffix="（内容不同 C）")
         c_built = build_snapshot(SnapshotRequest(c_batch.manifest, self.out))
         write_verification(self.out, c_built.snapshot_id)
@@ -203,7 +228,7 @@ class RollbackResilienceTest(P23TestCase):
     def test_missing_current_with_plain_pointer_is_not_treated_as_unpublished(self):
         """current 缺失但仍有普通 JSON 指针：必须要求修复，不能当成首次发布；
         显式修复时仍要把指针指向的真实前驱写进激活审计。"""
-        (self.out / "published" / "current").unlink()
+        (self.out / "published" / "current").unlink(missing_ok=True)
         pointer = self.out / "published" / "current.json"
         if pointer.is_symlink():
             pointer.unlink()
@@ -222,6 +247,19 @@ class RollbackResilienceTest(P23TestCase):
     def test_pointer_permission_error_is_publish_error(self):
         """current 正常、读取 current.json 软链时权限错误，也必须转 PublishError。"""
         pointer = self.out / "published" / "current.json"
+        if publishing.POINTER_BACKEND == "atomic_json":
+            original = publishing.read_json
+
+            def denied(path):
+                if Path(path) == pointer:
+                    raise PermissionError("pointer denied")
+                return original(path)
+
+            with patch.object(publishing, "read_json", side_effect=denied):
+                with self.assertRaises(PublishError) as caught:
+                    dataset_paths(self.out)
+            self.assertIn("current.json", str(caught.exception))
+            return
         if pointer.is_symlink():
             pointer.unlink()
         os.symlink(os.path.join("current", ".current.json"), pointer)
@@ -251,6 +289,7 @@ class RollbackResilienceTest(P23TestCase):
 
     def test_publish_rejects_when_previous_data_replaced_with_candidate_files(self):
         """P2：前驱 B 的数据文件被换成 A 的内容时，普通 publish 不得跳过换版门禁并写入 computed/false。"""
+        before_pointer = (self.out / "published" / "current.json").read_bytes()
         a_batch = build_publish_batch(self.root / "A_repub", label="A")
         a_built = build_snapshot(SnapshotRequest(a_batch.manifest, self.out))
         write_verification(self.out, a_built.snapshot_id)
@@ -270,7 +309,7 @@ class RollbackResilienceTest(P23TestCase):
                 message = str(caught.exception)
                 self.assertIn("activate", message)
                 self.assertIn(self.b.release_id, message)
-                self.assertEqual(self.current_id(), self.b.release_id)
+                self.assert_corrupt_current_pointer_unchanged(before_pointer)
                 self.assertEqual(
                     sorted(p.name for p in (self.out / "published" / "activations").glob("*.json")),
                     before_events,
@@ -285,6 +324,7 @@ class RollbackResilienceTest(P23TestCase):
 
     def test_publish_rejects_when_previous_has_undeclared_dataset_file(self):
         """P2：前驱 release 目录出现未声明的数据文件时，普通 publish 必须拒绝并提示 activate 恢复。"""
+        before_pointer = (self.out / "published" / "current.json").read_bytes()
         (self.b.release_dir / "tax_rates.json").write_text(
             json.dumps({"dataset": {"synthetic": False, "review_status": "unreviewed"}, "records": []}),
             encoding="utf-8",
@@ -297,7 +337,7 @@ class RollbackResilienceTest(P23TestCase):
             publish_release(PublishRequest(c_built.snapshot_dir, self.out))
         self.assertIn("activate", str(caught.exception))
         self.assertIn("未声明的数据文件", str(caught.exception))
-        self.assertEqual(self.current_id(), self.b.release_id)
+        self.assert_corrupt_current_pointer_unchanged(before_pointer)
         self.assertEqual(
             sorted(p.name for p in (self.out / "published" / "releases").iterdir()),
             before_releases,
@@ -305,6 +345,7 @@ class RollbackResilienceTest(P23TestCase):
 
     def test_publish_revalidates_previous_inside_publish_lock(self):
         """P2：锁外预检通过后、进入发布锁前前驱被篡改时，锁内重验仍须拦截并禁止落盘。"""
+        before_pointer = (self.out / "published" / "current.json").read_bytes()
         c_batch = build_publish_batch(self.root / "C_toctou", label="C", name_suffix="（锁内重验）")
         c_built = build_snapshot(SnapshotRequest(c_batch.manifest, self.out))
         write_verification(self.out, c_built.snapshot_id)
@@ -331,7 +372,7 @@ class RollbackResilienceTest(P23TestCase):
                 ))
         self.assertTrue(tampered["done"])
         self.assertIn("activate", str(caught.exception))
-        self.assertEqual(self.current_id(), self.b.release_id)
+        self.assert_corrupt_current_pointer_unchanged(before_pointer)
         self.assertEqual(
             sorted(p.name for p in (self.out / "published" / "releases").iterdir()),
             before_releases,
@@ -429,7 +470,7 @@ class NoActivateRetryTest(P23TestCase):
 
     def test_no_activate_still_rejects_when_current_and_current_json_both_lost(self):
         published = publish_release(PublishRequest(self.snap_a.snapshot_dir, self.out, activate=True))
-        (self.out / "published" / "current").unlink()
+        (self.out / "published" / "current").unlink(missing_ok=True)
         (self.out / "published" / "current.json").unlink()
         self.assertTrue((published.release_dir / ".current.json").is_file())
         with self.assertRaises(PublishError) as caught:
@@ -437,7 +478,7 @@ class NoActivateRetryTest(P23TestCase):
         self.assertIn("activate", str(caught.exception))
 
     def test_retry_allowed_when_first_activation_cleanly_rolled_back_as_failed(self):
-        with patch.object(publishing.os, "symlink", side_effect=OSError("模拟首次激活建链失败")):
+        with fail_activation_commit():
             with self.assertRaises(PublishError):
                 publish_release(PublishRequest(self.snap_a.snapshot_dir, self.out, activate=True))
         self.assertFalse((self.out / "published" / "current").exists())
