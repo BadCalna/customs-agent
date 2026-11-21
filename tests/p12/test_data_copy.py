@@ -29,6 +29,7 @@ from apps.runs.models import Run, RunItem
 from scripts.database import dumpdata_full, model_inventory, snapshot_sqlite, verify_copy
 
 from .factories import build_submitted_task
+from tests.platform_files import create_directory_link
 
 
 MOMENT = dt.datetime(2026, 11, 15, 7, 30, 45, 123456, tzinfo=dt.timezone.utc)
@@ -469,9 +470,16 @@ class DataCopyDatabaseTests(TestCase):
             outside = Path(directory) / "outside"
             outside.mkdir()
             (outside / "original.xlsx").write_bytes(b"outside root")
-            (root / "linked.xlsx").symlink_to(outside / "original.xlsx")
-            (root / "linked-directory").symlink_to(outside, target_is_directory=True)
-            for path in ("linked.xlsx", "linked-directory/original.xlsx"):
+            if sys.platform == "win32":
+                # A genuine NTFS directory junction requires no symlink
+                # privilege; the referenced file still resolves outside root.
+                create_directory_link(root / "linked-file-parent", outside)
+                linked_file = "linked-file-parent/original.xlsx"
+            else:
+                (root / "linked.xlsx").symlink_to(outside / "original.xlsx")
+                linked_file = "linked.xlsx"
+            create_directory_link(root / "linked-directory", outside)
+            for path in (linked_file, "linked-directory/original.xlsx"):
                 with self.subTest(path=path):
                     self._set_original_path(path)
                     self.assertEqual(verify_copy.attachment_report(root), (1, [path]))

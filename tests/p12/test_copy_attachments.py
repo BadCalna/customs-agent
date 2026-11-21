@@ -2,13 +2,14 @@
 import hashlib
 import os
 from pathlib import Path
-import subprocess
 import tempfile
 
 from django.conf import settings
 from django.test import SimpleTestCase
 
 from scripts.database.copy_attachments import copy_attachments, verify_manifest
+from tests.p12.shell import run_database_script
+from tests.platform_files import create_directory_link
 
 
 class CopyAttachmentsTests(SimpleTestCase):
@@ -50,11 +51,22 @@ class CopyAttachmentsTests(SimpleTestCase):
 
     def test_target_symlink_and_nested_roots_are_rejected(self):
         self.target.mkdir()
-        (self.target / "tasks").symlink_to(self.source / "tasks", target_is_directory=True)
+        create_directory_link(self.target / "tasks", self.source / "tasks")
         with self.assertRaisesRegex(ValueError, "符号链接"):
             copy_attachments(self.source, self.target, self.manifest)
+        self.assertEqual((self.source / self.relative).read_bytes(), b"original attachment")
         with self.assertRaisesRegex(ValueError, "互相嵌套"):
             copy_attachments(self.source, self.source / "nested", self.manifest)
+
+    def test_in_root_directory_redirect_is_rejected_before_publication(self):
+        self.target.mkdir()
+        actual = self.target / "actual-tasks"
+        actual.mkdir()
+        create_directory_link(self.target / "tasks", actual)
+        with self.assertRaisesRegex(ValueError, "符号链接"):
+            copy_attachments(self.source, self.target, self.manifest)
+        self.assertEqual(list(actual.iterdir()), [])
+        self.assertEqual((self.source / self.relative).read_bytes(), b"original attachment")
 
     def test_manifest_verifies_both_roots_after_copy(self):
         copy_attachments(self.source, self.target, self.manifest)
@@ -66,7 +78,10 @@ class CopyAttachmentsTests(SimpleTestCase):
     def test_arbitrary_source_requires_explicit_file_root(self):
         env = dict(os.environ)
         env.pop("CUSTOMS_SOURCE_FILE_ROOT", None)
-        result = subprocess.run([str(settings.BASE_DIR / "scripts/database/copy_sqlite_to_pg.sh"),
-                                 str(self.base / "some.sqlite3")], env=env, capture_output=True, text=True)
+        # This guard is before any PostgreSQL access; make that prerequisite
+        # explicit rather than relying on a developer's local PG installation.
+        env["CUSTOMS_PG_BIN"] = str(self.base / "no-bin")
+        result = run_database_script(settings.BASE_DIR / "scripts/database/copy_sqlite_to_pg.sh",
+                                     self.base / "some.sqlite3", env=env)
         self.assertEqual(result.returncode, 2)
         self.assertIn("--source-files-root", result.stderr)

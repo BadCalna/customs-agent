@@ -56,7 +56,9 @@ from adapters.files.dispimg import (
 )
 from adapters.files.ooxml import OoxmlError, Workbook
 from adapters.files.packing_links import map_workbook
-from adapters.sources.history_publish import PublishError, publish_staging
+from adapters.sources.history_publish import (
+    PublishError, publish_staging, resolve_history_file,
+)
 from adapters.sources.history_consolidated import (
     CONSOLIDATED_IDENTITY_VERSION,
     FORMAT_AUTO,
@@ -2016,10 +2018,10 @@ def _copy_row_image(row_image: Any, record_id: str, image_dir: Path) -> str:
 
 def _publish_staging(
     staging: Path, out_dir: Path, files: Sequence[Path], *, expected_records_sha256: str | None = None
-) -> None:
+) -> Path | None:
     """完整 generation + 单指针提交；CAS 防止并发合并丢更新。"""
     try:
-        publish_staging(staging, out_dir, files, expected_records_sha256=expected_records_sha256)
+        return publish_staging(staging, out_dir, files, expected_records_sha256=expected_records_sha256)
     except PublishError as exc:
         raise ImportIncompleteError(f"发布输出失败，旧输出未改动：{exc}") from exc
 
@@ -2565,9 +2567,10 @@ def _import_history_templates(request: ImportRequest, staging: Path) -> ImportOu
 
     records_path = request.out_dir / "history_records.json"
     # 同一次读取的字节同时用于解析与CAS；不能读旧payload后重新读新hash。
-    existing_bytes = records_path.read_bytes() if records_path.is_file() else None
+    existing_path = resolve_history_file(records_path)
+    existing_bytes = existing_path.read_bytes() if existing_path.is_file() else None
     expected_records_sha = hashlib.sha256(existing_bytes).hexdigest() if existing_bytes is not None else ""
-    existing_snapshot = _read_existing(records_path, data=existing_bytes)
+    existing_snapshot = _read_existing(existing_path, data=existing_bytes)
     existing_payload = None if request.fresh else existing_snapshot
     previous_total = 0 if request.fresh else (len(existing_snapshot.get("records", [])) if existing_snapshot else 0)
     previous_dataset = (existing_snapshot or {}).get("dataset") or {}
@@ -2922,7 +2925,9 @@ def _import_history_templates(request: ImportRequest, staging: Path) -> ImportOu
         publish_files.extend(sorted(image_dir.rglob("*")))
 
     try:
-        _publish_staging(staging, request.out_dir, publish_files, expected_records_sha256=expected_records_sha)
+        published_generation = _publish_staging(
+            staging, request.out_dir, publish_files, expected_records_sha256=expected_records_sha,
+        )
     except Exception as publish_error:
         try:
             import shutil
@@ -2942,13 +2947,16 @@ def _import_history_templates(request: ImportRequest, staging: Path) -> ImportOu
     except OSError:
         pass
 
-    final_validation_json = request.out_dir / "query_validation.json" if validation else None
-    final_validation_md = request.out_dir / "query_validation.md" if validation else None
+    published_dir = published_generation if os.name == "nt" else request.out_dir
+    if published_dir is None:
+        raise ImportIncompleteError("发布未返回已提交的 generation，不能报告成功")
+    final_validation_json = published_dir / "query_validation.json" if validation else None
+    final_validation_md = published_dir / "query_validation.md" if validation else None
     return ImportOutcome(
         out_dir=request.out_dir,
-        records_path=records_path,
-        report_json_path=request.out_dir / "import_report.json",
-        report_md_path=request.out_dir / "import_report.md",
+        records_path=published_dir / "history_records.json",
+        report_json_path=published_dir / "import_report.json",
+        report_md_path=published_dir / "import_report.md",
         validation_json_path=final_validation_json,
         validation_md_path=final_validation_md,
         report=report,
@@ -3055,7 +3063,7 @@ def validate_history_queries(
     configure_django()
     from adapters.sources.history_search import HistoryQuery, HistorySearchSource
 
-    stable_records_path = records_path.resolve()
+    stable_records_path = resolve_history_file(records_path).resolve()
     records_bytes = stable_records_path.read_bytes()
     validation_records_sha = hashlib.sha256(records_bytes).hexdigest()
     payload = json.loads(records_bytes)
@@ -3155,7 +3163,13 @@ def validate_history_queries(
             (candidate / "query_validation.md").write_text(
                 render_validation_markdown(validation), encoding="utf-8"
             )
-            is_same_output = records_path.absolute() == (out_dir / "history_records.json").absolute()
+            logical_output = (out_dir / "history_records.json").absolute()
+            is_same_output = records_path.absolute() == logical_output
+            try:
+                pinned_relative = stable_records_path.relative_to((out_dir / ".snapshots").resolve())
+                is_same_output |= len(pinned_relative.parts) == 2 and pinned_relative.name == "history_records.json"
+            except ValueError:
+                pass
             _publish_staging(candidate, out_dir, [
                 candidate / "query_validation.json", candidate / "query_validation.md",
             ], expected_records_sha256=validation_records_sha if is_same_output else None)

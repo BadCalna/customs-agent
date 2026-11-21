@@ -38,7 +38,9 @@ PG_RUN_DIR="$REPO_ROOT/.local"
 PGDATA="${CUSTOMS_PGDATA:-$PG_RUN_DIR/pgdata}"
 PGPORT="${CUSTOMS_PG_PORT:-5432}"
 # Unix socket names have a small platform limit; repo paths can contain long Unicode names.
-repo_key="$(printf '%s' "$REPO_ROOT" | shasum -a 256 | cut -c 1-12)"
+# Hash the same root bytes with the already-required Python, also on Git Bash.
+repo_key="$(printf '%s' "$REPO_ROOT" | "${PYTHON:-$REPO_ROOT/.venv-customs/bin/python}" -c \
+  'import hashlib, sys; print(hashlib.sha256(sys.stdin.buffer.read()).hexdigest()[:12])')"
 PGSOCKET="${CUSTOMS_PG_SOCKET:-/tmp/customs-pg-$(id -u)-$repo_key}"
 PGLOG="${CUSTOMS_PG_LOG:-$PG_RUN_DIR/pg.log}"
 PGHOST="${CUSTOMS_PG_HOST:-127.0.0.1}"

@@ -18,6 +18,7 @@ from apps.history_reference.models import (
 )
 from apps.history_reference.services import HistoryImportError, import_history_snapshot
 from apps.history_reference.store import DatabaseHistoryStore
+from tests.p15_pg.private_report_checks import assert_private_report
 
 
 def row(record_id="r1", *, anchor="a1", hs="7307210000", review=False, material="不锈钢"):
@@ -314,7 +315,7 @@ class PersistenceTests(TestCase):
         self.assertTrue(json.loads(output.getvalue())["dry_run"])
         report_path = Path(self.temp.name) / "private-report.json"
         call_command("import_history_records", **common, report=str(report_path), stdout=StringIO())
-        self.assertEqual(report_path.stat().st_mode & 0o777, 0o600)
+        assert_private_report(self, report_path)
         self.assertEqual(json.loads(report_path.read_text())["added"], 1)
         self.path.write_text(json.dumps(payload([row(hs="7307990000")])), encoding="utf-8")
         with self.assertRaises(CommandError) as caught:

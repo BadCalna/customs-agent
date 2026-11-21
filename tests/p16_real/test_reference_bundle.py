@@ -20,7 +20,12 @@ from adapters.engines.reference_bundle import (
 )
 from adapters.sources import history_search as history
 from adapters.sources import hs_lookup as tariff
+from adapters.sources import declaration_elements as elements
+from adapters.sources import tax_lookup as tax
+from adapters.sources import tariff_commentary as commentary
 from adapters.sources.reference_import.model import fingerprint
+from adapters.sources.reference_import import publish as publishing
+from tests.platform_files import create_directory_link
 
 HS = "0101210010"
 SOURCE = {"document": "UNIT-CONTRACT-NOT-REAL", "locator": "Sheet!A10",
@@ -95,8 +100,15 @@ def release_fixture(root, *, data=None, reviewed=False, activate=True):
     write_json(path / ".current.json", {key: release[key] for key in (
         "release_id", "release_fingerprint", "business_fingerprint", "review_status")})
     if activate:
-        (root / "published" / "current").symlink_to(f"releases/{release_id}", target_is_directory=True)
-        (root / "published" / "current.json").symlink_to("current/.current.json")
+        if publishing.POINTER_BACKEND == "atomic_json":
+            write_json(root / "published" / "current.json", {
+                "schema_version": "p23.current.1", "pointer_backend": "atomic_json",
+                **{key: release[key] for key in (
+                    "release_id", "release_fingerprint", "business_fingerprint", "review_status")},
+            })
+        else:
+            (root / "published" / "current").symlink_to(f"releases/{release_id}", target_is_directory=True)
+            (root / "published" / "current.json").symlink_to("current/.current.json")
     return path, release
 
 
@@ -166,10 +178,50 @@ class ReferenceBundleTests(unittest.TestCase):
         bundle = ReferenceBundle.load(ReferenceBundleConfig(release_dir=self.root / "published" / "current"))
         self.assertEqual(bundle.bundle_id, self.release["release_id"])
 
+    def test_explicit_current_dataset_environment_paths_use_real_stores(self):
+        for store, env_store, variable, name in (
+            (tariff.JsonTariffStore, tariff.EnvTariffStore, tariff.ENV_TARIFF_PATH, "tariff.json"),
+            (elements.JsonElementStore, elements.EnvElementStore, elements.ENV_ELEMENTS_PATH, "elements.json"),
+            (tax.JsonTaxRateStore, tax.EnvTaxRateStore, tax.ENV_TAX_RATE_PATH, "tax_rates.json"),
+            (commentary.JsonCommentaryStore, commentary.EnvCommentaryStore, commentary.ENV_COMMENTARY_PATH, "commentary.json"),
+        ):
+            with self.subTest(dataset=name), patch.dict(os.environ, {
+                variable: str(self.root / "published" / "current" / name),
+            }):
+                self.assertEqual(env_store().load(), store(self.path / name).load())
+
+    def test_configured_published_directory_name_is_not_guessed(self):
+        custom = self.root / "explicit-reference-export"
+        (self.root / "published").rename(custom)
+        bundle = ReferenceBundle.load(ReferenceBundleConfig(published_dir=custom))
+        self.assertEqual(bundle.bundle_id, self.release["release_id"])
+        self.assertEqual(tariff.JsonTariffStore(custom / "current" / "tariff.json").load().codes[0].code, HS)
+
+    def test_direct_release_directory_redirection_is_not_hidden_by_resolve(self):
+        alias = self.root / "release-alias"
+        create_directory_link(alias, self.path)
+        with self.assertRaises(ReferenceBundleError):
+            ReferenceBundle.load(ReferenceBundleConfig(release_dir=alias))
+
+    def test_current_dataset_rejects_a_tampered_release(self):
+        (self.path / "tariff.json").write_text("{}", encoding="utf-8")
+        with self.assertRaises(ReferenceBundleError):
+            ReferenceBundle.load(ReferenceBundleConfig(published_dir=self.root / "published"))
+        if publishing.POINTER_BACKEND == "atomic_json":
+            # The selected elements file is untouched. Windows' virtual current/
+            # path still validates the complete release before any dataset is read.
+            with self.assertRaises(elements.ElementStoreError):
+                elements.JsonElementStore(self.root / "published" / "current" / "elements.json").load()
+
     def test_unsafe_current_targets_and_missing_declared_data_refused(self):
         current = self.root / "published" / "current"
-        current.unlink()
-        current.symlink_to("../../outside-release")
+        if publishing.POINTER_BACKEND == "atomic_json":
+            pointer = self.root / "published" / "current.json"
+            payload = json.loads(pointer.read_text(encoding="utf-8"))
+            write_json(pointer, {**payload, "release_id": "../../outside-release"})
+        else:
+            current.unlink()
+            current.symlink_to("../../outside-release")
         with self.assertRaisesRegex(ReferenceBundleError, "Invalid published/current"):
             ReferenceBundle.load(ReferenceBundleConfig(published_dir=self.root / "published"))
         (self.path / "tax_rates.json").unlink()
@@ -194,6 +246,25 @@ class ReferenceBundleTests(unittest.TestCase):
         changed = payloads()
         changed["p14_tariff"]["codes"][0]["description"] = "NEW RELEASE"
         next_path, _ = release_fixture(self.root, data=changed, activate=False)
+        if publishing.POINTER_BACKEND == "atomic_json":
+            original = publishing._read_release_json
+            calls = []
+
+            def read_pointer(path):
+                result = original(path)
+                if Path(path) == self.root / "published" / "current.json":
+                    calls.append(str(path))
+                    publishing._write_current_pointer(Path(path),
+                        json.loads((next_path / ".current.json").read_text(encoding="utf-8")))
+                return result
+
+            with patch.object(publishing, "_read_release_json", side_effect=read_pointer):
+                bundle = ReferenceBundle.load(ReferenceBundleConfig(published_dir=self.root / "published"))
+            self.assertEqual(len(calls), 1)
+            self.assertEqual(bundle.bundle_id, self.release["release_id"])
+            self.assertNotEqual(next_path.name, bundle.bundle_id)
+            self.assertEqual(bundle.tariff_store.load().codes[0].description, "")
+            return
         actual_readlink = os.readlink
         calls = []
         def readlink(path):

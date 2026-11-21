@@ -11,6 +11,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import sys
 import tempfile
 from pathlib import Path, PurePosixPath
@@ -68,7 +69,16 @@ def _target_path(root, relative):
     candidate = root
     for part in PurePosixPath(relative).parts:
         candidate = candidate / part
-        if candidate.is_symlink():
+        try:
+            metadata = candidate.lstat()
+        except FileNotFoundError:
+            metadata = None
+        # Windows directory junctions are reparse points but is_symlink() is
+        # false. Publishing must reject those redirects just like POSIX links,
+        # including junctions whose target happens to stay inside the root.
+        reparse = metadata is not None and bool(
+            getattr(metadata, "st_file_attributes", 0) & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400))
+        if candidate.is_symlink() or reparse:
             raise ValueError(f"目标附件路径不允许符号链接：{relative}")
     return resolve_path(root, relative)
 

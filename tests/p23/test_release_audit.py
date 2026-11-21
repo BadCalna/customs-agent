@@ -10,7 +10,7 @@ from adapters.sources.reference_import.publish import (
 )
 from adapters.sources.reference_import.snapshot import SnapshotRequest, build_snapshot
 from tests.p23.builders import build_publish_batch, write_verification
-from tests.p23.support import P23TestCase
+from tests.p23.support import P23TestCase, fail_activation_commit
 
 
 class ReleaseAuditTest(P23TestCase):
@@ -85,9 +85,12 @@ class ReleaseAuditTest(P23TestCase):
         pointer.write_text(json.dumps({"release_id": second.release_id}))
         repaired = activate_release(self.out, second.release_id)
         self.assertEqual(repaired["release_id"], second.release_id)
-        self.assertEqual(pointer.resolve(), (second.release_dir / ".current.json").resolve())
+        self.assert_current_layout(self.out, second)
         intent = next(e for e in self.events() if e["event_id"] == repaired["activation_event_id"])
-        self.assertEqual(intent["previous_release"], first.release_id)
+        self.assertEqual(intent["previous_release"],
+                         second.release_id if publishing.POINTER_BACKEND == "atomic_json" else first.release_id)
+        if publishing.POINTER_BACKEND == "atomic_json":
+            self.assertEqual(intent["previous_source"], "legacy_current_json")
 
     def test_result_write_failure_reports_committed_with_audit_warning(self):
         self.publish(0)
@@ -110,11 +113,30 @@ class ReleaseAuditTest(P23TestCase):
         self.assertEqual({k: after[k] for k in before}, before)
         self.assertTrue(any(e["event_id"] == current["activation_event_id"] for e in self.events()))
 
+    def test_after_commit_failure_never_rolls_back_an_observed_release(self):
+        self.publish(0)
+        second = self.publish(1, activate=False, allow_content_change=True, reason="准备 B")
+
+        def fail_after_commit(stage):
+            if stage == "committed":
+                self.assertEqual(publishing.current_release_dir(self.out), second.release_dir)
+                raise OSError("提交后发生故障")
+
+        with patch.object(publishing, "_activation_checkpoint", side_effect=fail_after_commit):
+            result = activate_release(self.out, second.release_id)
+        self.assertEqual(result["release_id"], second.release_id)
+        self.assertIn("已提交", result["audit_warning"])
+        self.assert_current_layout(self.out, second)
+        failed = [json.loads(path.read_text(encoding="utf-8")) for path in
+                  (self.out / "published" / "activation-results").glob("*.json")
+                  if path.stem == result["activation_event_id"]]
+        self.assertEqual(failed, [], "提交后的故障不得伪造 failed 激活结果")
+
     def test_failed_activation_records_failure_without_touching_release(self):
         first = self.publish(0)
         before = self.release_bytes(first)
         second = self.publish(1, activate=False, allow_content_change=True, reason="准备 B")
-        with patch.object(publishing.os, "symlink", side_effect=OSError("模拟激活失败")):
+        with fail_activation_commit():
             with self.assertRaises(PublishError):
                 activate_release(self.out, second.release_id)
         self.assertEqual(self.release_bytes(first), before)

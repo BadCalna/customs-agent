@@ -138,21 +138,42 @@ def _review_time(value: Any) -> bool:
         return False
 
 
+def _plain_reference_path(path: Path) -> None:
+    from adapters.sources.reference_import.publish import PublishError, require_plain_path
+    try:
+        require_plain_path(path)
+    except PublishError as exc:
+        raise ReferenceBundleError("Reference path must not contain a symlink, junction or reparse point") from exc
+
+
 def _release_path(config: ReferenceBundleConfig) -> tuple[Path, bool]:
     if bool(config.release_dir) == bool(config.published_dir):
         raise ReferenceBundleError("Explicitly configure exactly one release_dir or published_dir; no default sample")
     if config.release_dir:
         path = Path(config.release_dir).expanduser()
+        if os.name == "nt" and path.name == "current":
+            # Windows deliberately has no current/ directory: resolve its sole
+            # atomic current.json once, then validate the immutable release below.
+            return _current_path(path.parent), True
         # A caller may explicitly pass published/current; freeze its target once.
         if path.is_symlink():
             if path.name != "current":
                 raise ReferenceBundleError("release_dir must not be an arbitrary symlink")
             return _current_path(path.parent), True
+        _plain_reference_path(path)
         return path.resolve(), False
     return _current_path(Path(config.published_dir).expanduser()), True
 
 
 def _current_path(published: Path) -> Path:
+    _plain_reference_path(published)
+    if os.name == "nt":
+        from adapters.sources.reference_import.publish import PublishError, published_release_dir
+        try:
+            path = published_release_dir(published)
+        except PublishError as exc:
+            raise ReferenceBundleError(f"Invalid published/current pointer: {exc}") from exc
+        return path.resolve()
     try:
         # Do NOT resolve/read current.json through current a second time.
         target = os.readlink(published / "current")
@@ -166,6 +187,7 @@ def _current_path(published: Path) -> Path:
         elif pointer.exists():
             raise ReferenceBundleError("Legacy independent current.json must be repaired explicitly")
         path = published / "releases" / release_id
+        _plain_reference_path(path)
         if path.is_symlink():
             raise ReferenceBundleError("Release directory must not be a symlink")
         return path.resolve()
@@ -286,7 +308,11 @@ def _history_source(config: ReferenceBundleConfig) -> tuple[history.HistorySearc
     source = config.history_source
     try:
         if config.history_path is not None:
-            payload, _ = _read(Path(config.history_path).expanduser())
+            from adapters.sources.history_publish import resolve_history_file
+
+            # P15 Windows public paths may retain legacy flat bytes. Pin the
+            # authoritative generation once before reading the frozen bundle.
+            payload, _ = _read(resolve_history_file(Path(config.history_path).expanduser()))
             if payload.get("schema_version") != history.SCHEMA_VERSION:
                 raise ReferenceBundleError("Explicit P15 history schema_version required")
             if not isinstance(payload.get("dataset"), dict) or payload["dataset"].get("synthetic") is not False:

@@ -53,7 +53,7 @@ from tests.p23.builders import (
     write_catalog_workbook,
     write_verification,
 )
-from tests.p23.support import P23TestCase
+from tests.p23.support import P23TestCase, fail_activation_commit
 
 
 def _rewrite_zip_entry(path: Path, part: str, transform: Callable[[bytes], bytes]) -> None:
@@ -645,14 +645,18 @@ class Pr34ReviewFixesTest(P23TestCase):
                 json.loads(pointer.read_text(encoding="utf-8"))["release_id"],
                 expected_release_id,
             )
-            self.assertEqual(Path(os.readlink(link)).name, expected_release_id)
+            if publish_module.POINTER_BACKEND == "atomic_json":
+                self.assertFalse(link.exists())
+                self.assertFalse(pointer.is_symlink())
+            else:
+                self.assertEqual(Path(os.readlink(link)).name, expected_release_id)
             active_items = [item["release_id"] for item in list_releases(out_root) if item["active"]]
             self.assertEqual(active_items, [expected_release_id])
             paths = dataset_paths(out_root)
             self.assertTrue(all(expected_release_id in p for p in paths.values()))
 
         # 场景 1：创建软链失败 → 抛 PublishError，所有读取入口保持旧版
-        with patch.object(publish_module.os, "symlink", side_effect=OSError("模拟软链中断")):
+        with fail_activation_commit():
             with self.assertRaises(PublishError):
                 activate_release(out_root, second.release_id)
         assert_all_readers_point_to(first.release_id)
@@ -661,7 +665,7 @@ class Pr34ReviewFixesTest(P23TestCase):
         orig_replace = publish_module.os.replace
 
         def fail_on_link_replace(src, dst):
-            if Path(dst).name == "current":
+            if Path(dst).name == ("current.json" if publish_module.POINTER_BACKEND == "atomic_json" else "current"):
                 raise OSError("模拟软链原子替换中断")
             return orig_replace(src, dst)
 

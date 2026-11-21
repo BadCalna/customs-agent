@@ -791,6 +791,19 @@ def default_tariff_path() -> Path | None:
 def read_json_document(path: Path, *, label: str) -> Any:
     """读取 JSON 文件，错误信息带字段名但不泄露服务器绝对路径。"""
 
+    if (os.name == "nt" and path.parent.name == "current"
+            and (path.parent.parent.name == "published"
+                 or (path.parent.parent / "current.json").exists())):
+        # Published Windows releases have one atomic JSON pointer, not a current/
+        # symlink. Pin and verify the complete release before reading this dataset.
+        from .reference_import.publish import PublishError, published_release_dir
+        from .reference_import.model import DatasetId
+        try:
+            if path.name not in {dataset.filename for dataset in DatasetId}:
+                raise PublishError("不是已声明的发布数据文件")
+            path = published_release_dir(path.parent.parent) / path.name
+        except PublishError as exc:
+            raise TariffStoreError(f"{label}发布指针无效：{path.name}") from exc
     try:
         text = path.read_text(encoding="utf-8")
     except OSError as exc:

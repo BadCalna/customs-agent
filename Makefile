@@ -7,7 +7,7 @@ export TASK
 
 .PHONY: setup migrate seed-demo seed-contracts contracts demo-components workbench dev check test test-contracts worker dispatcher \
         pg-init pg-start pg-stop pg-status db-backup db-copy check-postgres \
-        reference-scan reference-import reference-publish reference-releases
+        reference-scan reference-import reference-publish reference-releases test-integration
 setup:
 	$(UV) sync --locked
 	$(PYTHON) -m config.bootstrap
@@ -52,7 +52,7 @@ dispatcher:
 workbench:
 	@echo "正式工作台：http://$(BIND)/workbench/（真实登录会话与 API）"
 	@echo "  样例仅 DEBUG 下显式 ?mode=fixture 或 ?mode=demo。"
-	@echo "  P13 队列/重试及专家工作簿布局仍待交付；mock AI 不构成申报依据。"
+	@echo "  按所选版本和执行记录审核；专家工作簿布局待确认，mock AI 不构成申报依据。"
 	$(MANAGE) runserver $(BIND)
 
 check:
@@ -62,9 +62,15 @@ check:
 
 test:
 	@case "$$TASK" in P[0-9][0-9]) ;; *) echo "Use make test TASK=Pxx" >&2; exit 2;; esac; \
+	if [ "$$TASK" = P21 ]; then $(PYTHON) tests/integration/run.py --backend $(P21_BACKEND); exit $$?; fi; \
 	dir="tests/$$(echo "$$TASK" | tr 'A-Z' 'a-z')"; \
 	if [ ! -d "$$dir" ]; then echo "No test entry for $$TASK" >&2; exit 2; fi; \
 	$(MANAGE) test "$$dir"
+
+# P21 fixes mock/inline and isolated file storage; PG requires an explicit local P21 database.
+P21_BACKEND ?= sqlite
+test-integration:
+	$(PYTHON) tests/integration/run.py --backend $(P21_BACKEND)
 
 # ---------------------------------------------------------------------------
 # P12：推荐 PostgreSQL（scripts/database/ 管理本机集群；无配置时仍可用 SQLite）

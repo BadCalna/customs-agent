@@ -404,9 +404,11 @@ class JsonHistoryStore:
         return self._path
 
     def load(self) -> HistorySnapshot:
+        from adapters.sources.history_publish import PublishError, resolve_history_file
+
         try:
-            text = self._path.read_text(encoding="utf-8")
-        except OSError as exc:
+            text = resolve_history_file(self._path).read_text(encoding="utf-8")
+        except (OSError, PublishError) as exc:
             raise HistoryStoreError(
                 f"历史记录文件不可读：{self._path.name}（{type(exc).__name__}）"
             ) from exc
