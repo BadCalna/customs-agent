@@ -19,6 +19,7 @@ const deferred = () => {
 const task = (id, overrides = {}) => ({
   task_id: id, title: `Task ${id}`, current_version_id: `V${id}`, latest_run_id: `R${id}`,
   stage: 'submitted', revision: 1, result_mode: 'live', supplier: 'supplier',
+  allowed_actions: ['read', 'decision.resolve'],
   versions: [{version_id: `V${id}`, number: 1, original_filename: `${id}.xlsx`}],
   ...overrides,
 });

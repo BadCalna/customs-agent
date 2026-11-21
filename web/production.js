@@ -1,5 +1,6 @@
 import {createClient} from "/app/assets/api.js";
 import {createMessageList} from "/app/assets/components/message-list.js";
+import {renderReviewInsights} from "/app/assets/review-insights.js";
 
 const api = createClient({mode: "live"});
 let messages = null, messageOwner = null;
@@ -18,7 +19,37 @@ const state = {me: null, tasks: [], cursor: null, claims: [], claimCursor: null,
   history: null, importJob: null, run: null, card: null, selectedItemId: null,
   decisionDrafts: new Map(), renderedDecisionScope: null,
   uploadIntent: null, actionKeys: new Map(), generation: 0, timer: null, busy: false,
-  reviewLoading: false};
+  reviewLoading: false, detailError: "", requested: null, itemRequest: 0,
+  taskQuery: "", stage: "", listRequest: 0, claimRequest: 0, listLoading: false, listError: false};
+
+function loginPage(restore) {
+  if (typeof location === "undefined" || !location.replace) return;
+  const query = new URLSearchParams();
+  if (restore) {
+    const original = new URLSearchParams(location.search);
+    const target = state.requested || {taskId: original.get("task"), versionId: original.get("version")};
+    if (target.taskId) {
+      query.set("task", target.taskId);
+      if (target.versionId) query.set("version", target.versionId);
+    }
+  }
+  location.replace("/login/" + (query.size ? `?${query}` : ""));
+}
+
+function recordLocation(taskId, versionId) {
+  if (!globalThis.history?.replaceState) return;
+  const query = new URLSearchParams({task: taskId});
+  if (versionId) query.set("version", versionId);
+  globalThis.history.replaceState(null, "", `/?${query}`);
+}
+
+function focusPanel(selector) {
+  const panel = $(selector);
+  if (!panel || panel.hidden) return;
+  panel.setAttribute?.("tabindex", "-1");
+  panel.focus?.({preventScroll: true});
+  panel.scrollIntoView?.({block: "nearest"});
+}
 
 function notice(message, error = false) {
   const host = $("#notice");
@@ -29,10 +60,13 @@ function notice(message, error = false) {
 
 function fail(error) {
   if (error?.status === 401) {
+    loginPage(true);
     state.me = null;
     showSession();
   }
-  notice(error?.message || "请求失败，请刷新后重试", true);
+  const hint = error?.status === 409 ? " 请刷新并核对最新版本后重试。"
+    : error?.status === 404 ? " 请从任务队列选择可访问的对象。" : "";
+  notice(`${error?.message || "请求失败，请刷新后重试"}${hint}${error?.requestId ? ` · 请求号 ${error.requestId}` : ""}`, true);
 }
 
 async function guarded(action) {
@@ -61,10 +95,10 @@ function showSession() {
     messages = createMessageList($("#messages-area"), {client: api,
       onCount: count => {$("#messages-count").textContent = String(count);},
       onError: error => {if (error?.status === 401) fail(error);},
-      onOpen: message => guarded(async () => {
-        if (!state.me || messageOwner !== owner) return;
-        await openTask(message.task_id, message.version_id);
-      })});
+      onOpen: async message => {
+        if (!state.me || state.busy || messageOwner !== owner) return;
+        if (await openTask(message.task_id, message.version_id)) focusPanel("#task-detail");
+      }});
     void messages.load();
   }
   if (!state.me) {
@@ -74,6 +108,17 @@ function showSession() {
     state.decisionDrafts.clear();
     state.renderedDecisionScope = null;
     state.task = null;
+    state.items = [];
+    state.versionId = state.selectedItemId = state.requested = state.uploadIntent = null;
+    state.actionKeys.clear();
+    state.detailError = state.taskQuery = state.stage = "";
+    state.cursor = null;
+    state.listLoading = state.listError = false;
+    state.listRequest++; state.claimRequest++;
+    $("#task-search").value = $("#task-stage").value = "";
+    $("#claim-list").innerHTML = "";
+    $("#more-claims").hidden = $("#duplicate-area").hidden = true;
+    $("#upload-form").reset?.();
     state.tasks = [];
     state.claims = [];
     state.claimCursor = null;
@@ -87,19 +132,48 @@ function showSession() {
 }
 
 function renderTaskList() {
-  $("#task-list").innerHTML = state.tasks.length ? state.tasks.map(task =>
-    `<button class="task-button ${state.task?.task_id === task.task_id ? "selected" : ""}" data-task="${esc(task.task_id)}">
-      ${esc(task.title)}<small>V${esc(task.current_version_number || "-")} · ${esc(label(task.stage))}</small></button>`).join("")
-    : '<p class="muted">暂无任务</p>';
+  const tokens = state.taskQuery.normalize("NFKC").trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const visible = state.tasks.filter(task => {
+    const text = [task.title, task.task_id, task.supplier].join(" ").normalize("NFKC").toLowerCase();
+    return tokens.every(token => text.includes(token));
+  });
+  const selected = state.task?.task_id;
+  const list = $("#task-list");
+  list.setAttribute?.("aria-busy", String(state.listLoading));
+  list.innerHTML = visible.length ? visible.map(task =>
+    `<button class="task-button ${selected === task.task_id ? "selected" : ""}" aria-current="${selected === task.task_id}" data-task="${esc(task.task_id)}">
+      <strong class="task-name">${esc(task.title)}</strong><small class="task-meta">${esc(label(task.stage))} · V${esc(task.current_version_number || "—")}</small>
+      <small class="task-key">${esc(task.supplier)} · ${esc(task.task_id)}</small></button>`).join("")
+    : `<p class="muted">${state.listLoading ? "正在读取任务队列…" : state.listError ? "任务读取失败，请刷新队列。" : tokens.length || state.stage ? "没有匹配的任务。可调整条件或清除筛选。" : "暂无可见任务。"}</p>`;
+  $("#task-count").textContent = `${state.listLoading ? "读取中 · " : state.listError ? "读取失败 · " : ""}已加载 ${state.tasks.length} 项${tokens.length ? ` · 匹配 ${visible.length} 项` : ""}${state.cursor ? " · 还有下一页" : ""}`;
+  $("#task-reset").disabled = !state.stage && !state.taskQuery;
   $("#more-tasks").hidden = !state.cursor;
+  $("#more-tasks").disabled = state.listLoading;
+}
+
+function mergePage(previous, rows) {
+  return [...new Map([...previous, ...rows].map(row => [row.task_id, row])).values()];
 }
 
 async function loadTasks(append = false) {
-  const page = await api.listTasks({limit: 50, cursor: append ? state.cursor : null});
-  state.tasks = append ? [...state.tasks, ...page.items] : page.items;
-  state.cursor = page.next_cursor;
+  if (!state.me || (append && (!state.cursor || state.listLoading))) return;
+  const request = ++state.listRequest;
+  const cursor = append ? state.cursor : null;
+  state.listLoading = true; state.listError = false;
   renderTaskList();
-  if (state.me?.role === "operator" && !append) await loadClaims();
+  try {
+    const page = await api.listTasks({stage: state.stage, limit: 50, cursor});
+    if (request !== state.listRequest) return;
+    if (page.next_cursor && page.next_cursor === cursor) throw new Error("队列分页未向前推进，请刷新");
+    state.tasks = mergePage(append ? state.tasks : [], page.items);
+    state.cursor = page.next_cursor;
+  } catch (error) {
+    if (request !== state.listRequest) return;
+    state.listError = true;
+    throw error;
+  } finally {
+    if (request === state.listRequest) {state.listLoading = false; renderTaskList();}
+  }
 }
 
 async function openRequestedVersion() {
@@ -110,8 +184,21 @@ async function openRequestedVersion() {
 }
 
 async function loadClaims(append = false) {
-  const page = await api.listClaimable({limit: 50, cursor: append ? state.claimCursor : null});
-  state.claims = append ? [...state.claims, ...page.items] : page.items;
+  if (state.me?.role !== "operator" || (append && !state.claimCursor)) return;
+  const request = ++state.claimRequest, list = $("#claim-list"), more = $("#more-claims");
+  list.setAttribute?.("aria-busy", "true"); more.disabled = true;
+  if (!state.claims.length) list.innerHTML = '<p class="muted">正在读取待认领任务…</p>';
+  let page;
+  try { page = await api.listClaimable({limit: 50, cursor: append ? state.claimCursor : null}); }
+  catch (error) {
+    if (request !== state.claimRequest) return;
+    if (!state.claims.length) list.innerHTML = '<p class="muted">待认领任务读取失败，可刷新重试。</p>';
+    throw error;
+  } finally {
+    if (request === state.claimRequest) {list.setAttribute?.("aria-busy", "false"); more.disabled = false;}
+  }
+  if (request !== state.claimRequest) return;
+  state.claims = mergePage(append ? state.claims : [], page.items);
   state.claimCursor = page.next_cursor;
   $("#more-claims").hidden = !state.claimCursor;
   $("#claim-list").innerHTML = state.claims.length ? state.claims.map(entry =>
@@ -119,13 +206,18 @@ async function loadClaims(append = false) {
         <button data-claim="${esc(entry.task_id)}">认领</button></div>`).join("") : '<p class="muted">暂无待认领任务</p>';
 }
 
-async function allItems(versionId) {
-  const rows = [];
+async function allItems(taskId, versionId, isCurrent) {
+  const rows = [], seenCursors = new Set();
   let cursor = null;
   do {
     const page = await api.listItems(versionId, {limit: 100, cursor});
+    if (!isCurrent()) return [];
+    if (page.items.some(item => (item.task_id != null && item.task_id !== taskId)
+      || (item.version_id != null && item.version_id !== versionId))) throw new Error("商品列表归属不匹配，请刷新后重试");
     rows.push(...page.items);
     cursor = page.next_cursor;
+    if (cursor && seenCursors.has(cursor)) throw new Error("商品列表未完整加载，请刷新重试");
+    seenCursors.add(cursor);
   } while (cursor);
   return rows;
 }
@@ -177,19 +269,41 @@ function invalidateDecisionForm() {
   $("#decision-form")?.remove?.();
 }
 
+function clearVersion() {
+  state.items = []; state.history = state.run = state.importJob = state.card = state.selectedItemId = null;
+  state.detailError = "";
+}
+
+function detailFailure(error) {
+  // The old view is intentionally not restored: it may no longer be writable/visible.
+  clearVersion();
+  state.detailError = error?.message || "无法读取详情";
+  state.reviewLoading = true;
+  renderDetail();
+  throw error;
+}
+
 async function openTask(taskId, versionId = null, itemId = null) {
   clearTimeout(state.timer);
   invalidateDecisionForm();
   const generation = ++state.generation;
-  // Navigation invalidates retry immediately, even while getTask is still pending.
-  state.run = null;
-  renderRun();
-  const task = await api.getTask(taskId);
-  if (generation !== state.generation) return;
-  if (task.task_id !== taskId) throw new Error("任务响应归属不匹配，请刷新后重试");
+  state.requested = {taskId, versionId};
+  state.task = state.versionId = null;
+  clearVersion(); renderDetail(); renderTaskList();
+  let task;
+  try {
+    task = await api.getTask(taskId);
+    if (generation !== state.generation) return false;
+    if (task.task_id !== taskId) throw new Error("任务响应归属不匹配，请刷新后重试");
+  } catch (error) {
+    if (generation !== state.generation) return false;
+    detailFailure(error);
+  }
   state.task = task;
+  // Update only rows already received from this authorized list, never invent a page.
+  state.tasks = state.tasks.flatMap(row => row.task_id !== taskId ? [row] : state.stage && state.stage !== task.stage ? [] : [task]);
   renderTaskList();
-  await openVersion(versionId || task.current_version_id, itemId);
+  return openVersion(versionId || task.current_version_id, itemId);
 }
 
 async function openVersion(versionId, itemId = null) {
@@ -200,45 +314,58 @@ async function openVersion(versionId, itemId = null) {
   const isCurrent = () => generation === state.generation
     && state.task?.task_id === taskId && state.versionId === versionId;
   state.versionId = versionId;
-  state.items = [];
-  state.run = null;
-  state.importJob = null;
-  state.card = null;
-  state.selectedItemId = null;
-  renderDetail();
-  if (!versionId) {
-    state.reviewLoading = false;
-    return;
+  state.requested = {taskId, versionId};
+  clearVersion(); renderDetail();
+  try {
+    if (versionId) {
+      if (!taskId || !state.task.versions.some(version => version.version_id === versionId))
+        throw new Error("版本不属于当前任务，请刷新后重试");
+      const [items, history, importJob] = await Promise.all([
+        allItems(taskId, versionId, isCurrent), api.taskHistory(taskId),
+        api.getImport(versionId).catch(error => { if (error.status === 404) return null; throw error; }),
+      ]);
+      if (!isCurrent()) return false;
+      if ((history.task_id != null && history.task_id !== taskId)
+        || (importJob && (importJob.task_id !== taskId || importJob.version_id !== versionId)))
+        throw new Error("版本记录归属不匹配，请刷新后重试");
+      state.items = items; state.history = history; state.importJob = importJob;
+      const runId = activeRunId();
+      const run = runId ? await api.getRun(runId) : null;
+      if (!isCurrent()) return false;
+      if (run && !runMatchesScope(run, taskId, versionId, runId))
+        throw new Error("运行结果归属不匹配，请刷新后重试");
+      state.run = run;
+    }
+  } catch (error) {
+    if (!isCurrent()) return false;
+    detailFailure(error);
   }
-  if (!taskId || !state.task.versions.some(version => version.version_id === versionId))
-    throw new Error("版本不属于当前任务，请刷新后重试");
-  const [items, history, importJob] = await Promise.all([
-    allItems(versionId), api.taskHistory(taskId),
-    api.getImport(versionId).catch(error => { if (error.status === 404) return null; throw error; }),
-  ]);
-  if (!isCurrent()) return;
-  state.items = items;
-  state.history = history;
-  state.importJob = importJob;
-  const runId = activeRunId();
-  const run = runId ? await api.getRun(runId) : null;
-  if (!isCurrent()) return;
-  if (run && !runMatchesScope(run, taskId, versionId, runId))
-    throw new Error("运行结果归属不匹配，请刷新后重试");
-  state.run = run;
   state.reviewLoading = false;
+  recordLocation(taskId, versionId);
   renderDetail();
   if (itemId) await openItem(itemId);
+  if (!isCurrent()) return false;
   schedulePoll(generation);
+  return true;
 }
 
 async function openItem(itemId) {
-  const generation = state.generation;
-  const card = await api.getItem(state.versionId, itemId);
-  if (generation !== state.generation) return;
-  state.card = card;
-  state.selectedItemId = itemId;
+  if (state.reviewLoading || !state.task || !state.versionId) return false;
+  const generation = state.generation, request = ++state.itemRequest;
+  const isCurrent = () => generation === state.generation && request === state.itemRequest;
+  state.card = state.selectedItemId = null;
   renderItem();
+  detailStatus("正在读取商品详情…");
+  try {
+    const card = await api.getItem(state.versionId, itemId);
+    if (!isCurrent()) return false;
+    if (card.item_id !== itemId || card.version_id !== state.versionId || card.task_id !== state.task.task_id)
+      throw new Error("商品详情归属不匹配，请刷新重试");
+    state.card = card; state.selectedItemId = itemId;
+    renderItem();
+  } catch (error) {if (isCurrent()) throw error; return false;}
+  finally {if (isCurrent()) detailStatus("");}
+  return true;
 }
 
 function schedulePoll(generation) {
@@ -258,6 +385,8 @@ function schedulePoll(generation) {
       ]);
       if (generation !== state.generation || state.task?.task_id !== taskId || state.versionId !== versionId) return;
       if (state.busy) { schedulePoll(generation); return; }
+      if (job && (job.task_id !== taskId || job.version_id !== versionId))
+        detailFailure(new Error("解析记录归属不匹配，请刷新后重试"));
       if (run && !runMatchesScope(run, taskId, versionId, runId))
         throw new Error("运行结果归属不匹配，请刷新后重试");
       const importFinished = state.importJob?.parse_status === "staged" && job?.parse_status !== "staged";
@@ -285,20 +414,24 @@ function renderTask() {
   const live = task.result_mode === "live";
   const submission = pendingSubmission();
   const versions = task.versions.map(version =>
-    `<button data-version="${esc(version.version_id)}" class="${version.version_id === state.versionId ? "current" : ""}">
+    `<button aria-pressed="${version.version_id === state.versionId}" data-version="${esc(version.version_id)}" class="${version.version_id === state.versionId ? "current" : ""}">
       V${esc(version.number)} · ${esc(version.original_filename)}</button>`).join("");
-  const operatorActions = state.me.role === "operator" && current && live ? `
+  const can = action => task.allowed_actions?.includes(action) === true;
+  const confirmationIds = new Set((currentHistoryVersion()?.confirmations || []).map(row => row.item_id));
+  const firstUnconfirmed = state.items.find(item => !confirmationIds.has(item.item_id));
+  const operatorActions = !state.reviewLoading && state.me.role === "operator" && current && live ? `
+    ${state.items.length && !["submitted", "approved"].includes(task.stage) ? `<p>已保存确认 ${state.items.filter(item => confirmationIds.has(item.item_id)).length} / ${state.items.length} 项${firstUnconfirmed && can("confirmation.write") ? ` · <button type="button" data-item="${esc(firstUnconfirmed.item_id)}">定位首个待确认商品</button>` : ""}</p>` : ""}
     <div class="actions"><button data-action="precheck" ${task.precheck_allowed ? "" : "disabled"}>重新预审</button>
-      <button data-action="submit" class="primary" ${state.items.length && !["submitted", "approved"].includes(task.stage) ? "" : "disabled"}>提交专家审核</button></div>
-    ${task.stage !== "approved" && task.stage !== "submitted" ? `<form id="return-form" class="action-form"><h3>退回供应商补料</h3>
+      ${can("submission.create") ? `<button data-action="submit" class="primary" ${state.items.length && !firstUnconfirmed && !["submitted", "approved"].includes(task.stage) ? "" : "disabled"}>提交专家审核</button>` : ""}</div>
+    ${can("task.return") && task.stage !== "approved" && task.stage !== "submitted" ? `<form id="return-form" class="action-form"><h3>退回供应商补料</h3>
       <label>原因<textarea name="reason" required></textarea></label><button type="submit" class="danger">退回</button></form>` : ""}` : "";
-  const scope = !state.reviewLoading && state.me.role === "expert" && current && live && submission
+  const scope = !state.reviewLoading && state.me.role === "expert" && can("decision.resolve") && current && live && submission
     ? decisionScope(submission) : null;
   const decision = scope ? decisionPanel(submission, decisionDraft(scope)) : "";
   host.innerHTML = `<div class="section-heading"><h1>${esc(task.title)}</h1><span class="status ${esc(task.stage)}">${esc(label(task.stage))}</span></div>
     <div class="meta"><span>任务 ${esc(task.task_id)}</span><span>供应商 ${esc(task.supplier)}</span>
       <span>修订 ${esc(task.revision)}</span></div>
-    ${!live ? '<p class="warning">当前结果为模拟数据，不能用于正式审核。</p>' : ""}
+    ${!current ? '<p class="warning">历史版本 · 仅可查阅，不会修改当前版本。</p>' : !live ? '<p class="warning">当前结果为模拟数据，不能用于正式审核。</p>' : ""}
     <div class="version-list">${versions}</div>
     ${state.importJob ? `<p>解析：${esc(label(state.importJob.parse_status))} · 商品 ${esc(state.importJob.item_count)} 条
       · <a href="${esc(state.importJob.original_download_url)}">下载原件</a></p>
@@ -339,15 +472,17 @@ function renderRun() {
     host.innerHTML = state.importJob?.parse_status === "staged" ? '<p class="muted">正在解析单证...</p>' : "";
     return;
   }
-  const p = run.progress;
+  const p = run.progress || {};
+  const count = n => Number.isSafeInteger(n) && n >= 0 ? n : "未提供";
+  const processing = [p.running, p.queued].every(n => typeof count(n) === "number") ? count(p.running + p.queued) : "未提供";
   const active = ["queued", "running"].includes(run.status);
   host.innerHTML = `<div class="section-heading"><h2>${run.kind === "expert_check" ? "专家 AI 辅助核查" : "AI 预审"}</h2>
       <span class="status ${esc(run.status)}">${esc(label(run.status))}</span></div>
     ${state.importJob?.parse_status === "staged" ? '<p class="muted">正在解析单证...</p>'
       : run.status === "running" ? '<div class="ai-thinking" role="status"><i></i><i></i><i></i>AI 思考中...</div>'
       : active ? '<p class="muted">等待 AI 处理...</p>' : ""}
-    <div class="run-counts"><span>总数 <b>${esc(p.total)}</b></span><span>完成 <b>${esc(p.succeeded)}</b></span>
-      <span>失败 <b>${esc(p.failed)}</b></span><span>处理中 <b>${esc(p.running + p.queued)}</b></span></div>
+    <div class="run-counts"><span>总数 <b>${count(p.total)}</b></span><span>完成 <b>${count(p.succeeded)}</b></span>
+      <span>失败 <b>${count(p.failed)}</b></span><span>处理中 <b>${processing}</b></span></div>
     ${run.result_mode === "mock" ? '<p class="warning">模拟结果，不可作为审核依据。</p>' : ""}
     ${run.retry_allowed && run.retry_item_ids.length ? `<button data-action="retry">重试失败行（${esc(run.retry_item_ids.length)}）</button>` : ""}
     <ul class="run-rows">${run.items.map(row => `<li><a href="#item-detail" data-item="${esc(row.item_id)}">${esc(row.source_location.sheet_name)} 第${esc(row.source_location.row_number)}行</a>
@@ -357,25 +492,26 @@ function renderRun() {
 
 function renderItems() {
   const host = $("#item-area");
-  host.hidden = !state.task || !state.versionId;
-  if (host.hidden) return;
+  host.hidden = !state.task || !state.versionId || state.reviewLoading;
+  if (host.hidden) {$("#item-list").innerHTML = ""; return;}
   $("#item-list").innerHTML = state.items.length ? `<div class="table-wrap"><table><thead><tr>
     <th>来源</th><th>商品</th><th>原编码</th><th>AI 建议</th><th>业务确认</th><th>专家终值</th><th>比较</th>
-    </tr></thead><tbody>${state.items.map(item => `<tr data-item="${esc(item.item_id)}">
-      <td>${esc(item.source_location.sheet_name)} ${esc(item.source_location.row_number)}</td><td>${esc(item.name)}</td>
+    </tr></thead><tbody>${state.items.map(item => `<tr>
+      <td>${esc(item.source_location.sheet_name)} ${esc(item.source_location.row_number)}</td><td><button type="button" class="item-link" data-item="${esc(item.item_id)}">${esc(item.name || "查看商品")}</button></td>
       <td>${esc(item.supplier_hs_raw || "-")}</td><td>${esc(item.precheck_suggested_hs || "-")}</td>
       <td>${esc(item.business_confirmed_hs || "-")}</td><td>${esc(item.expert_final_hs || "-")}</td>
       <td>${esc(label(item.comparison_status))}</td></tr>`).join("")}</tbody></table></div>`
-    : '<p class="muted">该版本暂无商品。</p>';
+    : `<p class="muted">${state.importJob?.parse_status === "staged" ? "单证正在解析，商品尚未就绪。" : state.importJob?.parse_status === "failed" ? "解析失败，尚无可用商品。" : "该版本暂无商品。"}</p>`;
 }
 
 function renderItem() {
   const host = $("#item-detail");
   const card = state.card;
   host.hidden = !card;
-  if (!card) return;
+  if (!card) {host.innerHTML = ""; return;}
   const current = state.versionId === state.task.current_version_id;
-  const confirm = state.me.role === "operator" && current && state.task.result_mode === "live"
+  const confirm = !state.reviewLoading && state.me.role === "operator" && current && state.task.result_mode === "live"
+    && card.result_mode === "live" && card.allowed_actions?.includes("confirmation.write")
     && !["submitted", "approved"].includes(state.task.stage);
   host.innerHTML = `<div class="section-heading"><h2>${esc(card.facts.name)}</h2>
       <span class="muted">${esc(card.source_location.sheet_name)} · 第${esc(card.source_location.row_number)}行</span></div>
@@ -401,14 +537,28 @@ function renderItem() {
 function renderHistory() {
   const host = $("#history-area");
   host.hidden = !state.history;
-  if (!state.history) return;
+  if (!state.history) {host.innerHTML = ""; return;}
   const events = state.history.audit_events.slice(0, 25);
-  host.innerHTML = `<details><summary>操作记录（最近 ${esc(events.length)} 条）</summary><ul class="timeline">
+  host.innerHTML = `<details><summary>任务操作记录（跨版本 · 最近 ${esc(events.length)} 条）</summary><ul class="timeline">
     ${events.map(event => `<li><small>${esc(new Date(event.created_at).toLocaleString())} · ${esc(event.actor)}</small>
       <div>${esc(event.action)}${event.reason ? ` · ${esc(event.reason)}` : ""}</div></li>`).join("")}</ul></details>`;
 }
 
-function renderDetail() { renderTask(); renderRun(); renderItems(); renderItem(); renderHistory(); }
+function detailStatus(text) {
+  const host = $("#detail-status");
+  host.textContent = text;
+  host.hidden = !text;
+}
+
+function renderDetail() {
+  renderTask(); renderRun(); renderItems(); renderItem(); renderHistory();
+  $("#workbench-empty").hidden = !!state.task || state.reviewLoading;
+  detailStatus(state.detailError ? `详情暂不可用：${state.detailError}。可刷新或选择其他任务。` : state.reviewLoading ? "正在读取任务与版本明细…" : "");
+  if (typeof renderReviewInsights === "function") renderReviewInsights($("#review-insights"), {
+    task: state.task, versionId: state.versionId, items: state.reviewLoading ? null : state.items,
+    loading: state.reviewLoading, error: state.detailError, importJob: state.importJob, run: state.run,
+  });
+}
 
 function actionKey(name, payload, resourceId = null) {
   const identity = JSON.stringify([state.task?.task_id || "new", state.versionId || "none", name, resourceId, payload]);
@@ -417,7 +567,8 @@ function actionKey(name, payload, resourceId = null) {
 }
 
 async function upload(file, target, confirmDuplicate = false) {
-  if (target === "replace" && !state.task) throw new Error("先选择需要补料的任务");
+  if (target === "replace" && (!state.task || state.reviewLoading || state.versionId !== state.task.current_version_id))
+    throw new Error("请先选择需要补料的任务，并切换至当前版本后重传");
   const taskId = target === "replace" ? state.task.task_id : null;
   const versionId = target === "replace" ? state.task.current_version_id : null;
   const signature = `${file.name}:${file.size}:${file.lastModified}:${taskId}:${versionId}`;
@@ -427,10 +578,13 @@ async function upload(file, target, confirmDuplicate = false) {
     state.uploadIntent.key = key();
     state.uploadIntent.confirmed = true;
   }
+  const intent = state.uploadIntent, selection = state.generation;
+  const isCurrent = () => state.uploadIntent === intent && state.generation === selection;
   notice("正在登记上传...");
   try {
     const result = await api.uploadFile(file, {taskId, currentVersionId: versionId,
-      confirmDuplicate, key: state.uploadIntent.key});
+      confirmDuplicate, key: intent.key});
+    if (!isCurrent()) {if (state.me) {notice("原文件上传已受理，当前选择未改变。"); await loadTasks();} return;}
     state.uploadIntent = null;
     $("#duplicate-area").hidden = true;
     $("#upload-form").reset();
@@ -439,6 +593,7 @@ async function upload(file, target, confirmDuplicate = false) {
     await openTask(result.task_id, result.version_id);
   } catch (error) {
     if (error.code === "duplicate_file") {
+      if (!isCurrent()) return;
       $("#duplicate-area").hidden = false;
       notice("文件与已有版本相同。确认后会创建新版本。");
       return;
@@ -500,18 +655,6 @@ async function decide(form) {
   if (sameView) await openTask(taskId);
 }
 
-$("#login-form").addEventListener("submit", event => {
-  event.preventDefault();
-  guarded(async () => {
-    const data = new FormData(event.target);
-    state.me = await api.login(data.get("username"), data.get("password"));
-    event.target.reset();
-    showSession();
-    notice("");
-    await loadTasks();
-    await openRequestedVersion();
-  });
-});
 $("#logout").addEventListener("click", () => guarded(async () => {
   messages?.destroy(); messages = null; messageOwner = null;
   $("#messages-area").hidden = true;
@@ -519,6 +662,7 @@ $("#logout").addEventListener("click", () => guarded(async () => {
   state.me = null;
   showSession();
   notice("已退出");
+  loginPage(false);
 }));
 $("#messages-toggle").addEventListener("click", () => {
   if (!state.me || !messages) return;
@@ -526,11 +670,26 @@ $("#messages-toggle").addEventListener("click", () => {
   $("#messages-toggle").setAttribute?.("aria-expanded", String(!host.hidden));
   if (!host.hidden) void messages.load();
 });
-$("#refresh").addEventListener("click", () => guarded(async () => {
-  await loadTasks();
-  if (state.task) await openTask(state.task.task_id, state.versionId, state.selectedItemId);
-}));
-$("#more-tasks").addEventListener("click", () => guarded(() => loadTasks(true)));
+$("#task-search").addEventListener("input", event => {
+  state.taskQuery = event.target.value; renderTaskList();
+});
+function setStage(stage) {
+  if (state.stage === stage) {renderTaskList(); return;}
+  state.stage = stage; state.tasks = []; state.cursor = null;
+  void loadTasks().catch(fail);
+}
+$("#task-stage").addEventListener("change", event => setStage(event.target.value));
+$("#task-reset").addEventListener("click", () => {
+  state.taskQuery = $("#task-search").value = $("#task-stage").value = "";
+  setStage(""); $("#task-search").focus?.();
+});
+$("#refresh").addEventListener("click", () => {
+  if (state.busy) return;
+  const current = state.requested;
+  void loadTasks().catch(fail); void loadClaims().catch(fail);
+  if (current) void openTask(current.taskId, current.versionId, state.selectedItemId).catch(fail);
+});
+$("#more-tasks").addEventListener("click", () => {void loadTasks(true).catch(fail);});
 $("#more-claims").addEventListener("click", () => guarded(() => loadClaims(true)));
 $("#upload-form").addEventListener("submit", event => {
   event.preventDefault();
@@ -563,13 +722,19 @@ document.addEventListener("click", event => {
     renderTask();
     return;
   }
+  if (target.disabled) return;
+  if (state.busy) {notice("当前操作正在处理，请稍后再切换或提交。"); return;}
+  if (target.dataset.task || target.dataset.version || target.dataset.item) {
+    event.preventDefault?.();
+    const item = target.dataset.item;
+    const navigate = item ? openItem(item) : target.dataset.task ? openTask(target.dataset.task) : openVersion(target.dataset.version);
+    void navigate.then(opened => {if (opened) focusPanel(item ? "#item-detail" : "#task-detail");}).catch(fail);
+    return;
+  }
   guarded(async () => {
-    if (target.dataset.task) await openTask(target.dataset.task);
-    else if (target.dataset.version) await openVersion(target.dataset.version);
-    else if (target.dataset.item) await openItem(target.dataset.item);
-    else if (target.dataset.claim) {
+    if (target.dataset.claim) {
       await api.claimTask(target.dataset.claim, actionKey("claim", target.dataset.claim));
-      await loadTasks();
+      await Promise.all([loadTasks(), loadClaims()]);
       await openTask(target.dataset.claim);
     } else if (target.dataset.action === "precheck") {
       const payload = {revision: state.task.revision};
@@ -614,5 +779,6 @@ document.addEventListener("submit", event => {
 api.me().then(async me => {
   state.me = me;
   showSession();
-  if (me) {await loadTasks(); await openRequestedVersion();}
+  if (me) {await Promise.all([loadTasks(), loadClaims(), openRequestedVersion()]);}
+  else loginPage(true);
 }).catch(fail);

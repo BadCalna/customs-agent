@@ -37,13 +37,14 @@ function exportAvailability(report){
   return {ready:true,reason:""};
 }
 function hideExports(){latestReport=null;exporting=false;exportTicket++;const box=$("#exports");if(!box)return;box.innerHTML="";box.hidden=true;}
+function sourceLabel(mode){return mode === "live" ? "LIVE" : mode === "mock" ? "MOCK" : "未提供或未知";}
 function renderExports(report){
   const box=$("#exports");if(!box)return;
   latestReport=report||null;
   if(!report){hideExports();return;}
-  const state=exportAvailability(report),source=String(report.result_mode||"mock").toUpperCase();
+  const state=exportAvailability(report),source=sourceLabel(report.result_mode);
   const note=state.ready
-    ?`结果来源 ${source}：导出文件会在文件名与结论里标注测试结果；导出不退回、不发送通知。`
+    ?`结果来源 ${source}。${report.result_mode === "mock" ? "模拟结果不能用于申报。" : "使用前须人工核对。"}导出不退回、不发送通知。`
     :state.reason;
   box.hidden=false;
   box.innerHTML=`<h2>结果导出</h2>
@@ -83,7 +84,7 @@ async function exportResult(kind){
     const link=document.createElement("a");link.href=url;link.download=result.filename;link.rel="noopener";
     document.body.appendChild(link);link.click();link.remove();
     setTimeout(()=>URL.revokeObjectURL(url),3000);
-    notice(`已生成 ${result.filename}（执行 ${result.runId} · 结果来源 ${String(result.resultMode||"").toUpperCase()}）`);
+    notice(`已生成 ${result.filename}（执行 ${result.runId} · 结果来源 ${sourceLabel(result.resultMode)}）`);
   }catch(error){
     if(!isCurrentExport())return;
     fail(error);
@@ -131,17 +132,17 @@ async function openVersion(id){
   let report=null;try{report=await api.getImport(id);}catch(e){if(e.status!==404)throw e;}
   if(seq!==requestSequence||token!==epoch||version!==id)return;
   const v=task.versions.find(x=>x.version_id===id);
-  $("#summary").innerHTML=report?`<b>V${esc(report.version_number)} · ${report.assignment_status==="unclaimed"?"待认领":"已认领"} · 解析 ${esc(report.parse_status)}</b><br>商品 ${esc(report.item_count)} 条 / 装箱成员 ${esc(report.member_count)} 条 / 图片 available ${esc(report.image_counts.available)} · absent ${esc(report.image_counts.absent)} · read_failed ${esc(report.image_counts.read_failed)}<br><a href="${esc(report.original_download_url)}">下载 V${esc(report.version_number)} 原件</a> · <b>MOCK</b> 预审：${esc(report.precheck_status)}`:`V${esc(v?.number)} · 旧演示版本无真实上传记录`;
+  $("#summary").innerHTML=report?`<b>V${esc(report.version_number)} · ${report.assignment_status==="unclaimed"?"待认领":"已认领"} · 解析 ${esc(report.parse_status)}</b><br>商品 ${esc(report.item_count)} 条 / 装箱成员 ${esc(report.member_count)} 条 / 图片 available ${esc(report.image_counts.available)} · absent ${esc(report.image_counts.absent)} · read_failed ${esc(report.image_counts.read_failed)}<br><a href="${esc(report.original_download_url)}">下载 V${esc(report.version_number)} 原件</a> · <b>${sourceLabel(report.result_mode)}</b> 预审：${esc(report.precheck_status)}`:`V${esc(v?.number)} · 本版本无可用上传解析记录`;
   if(report){const issues=[...(report.report.issues||[]),...(report.report.links||[]).flatMap(l=>[...(l.issues||[]),...(l.record?.issues||[])])];$("#report").innerHTML=`${Object.keys(report.error).length?`<pre class="error">${esc(JSON.stringify(report.error,null,2))}</pre>`:""}<details><summary>解析问题与来源（${issues.length}）</summary><pre>${esc(JSON.stringify(issues,null,2))}</pre></details><details><summary>查看本版本完整解析及装箱关联报告</summary><pre>${esc(JSON.stringify(report.report,null,2))}</pre></details>`;}
   renderExports(report);
-  $("#items").innerHTML=pages.length?`<table><thead><tr><th>来源</th><th>品名</th><th>供应商原 HS</th><th>图片</th><th>mock 建议</th></tr></thead><tbody>${pages.map(i=>`<tr data-item="${esc(i.item_id)}"><td>${esc(i.source_location.sheet_name)} ${esc(i.source_location.row_number)}</td><td>${esc(i.name)}</td><td>${esc(i.supplier_hs_raw)}</td><td>${esc(i.image_status)}</td><td>${esc(i.precheck_suggested_hs||"未给出")}</td></tr>`).join("")}</tbody></table>`:'<p class="muted">本版本暂无商品，检查导入状态和错误。</p>';
+  $("#items").innerHTML=pages.length?`<table><thead><tr><th>来源</th><th>品名</th><th>供应商原 HS</th><th>图片</th><th>预审建议</th></tr></thead><tbody>${pages.map(i=>`<tr data-item="${esc(i.item_id)}"><td>${esc(i.source_location.sheet_name)} ${esc(i.source_location.row_number)}</td><td>${esc(i.name)}</td><td>${esc(i.supplier_hs_raw)}</td><td>${esc(i.image_status)}</td><td>${esc(i.precheck_suggested_hs||"未给出")}</td></tr>`).join("")}</tbody></table>`:'<p class="muted">本版本暂无商品，检查导入状态和错误。</p>';
   if(report?.parse_status==="staged"){importTimer=setTimeout(()=>{if(seq===requestSequence&&token===epoch&&version===id)guarded(()=>openVersion(id));},1000);return;}
   $("#rerun").hidden=!(v?.is_current&&task.precheck_allowed===true);
   const runId=v?.is_current&&task.latest_run_id?task.latest_run_id:report?.precheck_run_id;
   if(runId)void progress.open({taskId:task.task_id,versionId:id,runId,isVersionCurrent:!!v?.is_current,versionNumber:v?.number});
 }
 async function openItem(id){const seq=++requestSequence,token=epoch,v=version;const c=await api.getItem(v,id);if(seq!==requestSequence||token!==epoch||v!==version)return;
-  $("#card").innerHTML=`<h2>${esc(c.facts.name)} · ${esc(c.source_location.cells)}</h2><p><b>MOCK</b> · 比较 ${esc(c.comparison_status)} · 图片 ${esc(c.image_status)}</p>${c.images.map(i=>`<p>${esc(i.status)} · ${esc(i.source_cell)} · ${esc(i.error_message)} ${i.download_url?`<a href="${esc(i.download_url)}">下载图片</a><br><img src="${esc(i.download_url)}" alt="${esc(c.facts.name)} 的商品图片">`:""}</p>`).join("")}<details open><summary>原文、来源位置和本版本结果</summary><pre>${esc(JSON.stringify(c,null,2))}</pre></details>`;
+  $("#card").innerHTML=`<h2>${esc(c.facts.name)} · ${esc(c.source_location.cells)}</h2><p><b>${sourceLabel(c.result_mode)}</b> · 比较 ${esc(c.comparison_status)} · 图片 ${esc(c.image_status)}</p>${c.images.map(i=>`<p>${esc(i.status)} · ${esc(i.source_cell)} · ${esc(i.error_message)} ${i.download_url?`<a href="${esc(i.download_url)}">下载图片</a><br><img src="${esc(i.download_url)}" alt="${esc(c.facts.name)} 的商品图片">`:""}</p>`).join("")}<details open><summary>原文、来源位置和本版本结果</summary><pre>${esc(JSON.stringify(c,null,2))}</pre></details>`;
 }
 async function upload(confirmDuplicate=false){
   if(busy)return;
@@ -167,7 +168,7 @@ async function upload(confirmDuplicate=false){
     const result=await api.uploadFile(intent.file,{taskId:intent.taskId,currentVersionId:intent.currentVersionId,key:intent.key,confirmDuplicate:intent.confirmDuplicate});
     if(!isCurrent())return;
     attempt=null;duplicateIntent=null;$("#duplicate").hidden=true;$("#file").value="";
-    notice(result.parse_status==="staged"?`上传已受理：V${result.version_number}。后台正在解析和预审，进度会自动更新。`:`上传成功：V${result.version_number}，${result.item_count} 条商品，${result.member_count} 条装箱成员。预审为 mock，执行 ${result.precheck_status}。`);
+    notice(result.parse_status==="staged"?`上传已受理：V${result.version_number}。后台正在解析和预审，进度会自动更新。`:`上传成功：V${result.version_number}，${result.item_count} 条商品，${result.member_count} 条装箱成员。预审来源 ${sourceLabel(result.result_mode)}，执行 ${result.precheck_status}。`);
     await refresh();if(isCurrent())await openTask(result.task_id,result.version_id);
   }catch(error){
     if(!isCurrent())return;

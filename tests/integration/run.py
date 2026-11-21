@@ -22,7 +22,7 @@ ROOT = Path(__file__).resolve().parents[2]
 PG_KEYS = ("CUSTOMS_PG_NAME", "CUSTOMS_PG_USER", "CUSTOMS_PG_PASSWORD",
            "CUSTOMS_PG_HOST", "CUSTOMS_PG_PORT")
 CORE_LABELS = [f"tests/p{number:02d}" for number in range(21)] + [
-    "tests/p15_pg", "tests/p16_real", "tests/p23", "tests/integration",
+    "tests/p15_pg", "tests/p16_real", "tests/p23", "tests/integration", "tests/optimization",
 ]
 
 
@@ -82,7 +82,12 @@ def main(argv: list[str] | None = None) -> int:
     }
     try:
         with tempfile.TemporaryDirectory(prefix="customs-p21-") as directory:
-            child_env = environment(args.backend, Path(directory))
+            # tempfile on macOS can return /var/... (a symlink to /private/var).
+            # Use the physical, runner-owned directory for child fixtures too; do
+            # not weaken the application's checks on publication/storage paths.
+            sandbox = Path(directory).resolve()
+            child_env = environment(args.backend, sandbox)
+            child_env.update(TMPDIR=str(sandbox), TEMP=str(sandbox), TMP=str(sandbox))
             with log_path.open("w", encoding="utf-8") as log:
                 process = subprocess.Popen(command, cwd=ROOT, env=child_env, stdout=subprocess.PIPE,
                                            stderr=subprocess.STDOUT, text=True, encoding="utf-8",

@@ -50,9 +50,9 @@ dispatcher:
 	$(MANAGE) dispatch_runs --watch
 
 workbench:
-	@echo "正式工作台：http://$(BIND)/workbench/（真实登录会话与 API）"
-	@echo "  样例仅 DEBUG 下显式 ?mode=fixture 或 ?mode=demo。"
-	@echo "  按所选版本和执行记录审核；专家工作簿布局待确认，mock AI 不构成申报依据。"
+	@echo "关务作业台：http://$(BIND)/（未登录自动进入 /login/）"
+	@echo "  运行与导出：/workbench/ ；上传与认领：/uploads/ 。三个入口共享业务会话。"
+	@echo "  请核对任务版本与结果来源；模拟结果不能作为申报依据。"
 	$(MANAGE) runserver $(BIND)
 
 check:

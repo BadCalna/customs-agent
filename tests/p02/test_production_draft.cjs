@@ -79,6 +79,7 @@ async function harness() {
     listTasks: async () => ({items: [], next_cursor: null}),
     getTask: async id => ({task_id: id, title: 'Review', current_version_id: versionId,
       current_version_number: 1, stage: 'submitted', result_mode: 'live', latest_run_id: 'run-1',
+      allowed_actions: ['read', 'decision.resolve'],
       versions: [{version_id: versionId, number: 1, original_filename: 'input.xlsx'}],
       supplier: 'Supplier', revision: 1}),
     listItems: async () => ({items: [{item_id: itemId, name: 'Item', source_location: {
@@ -265,6 +266,7 @@ async function harness() {
       items: [], retry_allowed: false, retry_item_ids: [], result_mode: 'live'});
     releaseTask = () => resolve({task_id: id, title: 'Review B', current_version_id: 'version-1',
       current_version_number: 1, stage: 'submitted', result_mode: 'live', latest_run_id: 'run-1',
+      allowed_actions: ['read', 'decision.resolve'],
       versions: [{version_id: 'version-1', number: 1, original_filename: 'input.xlsx'}],
       supplier: 'Supplier', revision: 1});
   });

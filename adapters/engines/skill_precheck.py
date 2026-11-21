@@ -67,6 +67,32 @@ def _dataset(value) -> dict:
     ) if key in data} | {"review_status": data.get("review_status", "unknown")}
 
 
+def _section_rules(text: str, title: str, count: int) -> dict[int, str]:
+    """Read one known, flat numbered section; do not guess Markdown boundaries."""
+    parts = re.split(r"(?m)^ {0,3}##[ \t]+([^\n]*)$", text)
+    ordinal = title.partition("、")[0] + "、"
+    matches = [(heading, body) for heading, body in zip(parts[1::2], parts[2::2])
+               if heading.strip().startswith(ordinal)]
+    if len(matches) != 1 or matches[0][0].strip() != title:
+        raise ValueError("missing or ambiguous section")
+
+    rules = {}
+    for line in matches[0][1].splitlines():
+        if not line.strip():
+            continue
+        number = len(rules) + 1
+        if line.startswith(f"{number}. ") and line.partition(". ")[2].strip():
+            rules[number] = line
+        elif rules and re.fullmatch(r" {3}(?![\s\d#`~])\S.*", line):
+            # The checked-in Skill continues rule 7 with indented prose.
+            rules[number - 1] += "\n" + line
+        else:
+            raise ValueError("unexpected rule boundary or numbering")
+    if len(rules) != count:
+        raise ValueError("unexpected section length")
+    return rules
+
+
 def _load_skill(path: Path) -> dict:
     try:
         raw = path.read_bytes()
@@ -75,35 +101,31 @@ def _load_skill(path: Path) -> dict:
         text = raw.decode("utf-8").replace("\r\n", "\n")
         # Fail closed on unfamiliar layouts rather than forwarding the whole Skill,
         # its front matter, expert workflow, images, Excel operations or references.
-        sections = dict(re.findall(r"(?m)^## ([^\n]+)\n(.*?)(?=^## |\Z)", text, re.S | re.M))
-        common = sections["一、确认商品及两个页签的关联"]
-        precheck = sections["二、业务员预审：独立推荐HS并比较"]
-        picked = []
-        for number in (2, 3):
-            match = re.search(rf"(?m)^{number}\. (.*?)(?=^\d+\. |\Z)", common, re.S)
-            if not match:
-                raise ValueError("missing fact rule")
-            picked.append(match.group(0).strip())
+        common = _section_rules(text, "一、确认商品及两个页签的关联", 7)
+        precheck = _section_rules(text, "二、业务员预审：独立推荐HS并比较", 9)
+        picked = [common[2], common[3]]
         for number in (1, 2, 4, 7):
-            match = re.search(rf"(?m)^{number}\. (.*?)(?=^\d+\. |\Z)", precheck, re.S)
-            if not match:
-                raise ValueError("missing precheck rule")
-            rule = match.group(0).strip()
+            rule = precheck[number]
             if number == 2:
                 # Keep source priority/provenance, not local workbook or website
                 # execution instructions. Runtime uses supplied packets only.
-                rule = rule.split("读取`references`", 1)[0] + (
+                marker = "读取`references`"
+                if rule.count(marker) != 1:
+                    raise ValueError("missing or ambiguous source boundary")
+                rule = rule.partition(marker)[0] + (
                     "仅消费 supplied reference_packet，不读取本地Excel、不上网。"
                     "历史成功记录和映射快照仅作佐证，不单独证明本批归类或当期税率；"
                     "历史HS仅在独立判断完成后由模型外程序核对。记录实际来源、日期、版本与查询状态。")
             elif number == 7:
-                rule = rule.replace("在映射底表`申报要素明细`取完整字段及必填标记",
-                                    "仅从supplied P14 packet取得完整字段及必填标记")
+                marker = "在映射底表`申报要素明细`取完整字段及必填标记"
+                if rule.count(marker) != 1:
+                    raise ValueError("missing or ambiguous elements boundary")
+                rule = rule.replace(marker, "仅从supplied P14 packet取得完整字段及必填标记")
             picked.append(rule)
         rules = "\n\n".join(picked)
         return {"name": "steel-hs-declaration", "stage": "precheck",
                 "sha256": hashlib.sha256(raw).hexdigest(),
-                "selected_rules_sha256": _hash(rules), "selection_version": "text-candidates-packet-only-2",
+                "selected_rules_sha256": _hash(rules), "selection_version": "text-candidates-packet-only-3",
                 "rules": rules}
     except Exception:
         raise EngineTechnicalError("预审Skill读取或阶段规则校验失败") from None
