@@ -1,0 +1,653 @@
+{
+  "browser": "157.0.8103.80",
+  "desktop": {
+    "viewport": [
+      1440,
+      900
+    ],
+    "js_errors": [],
+    "http_errors": [
+      [
+        401,
+        "/api/v1/auth/login"
+      ],
+      [
+        404,
+        "/api/v1/versions/a2a3db8e-60ac-4a92-ab09-79d89f3f9d33/import"
+      ],
+      [
+        404,
+        "/api/v1/versions/1339fc42-3ea6-4a74-8337-801cf2d950e3/import"
+      ]
+    ],
+    "responses": [
+      {
+        "items": 8,
+        "compare": {
+          "consistent": 1,
+          "inconsistent": 1,
+          "needs_confirmation": 3,
+          "supplier_missing": 1,
+          "supplier_invalid": 1,
+          "none": 1
+        }
+      },
+      {
+        "run": {
+          "total": 8,
+          "queued": 0,
+          "running": 0,
+          "succeeded": 7,
+          "failed": 1
+        },
+        "mode": "mock"
+      },
+      {
+        "items": 2,
+        "compare": {
+          "consistent": 1,
+          "inconsistent": 1
+        }
+      },
+      {
+        "run": {
+          "total": 2,
+          "queued": 0,
+          "running": 0,
+          "succeeded": 2,
+          "failed": 0
+        },
+        "mode": "mock"
+      }
+    ],
+    "images": {
+      "desktop-login.png": "d27bc4cee036a2d4e5689e9de0a3704d7c659fb7702c7a6507ba48668b686355",
+      "desktop-login-harbor.png": "d27bc4cee036a2d4e5689e9de0a3704d7c659fb7702c7a6507ba48668b686355",
+      "desktop-login-ledger.png": "06be28d80b1e4030fb7f574d3bba40f2f8a4207d4e0a9175b7b7db041c5e0ab6",
+      "desktop-login-night.png": "b3f126778a51cb257bc18c31828b0fd91cbc17d0bc3267a4a2076ebf870d3955",
+      "desktop-workspace.png": "1b6ce2a82a0a3e07f9297686f83cfde0cc86da1f25e6ab13cfd72060f833687a",
+      "desktop-data.png": "492a636ade2a0e0b6d9eda5246f34983daa64da066ac0a2e799531d5e08dffe4",
+      "desktop-workspace-ledger.png": "57cdf0147ab40a0011be298eba3e9c07808f77fc64d45d9a700695d2f27a4ca2",
+      "desktop-workspace-night.png": "929b35c4f0a0f4d3fb12b471372e8de9843e1931d0808126abe5f7f4f52c5e10",
+      "desktop-item.png": "c0589ac5c3a9315db56033ae52108ff174d3505e0aa3fd9593bf3af3ffefcff5"
+    },
+    "themes": {
+      "harbor": {
+        "login_palette": [
+          [
+            "rgb(237, 241, 236)",
+            "rgb(25, 47, 42)",
+            "none"
+          ],
+          [
+            "rgb(237, 241, 236)",
+            "rgb(25, 47, 42)",
+            "radial-gradient(circle at 12% 18%, rgb(234, 240, 232), rgba(0, 0, 0, 0) 52%), none"
+          ],
+          [
+            "rgba(0, 0, 0, 0)",
+            "rgb(25, 47, 42)",
+            "none"
+          ],
+          [
+            "rgb(22, 85, 72)",
+            "rgb(255, 255, 255)",
+            "none"
+          ]
+        ],
+        "workspace_palette": [
+          [
+            "rgb(237, 241, 236)",
+            "rgb(25, 47, 42)",
+            "none"
+          ],
+          [
+            "rgba(0, 0, 0, 0)",
+            "rgb(25, 47, 42)",
+            "none"
+          ],
+          [
+            "rgba(0, 0, 0, 0)",
+            "rgb(25, 47, 42)",
+            "none"
+          ],
+          [
+            "rgb(22, 85, 72)",
+            "rgb(255, 255, 255)",
+            "none"
+          ]
+        ]
+      },
+      "ledger": {
+        "login_palette": [
+          [
+            "rgb(238, 230, 215)",
+            "rgb(62, 50, 39)",
+            "none"
+          ],
+          [
+            "rgb(238, 230, 215)",
+            "rgb(62, 50, 39)",
+            "radial-gradient(circle at 12% 18%, rgb(242, 232, 216), rgba(0, 0, 0, 0) 52%), none"
+          ],
+          [
+            "rgba(0, 0, 0, 0)",
+            "rgb(62, 50, 39)",
+            "none"
+          ],
+          [
+            "rgb(118, 67, 39)",
+            "rgb(255, 255, 255)",
+            "none"
+          ]
+        ],
+        "workspace_palette": [
+          [
+            "rgb(238, 230, 215)",
+            "rgb(62, 50, 39)",
+            "none"
+          ],
+          [
+            "rgba(0, 0, 0, 0)",
+            "rgb(62, 50, 39)",
+            "none"
+          ],
+          [
+            "rgba(0, 0, 0, 0)",
+            "rgb(62, 50, 39)",
+            "none"
+          ],
+          [
+            "rgb(118, 67, 39)",
+            "rgb(255, 255, 255)",
+            "none"
+          ]
+        ]
+      },
+      "night": {
+        "login_palette": [
+          [
+            "rgb(16, 27, 39)",
+            "rgb(237, 242, 245)",
+            "none"
+          ],
+          [
+            "rgb(16, 27, 39)",
+            "rgb(237, 242, 245)",
+            "radial-gradient(circle at 12% 18%, rgb(33, 52, 65), rgba(0, 0, 0, 0) 52%), none"
+          ],
+          [
+            "rgba(0, 0, 0, 0)",
+            "rgb(237, 242, 245)",
+            "none"
+          ],
+          [
+            "rgb(167, 216, 218)",
+            "rgb(17, 46, 54)",
+            "none"
+          ]
+        ],
+        "workspace_palette": [
+          [
+            "rgb(16, 27, 39)",
+            "rgb(237, 242, 245)",
+            "none"
+          ],
+          [
+            "rgba(0, 0, 0, 0)",
+            "rgb(237, 242, 245)",
+            "none"
+          ],
+          [
+            "rgba(0, 0, 0, 0)",
+            "rgb(237, 242, 245)",
+            "none"
+          ],
+          [
+            "rgb(167, 216, 218)",
+            "rgb(17, 46, 54)",
+            "none"
+          ]
+        ]
+      }
+    },
+    "direct_login_status": 200,
+    "login_path": "/login/",
+    "login_text": "跳到账号登录\n关务审核工作台\nCUSTOMS DESK\n主题\n海港青\n档案棕\n夜航蓝\nFIELD ATLAS / 关务图志\nPLATE 01\nPORT OF ENTRY\n\n通关作业志 。\n\n单证流转，逐项有据。\nC / 01\nC / 02\nQUAY\nFIG. 01  港区装箱示意\n\n WORKSPACE ACCESS\n\n登录工作台\n\n使用分配的业务账号，处理单证预审与人工复核。\n\n账号\n密码\n登录\n→\n\n还没有账号，或忘记密码？请联系业务管理员。\n\n关务审核工作台 / 业务访问入口\nCUSTOMS DESK · ACCESS",
+    "login_geometry": {
+      "viewport": 1440,
+      "root": 1440,
+      "content": 1440,
+      "body": 1440
+    },
+    "login_labels": [
+      [
+        "账号"
+      ],
+      [
+        "密码"
+      ]
+    ],
+    "login_workspace_visible": false,
+    "theme_choices": [
+      "harbor",
+      "ledger",
+      "night"
+    ],
+    "theme_picker_snapshot": "- combobox \"界面主题\":\n  - option \"海港青\" [selected]\n  - option \"档案棕\"\n  - option \"夜航蓝\"",
+    "theme_after_refresh": "night",
+    "tab_from_user": "password",
+    "wrong_status": 401,
+    "login_error_feedback": "账号或密码不正确，请检查后重试。",
+    "wrong_password_text": "跳到账号登录\n关务审核工作台\nCUSTOMS DESK\n主题\n海港青\n档案棕\n夜航蓝\nFIELD ATLAS / 关务图志\nPLATE 01\nPORT OF ENTRY\n\n通关作业志 。\n\n单证流转，逐项有据。\nC / 01\nC / 02\nQUAY\nFIG. 01  港区装箱示意\n\n WORKSPACE ACCESS\n\n登录工作台\n\n使用分配的业务账号，处理单证预审与人工复核。\n\n账号\n密码\n\n账号或密码不正确，请检查后重试。\n\n登录\n→\n\n还没有账号，或忘记密码？请联系业务管理员。\n\n关务审核工作台 / 业务访问入口\nCUSTOMS DESK · ACCESS",
+    "workspace_path": "/",
+    "identity": "业务员甲 · 业务员",
+    "workspace_palette": [
+      [
+        "rgb(16, 27, 39)",
+        "rgb(237, 242, 245)",
+        "none"
+      ],
+      [
+        "rgba(0, 0, 0, 0)",
+        "rgb(237, 242, 245)",
+        "none"
+      ],
+      [
+        "rgba(0, 0, 0, 0)",
+        "rgb(237, 242, 245)",
+        "none"
+      ],
+      [
+        "rgb(167, 216, 218)",
+        "rgb(17, 46, 54)",
+        "none"
+      ]
+    ],
+    "theme_after_login": "night",
+    "task_counts": {
+      "initial": 3,
+      "search": 1,
+      "cleared": 3,
+      "none": 0,
+      "reset": 3,
+      "stage": 1,
+      "stage_reset": 3
+    },
+    "search_text": "契约演示-主流程\n待业务确认 · V2\n供应商甲 · 5ac50601-4b51-4ae2-9996-b84a98ca7347",
+    "no_results_text": "没有匹配的任务。可调整条件或清除筛选。",
+    "stage_text": "契约演示-专家改码\n已通过 · V1\n供应商甲 · 76ebb2e2-e179-4da2-9b2d-f624540d1ffc",
+    "task_detail": "契约演示-主流程\n待业务确认\n任务 5ac50601-4b51-4ae2-9996-b84a98ca7347\n供应商 供应商甲\n修订 1\n\n当前结果为模拟数据，不能用于正式审核。\n\nV1 · 契约演示-V1.xlsx\nV2 · 契约演示-V2.xlsx",
+    "v2_run": "AI 预审\n失败\n总数 8\n完成 7\n失败 1\n处理中 0\n\n模拟结果，不可作为审核依据。\n\n申报要素 第6行 · 已完成 · 编码不一致\n申报要素 第7行 · 已完成 · 待核对\n申报要素 第9行 · 已完成 · 原码缺失\n申报要素 第8行 · 已完成 · 待核对\n申报要素 第11行 · 失败 · mock 模拟的技术失败：上游模型超时\n申报要素 第12行 · 已完成 · 待核对\n申报要素 第10行 · 已完成 · 原码异常\n申报要素 第5行 · 已完成 · 编码一致",
+    "v2_items_text": "来源\t商品\t原编码\tAI 建议\t业务确认\t专家终值\t比较\n申报要素 5\t不锈钢制无缝管（一致样例）\t8544422900\t8544422900\t-\t-\t编码一致\n申报要素 6\t不锈钢制焊接管（不一致样例）\t7306290000\t8544422900\t-\t-\t编码不一致\n申报要素 7\t镍合金板（缺用途）\t8544422900\t-\t-\t-\t待核对\n申报要素 8\t镍合金带（附图读取失败）\t8544422900\t8544422900\t-\t-\t待核对\n申报要素 9\t钢制紧固件（原码未填）\t-\t8544422900\t-\t-\t原码缺失\n申报要素 10\t钢制法兰（原码异常）\tABC\t8544422900\t-\t-\t原码异常\n申报要素 11\t铜制管件（技术失败行）\t8544422900\t-\t-\t-\t未产生\n申报要素 12\t铝制型材（查询失败）\t8544422900\t8544422900\t-\t-\t待核对",
+    "v2_table_rows": 8,
+    "workspace_geometry": {
+      "viewport": 1440,
+      "root": 1440,
+      "content": 1440,
+      "body": 1440
+    },
+    "summary_selector": "#review-insights",
+    "v2_summary": "版本审核概览\n\n当前版本 · V2 · 契约演示-V2.xlsx\n\n8条商品\n\n含模拟结果，不可作为正式审核依据。\n\n各阶段编码记录\n\n有编码的商品数 / 本版本明细数\n\n预审建议\n6 / 8\n业务确认\n0 / 8\n提交留档\n0 / 8\n专家终值\n0 / 8\n供应商原码与预审比较\n\n每条商品只计一次；编码一致不等于审核通过。\n\n原码异常\n1 条\n原码缺失\n1 条\n编码不一致\n1 条\n待核对\n3 条\n编码一致\n1 条\n暂未有结论\n1 条\n定位需核对的商品按明细顺序，最多列 3 条\n不锈钢制焊接管（不一致样例）\n编码不一致 · 申报要素 · 第 6 行\n镍合金板（缺用途）\n待核对 · 申报要素 · 第 7 行\n镍合金带（附图读取失败）\n待核对 · 申报要素 · 第 8 行\n查看统计口径",
+    "v2_distribution": [
+      "原码异常\n1 条",
+      "原码缺失\n1 条",
+      "编码不一致\n1 条",
+      "待核对\n3 条",
+      "编码一致\n1 条",
+      "暂未有结论\n1 条"
+    ],
+    "v2_coverage": [
+      "预审建议\n6 / 8",
+      "业务确认\n0 / 8",
+      "提交留档\n0 / 8",
+      "专家终值\n0 / 8"
+    ],
+    "v2_total": "8条商品",
+    "item_card": "不锈钢制焊接管（不一致样例）\n申报要素 · 第6行\n\n本商品预审来自模拟结果，不能用于正式审核。\n\n供应商原编码\n7306290000\nAI 建议编码\n8544422900\n业务确认编码\n未确认\n提交编码\n未提交\n专家终值\n未决定\n申报要素原文\n品名:不锈钢制焊接管（不一致样例）|规格型号:SPEC-6\n\n建议编码与原码不一致",
+    "v1_run": "AI 预审\n已完成\n总数 2\n完成 2\n失败 0\n处理中 0\n\n模拟结果，不可作为审核依据。\n\n申报要素 第6行 · 已完成 · 编码不一致\n申报要素 第5行 · 已完成 · 编码一致",
+    "v1_summary": "版本审核概览\n\n历史版本 · V1 · 契约演示-V1.xlsx\n\n2条商品\n\n含模拟结果，不可作为正式审核依据。\n\n各阶段编码记录\n\n有编码的商品数 / 本版本明细数\n\n预审建议\n2 / 2\n业务确认\n0 / 2\n提交留档\n0 / 2\n专家终值\n0 / 2\n供应商原码与预审比较\n\n每条商品只计一次；编码一致不等于审核通过。\n\n编码不一致\n1 条\n编码一致\n1 条\n定位需核对的商品按明细顺序，最多列 3 条\n不锈钢制焊接管（不一致样例）\n编码不一致 · 申报要素 · 第 6 行\n查看统计口径",
+    "v1_items_text": "来源\t商品\t原编码\tAI 建议\t业务确认\t专家终值\t比较\n申报要素 5\t不锈钢制无缝管（一致样例）\t8544422900\t8544422900\t-\t-\t编码一致\n申报要素 6\t不锈钢制焊接管（不一致样例）\t7306290000\t8544422900\t-\t-\t编码不一致",
+    "v1_table_rows": 2,
+    "v1_distribution": [
+      "编码不一致\n1 条",
+      "编码一致\n1 条"
+    ],
+    "v1_coverage": [
+      "预审建议\n2 / 2",
+      "业务确认\n0 / 2",
+      "提交留档\n0 / 2",
+      "专家终值\n0 / 2"
+    ],
+    "v1_total": "2条商品",
+    "logout": {
+      "user_visible": true,
+      "workspace_visible": false,
+      "task_visible": false,
+      "path": "/login/"
+    }
+  },
+  "mobile": {
+    "viewport": [
+      390,
+      844
+    ],
+    "js_errors": [],
+    "http_errors": [
+      [
+        401,
+        "/api/v1/auth/login"
+      ],
+      [
+        404,
+        "/api/v1/versions/a2a3db8e-60ac-4a92-ab09-79d89f3f9d33/import"
+      ],
+      [
+        404,
+        "/api/v1/versions/1339fc42-3ea6-4a74-8337-801cf2d950e3/import"
+      ]
+    ],
+    "responses": [
+      {
+        "items": 8,
+        "compare": {
+          "consistent": 1,
+          "inconsistent": 1,
+          "needs_confirmation": 3,
+          "supplier_missing": 1,
+          "supplier_invalid": 1,
+          "none": 1
+        }
+      },
+      {
+        "run": {
+          "total": 8,
+          "queued": 0,
+          "running": 0,
+          "succeeded": 7,
+          "failed": 1
+        },
+        "mode": "mock"
+      },
+      {
+        "items": 2,
+        "compare": {
+          "consistent": 1,
+          "inconsistent": 1
+        }
+      },
+      {
+        "run": {
+          "total": 2,
+          "queued": 0,
+          "running": 0,
+          "succeeded": 2,
+          "failed": 0
+        },
+        "mode": "mock"
+      }
+    ],
+    "images": {
+      "mobile-login.png": "a3749ebb5aa79c5a863e803bdca5f901aed35312deebfe8c8b72c17aad2d61f2",
+      "mobile-selected-position.png": "afede04d5ddef8b0f3bc6160dd080908a029eb5463d454bf59478baaf5cd6301",
+      "mobile-workspace.png": "3675cdc7273d13236366621991b0b4409feab4b97dc4dd5a8fd928c0c5c179b2",
+      "mobile-data.png": "129a6f5e99e619d32ef0f859150a34badb66baafcce7648d24d83cd132392336",
+      "mobile-item.png": "aaf7c4ceee9e95eab56c22b581e8f45df3ae9cf8a5ad4c3f2aede91344472cd4"
+    },
+    "themes": {
+      "harbor": {
+        "login_palette": [
+          [
+            "rgb(237, 241, 236)",
+            "rgb(25, 47, 42)",
+            "none"
+          ],
+          [
+            "rgb(237, 241, 236)",
+            "rgb(25, 47, 42)",
+            "radial-gradient(circle at 12% 18%, rgb(234, 240, 232), rgba(0, 0, 0, 0) 52%), none"
+          ],
+          [
+            "rgba(0, 0, 0, 0)",
+            "rgb(25, 47, 42)",
+            "none"
+          ],
+          [
+            "rgb(22, 85, 72)",
+            "rgb(255, 255, 255)",
+            "none"
+          ]
+        ],
+        "workspace_palette": [
+          [
+            "rgb(237, 241, 236)",
+            "rgb(25, 47, 42)",
+            "none"
+          ],
+          [
+            "rgba(0, 0, 0, 0)",
+            "rgb(25, 47, 42)",
+            "none"
+          ],
+          [
+            "rgba(0, 0, 0, 0)",
+            "rgb(25, 47, 42)",
+            "none"
+          ],
+          [
+            "rgb(22, 85, 72)",
+            "rgb(255, 255, 255)",
+            "none"
+          ]
+        ]
+      },
+      "ledger": {
+        "login_palette": [
+          [
+            "rgb(238, 230, 215)",
+            "rgb(62, 50, 39)",
+            "none"
+          ],
+          [
+            "rgb(238, 230, 215)",
+            "rgb(62, 50, 39)",
+            "radial-gradient(circle at 12% 18%, rgb(242, 232, 216), rgba(0, 0, 0, 0) 52%), none"
+          ],
+          [
+            "rgba(0, 0, 0, 0)",
+            "rgb(62, 50, 39)",
+            "none"
+          ],
+          [
+            "rgb(118, 67, 39)",
+            "rgb(255, 255, 255)",
+            "none"
+          ]
+        ],
+        "workspace_palette": [
+          [
+            "rgb(238, 230, 215)",
+            "rgb(62, 50, 39)",
+            "none"
+          ],
+          [
+            "rgba(0, 0, 0, 0)",
+            "rgb(62, 50, 39)",
+            "none"
+          ],
+          [
+            "rgba(0, 0, 0, 0)",
+            "rgb(62, 50, 39)",
+            "none"
+          ],
+          [
+            "rgb(118, 67, 39)",
+            "rgb(255, 255, 255)",
+            "none"
+          ]
+        ]
+      },
+      "night": {
+        "login_palette": [
+          [
+            "rgb(16, 27, 39)",
+            "rgb(237, 242, 245)",
+            "none"
+          ],
+          [
+            "rgb(16, 27, 39)",
+            "rgb(237, 242, 245)",
+            "radial-gradient(circle at 12% 18%, rgb(33, 52, 65), rgba(0, 0, 0, 0) 52%), none"
+          ],
+          [
+            "rgba(0, 0, 0, 0)",
+            "rgb(237, 242, 245)",
+            "none"
+          ],
+          [
+            "rgb(167, 216, 218)",
+            "rgb(17, 46, 54)",
+            "none"
+          ]
+        ],
+        "workspace_palette": [
+          [
+            "rgb(16, 27, 39)",
+            "rgb(237, 242, 245)",
+            "none"
+          ],
+          [
+            "rgba(0, 0, 0, 0)",
+            "rgb(237, 242, 245)",
+            "none"
+          ],
+          [
+            "rgba(0, 0, 0, 0)",
+            "rgb(237, 242, 245)",
+            "none"
+          ],
+          [
+            "rgb(167, 216, 218)",
+            "rgb(17, 46, 54)",
+            "none"
+          ]
+        ]
+      }
+    },
+    "direct_login_status": 200,
+    "login_path": "/login/",
+    "login_text": "跳到账号登录\n关务审核工作台\nCUSTOMS DESK\n主题\n海港青\n档案棕\n夜航蓝\nPORT OF ENTRY\nC / 01\nC / 02\nQUAY\n\n WORKSPACE ACCESS\n\n登录工作台\n\n使用分配的业务账号，处理单证预审与人工复核。\n\n账号\n密码\n登录\n→\n\n还没有账号，或忘记密码？请联系业务管理员。\n\n关务审核工作台 / 业务访问入口",
+    "login_geometry": {
+      "viewport": 390,
+      "root": 390,
+      "content": 390,
+      "body": 390
+    },
+    "login_labels": [
+      [
+        "账号"
+      ],
+      [
+        "密码"
+      ]
+    ],
+    "login_workspace_visible": false,
+    "theme_choices": [
+      "harbor",
+      "ledger",
+      "night"
+    ],
+    "theme_picker_snapshot": "- combobox \"界面主题\":\n  - option \"海港青\" [selected]\n  - option \"档案棕\"\n  - option \"夜航蓝\"",
+    "theme_after_refresh": "night",
+    "tab_from_user": "password",
+    "wrong_status": 401,
+    "login_error_feedback": "账号或密码不正确，请检查后重试。",
+    "wrong_password_text": "跳到账号登录\n关务审核工作台\nCUSTOMS DESK\n主题\n海港青\n档案棕\n夜航蓝\nPORT OF ENTRY\nC / 01\nC / 02\nQUAY\n\n WORKSPACE ACCESS\n\n登录工作台\n\n使用分配的业务账号，处理单证预审与人工复核。\n\n账号\n密码\n\n账号或密码不正确，请检查后重试。\n\n登录\n→\n\n还没有账号，或忘记密码？请联系业务管理员。\n\n关务审核工作台 / 业务访问入口",
+    "workspace_path": "/",
+    "identity": "业务员甲 · 业务员",
+    "workspace_palette": [
+      [
+        "rgb(16, 27, 39)",
+        "rgb(237, 242, 245)",
+        "none"
+      ],
+      [
+        "rgba(0, 0, 0, 0)",
+        "rgb(237, 242, 245)",
+        "none"
+      ],
+      [
+        "rgba(0, 0, 0, 0)",
+        "rgb(237, 242, 245)",
+        "none"
+      ],
+      [
+        "rgb(167, 216, 218)",
+        "rgb(17, 46, 54)",
+        "none"
+      ]
+    ],
+    "theme_after_login": "night",
+    "task_counts": {
+      "initial": 3,
+      "search": 1,
+      "cleared": 3,
+      "none": 0,
+      "reset": 3,
+      "stage": 1,
+      "stage_reset": 3
+    },
+    "search_text": "契约演示-主流程\n待业务确认 · V2\n供应商甲 · 5ac50601-4b51-4ae2-9996-b84a98ca7347",
+    "no_results_text": "没有匹配的任务。可调整条件或清除筛选。",
+    "stage_text": "契约演示-专家改码\n已通过 · V1\n供应商甲 · 76ebb2e2-e179-4da2-9b2d-f624540d1ffc",
+    "task_detail": "契约演示-主流程\n待业务确认\n任务 5ac50601-4b51-4ae2-9996-b84a98ca7347\n供应商 供应商甲\n修订 1\n\n当前结果为模拟数据，不能用于正式审核。\n\nV1 · 契约演示-V1.xlsx\nV2 · 契约演示-V2.xlsx",
+    "v2_run": "AI 预审\n失败\n总数 8\n完成 7\n失败 1\n处理中 0\n\n模拟结果，不可作为审核依据。\n\n申报要素 第6行 · 已完成 · 编码不一致\n申报要素 第7行 · 已完成 · 待核对\n申报要素 第9行 · 已完成 · 原码缺失\n申报要素 第8行 · 已完成 · 待核对\n申报要素 第11行 · 失败 · mock 模拟的技术失败：上游模型超时\n申报要素 第12行 · 已完成 · 待核对\n申报要素 第10行 · 已完成 · 原码异常\n申报要素 第5行 · 已完成 · 编码一致",
+    "v2_items_text": "来源\t商品\t原编码\tAI 建议\t业务确认\t专家终值\t比较\n申报要素 5\t不锈钢制无缝管（一致样例）\t8544422900\t8544422900\t-\t-\t编码一致\n申报要素 6\t不锈钢制焊接管（不一致样例）\t7306290000\t8544422900\t-\t-\t编码不一致\n申报要素 7\t镍合金板（缺用途）\t8544422900\t-\t-\t-\t待核对\n申报要素 8\t镍合金带（附图读取失败）\t8544422900\t8544422900\t-\t-\t待核对\n申报要素 9\t钢制紧固件（原码未填）\t-\t8544422900\t-\t-\t原码缺失\n申报要素 10\t钢制法兰（原码异常）\tABC\t8544422900\t-\t-\t原码异常\n申报要素 11\t铜制管件（技术失败行）\t8544422900\t-\t-\t-\t未产生\n申报要素 12\t铝制型材（查询失败）\t8544422900\t8544422900\t-\t-\t待核对",
+    "v2_table_rows": 8,
+    "workspace_geometry": {
+      "viewport": 390,
+      "root": 390,
+      "content": 390,
+      "body": 390
+    },
+    "summary_selector": "#review-insights",
+    "v2_summary": "版本审核概览\n\n当前版本 · V2 · 契约演示-V2.xlsx\n\n8条商品\n\n含模拟结果，不可作为正式审核依据。\n\n各阶段编码记录\n\n有编码的商品数 / 本版本明细数\n\n预审建议\n6 / 8\n业务确认\n0 / 8\n提交留档\n0 / 8\n专家终值\n0 / 8\n供应商原码与预审比较\n\n每条商品只计一次；编码一致不等于审核通过。\n\n原码异常\n1 条\n原码缺失\n1 条\n编码不一致\n1 条\n待核对\n3 条\n编码一致\n1 条\n暂未有结论\n1 条\n定位需核对的商品按明细顺序，最多列 3 条\n不锈钢制焊接管（不一致样例）\n编码不一致 · 申报要素 · 第 6 行\n镍合金板（缺用途）\n待核对 · 申报要素 · 第 7 行\n镍合金带（附图读取失败）\n待核对 · 申报要素 · 第 8 行\n查看统计口径",
+    "v2_distribution": [
+      "原码异常\n1 条",
+      "原码缺失\n1 条",
+      "编码不一致\n1 条",
+      "待核对\n3 条",
+      "编码一致\n1 条",
+      "暂未有结论\n1 条"
+    ],
+    "v2_coverage": [
+      "预审建议\n6 / 8",
+      "业务确认\n0 / 8",
+      "提交留档\n0 / 8",
+      "专家终值\n0 / 8"
+    ],
+    "v2_total": "8条商品",
+    "item_card": "不锈钢制焊接管（不一致样例）\n申报要素 · 第6行\n\n本商品预审来自模拟结果，不能用于正式审核。\n\n供应商原编码\n7306290000\nAI 建议编码\n8544422900\n业务确认编码\n未确认\n提交编码\n未提交\n专家终值\n未决定\n申报要素原文\n品名:不锈钢制焊接管（不一致样例）|规格型号:SPEC-6\n\n建议编码与原码不一致",
+    "v1_run": "AI 预审\n已完成\n总数 2\n完成 2\n失败 0\n处理中 0\n\n模拟结果，不可作为审核依据。\n\n申报要素 第6行 · 已完成 · 编码不一致\n申报要素 第5行 · 已完成 · 编码一致",
+    "v1_summary": "版本审核概览\n\n历史版本 · V1 · 契约演示-V1.xlsx\n\n2条商品\n\n含模拟结果，不可作为正式审核依据。\n\n各阶段编码记录\n\n有编码的商品数 / 本版本明细数\n\n预审建议\n2 / 2\n业务确认\n0 / 2\n提交留档\n0 / 2\n专家终值\n0 / 2\n供应商原码与预审比较\n\n每条商品只计一次；编码一致不等于审核通过。\n\n编码不一致\n1 条\n编码一致\n1 条\n定位需核对的商品按明细顺序，最多列 3 条\n不锈钢制焊接管（不一致样例）\n编码不一致 · 申报要素 · 第 6 行\n查看统计口径",
+    "v1_items_text": "来源\t商品\t原编码\tAI 建议\t业务确认\t专家终值\t比较\n申报要素 5\t不锈钢制无缝管（一致样例）\t8544422900\t8544422900\t-\t-\t编码一致\n申报要素 6\t不锈钢制焊接管（不一致样例）\t7306290000\t8544422900\t-\t-\t编码不一致",
+    "v1_table_rows": 2,
+    "v1_distribution": [
+      "编码不一致\n1 条",
+      "编码一致\n1 条"
+    ],
+    "v1_coverage": [
+      "预审建议\n2 / 2",
+      "业务确认\n0 / 2",
+      "提交留档\n0 / 2",
+      "专家终值\n0 / 2"
+    ],
+    "v1_total": "2条商品",
+    "logout": {
+      "user_visible": true,
+      "workspace_visible": false,
+      "task_visible": false,
+      "path": "/login/"
+    }
+  }
+}

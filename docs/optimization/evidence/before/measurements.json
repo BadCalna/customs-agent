@@ -1,0 +1,299 @@
+{
+  "browser": "157.0.8103.80",
+  "desktop": {
+    "viewport": [
+      1440,
+      900
+    ],
+    "js_errors": [],
+    "http_errors": [
+      [
+        401,
+        "/api/v1/me"
+      ],
+      [
+        401,
+        "/api/v1/auth/login"
+      ],
+      [
+        404,
+        "/api/v1/versions/67bb3011-d2cc-4e32-909b-72dfe66b3a07/import"
+      ],
+      [
+        404,
+        "/api/v1/versions/03e40773-bb30-4945-99cf-0ddb7e5c7158/import"
+      ],
+      [
+        401,
+        "/api/v1/me"
+      ]
+    ],
+    "responses": [
+      {
+        "items": 8,
+        "compare": {
+          "consistent": 1,
+          "inconsistent": 1,
+          "needs_confirmation": 3,
+          "supplier_missing": 1,
+          "supplier_invalid": 1,
+          "none": 1
+        }
+      },
+      {
+        "run": {
+          "total": 8,
+          "queued": 0,
+          "running": 0,
+          "succeeded": 7,
+          "failed": 1
+        },
+        "mode": "mock"
+      },
+      {
+        "items": 2,
+        "compare": {
+          "consistent": 1,
+          "inconsistent": 1
+        }
+      },
+      {
+        "run": {
+          "total": 2,
+          "queued": 0,
+          "running": 0,
+          "succeeded": 2,
+          "failed": 0
+        },
+        "mode": "mock"
+      }
+    ],
+    "images": {
+      "desktop-login.png": "2a36a02820f678d1a60404c4406bcba8687e73dfcebcf4ed75e3458b4ec4a0c4",
+      "desktop-workspace.png": "8a64685209309d4f4731effdb8e095bf21163dcca7c5e197a4705ea7695404e9",
+      "desktop-data.png": "a00ce6c5a4fb3d236e1464c5161bb09ebf37648bcc2aae61f84f59b8b1680ccd",
+      "desktop-item.png": "3e5fac1ceee698b79a515ef60e2dd1e0f8ed9a1db0fb46bc16ac802dfe361cf2"
+    },
+    "themes": {},
+    "direct_login_status": 404,
+    "login_path": "/",
+    "login_text": "关\n关务审核工作台\n单证预审与人工审核\n登录\n账号\n密码\n登录",
+    "login_geometry": {
+      "viewport": 1440,
+      "root": 1440,
+      "content": 1440,
+      "body": 1440
+    },
+    "login_labels": [
+      [
+        "账号"
+      ],
+      [
+        "密码"
+      ]
+    ],
+    "login_workspace_visible": false,
+    "tab_from_user": "password",
+    "wrong_status": 401,
+    "login_error_feedback": "用户名或密码不正确",
+    "wrong_password_text": "关\n关务审核工作台\n单证预审与人工审核\n用户名或密码不正确\n登录\n账号\n密码\n登录",
+    "workspace_path": "/",
+    "identity": "业务员甲 · 业务员",
+    "workspace_palette": [
+      [
+        "rgb(244, 246, 245)",
+        "rgb(37, 54, 58)",
+        "none"
+      ],
+      [
+        "rgba(0, 0, 0, 0)",
+        "rgb(37, 54, 58)",
+        "none"
+      ],
+      [
+        "rgba(0, 0, 0, 0)",
+        "rgb(37, 54, 58)",
+        "none"
+      ],
+      [
+        "rgb(23, 103, 95)",
+        "rgb(255, 255, 255)",
+        "none"
+      ]
+    ],
+    "task_counts": {
+      "initial": 3
+    },
+    "task_detail": "契约演示-主流程\n待业务确认\n任务 c7af58ef-a2f6-4ec1-b87b-8e3d5d23c839\n供应商 供应商甲\n修订 1\n\n当前结果为模拟数据，不能用于正式审核。\n\nV1 · 契约演示-V1.xlsx\nV2 · 契约演示-V2.xlsx",
+    "v2_run": "AI 预审\n失败\n总数 8\n完成 7\n失败 1\n处理中 0\n\n模拟结果，不可作为审核依据。\n\n申报要素 第5行 · 已完成 · 编码一致\n申报要素 第7行 · 已完成 · 待核对\n申报要素 第8行 · 已完成 · 待核对\n申报要素 第6行 · 已完成 · 编码不一致\n申报要素 第9行 · 已完成 · 原码缺失\n申报要素 第12行 · 已完成 · 待核对\n申报要素 第11行 · 失败 · mock 模拟的技术失败：上游模型超时\n申报要素 第10行 · 已完成 · 原码异常",
+    "v2_items_text": "来源\t商品\t原编码\tAI 建议\t业务确认\t专家终值\t比较\n申报要素 5\t不锈钢制无缝管（一致样例）\t8544422900\t8544422900\t-\t-\t编码一致\n申报要素 6\t不锈钢制焊接管（不一致样例）\t7306290000\t8544422900\t-\t-\t编码不一致\n申报要素 7\t镍合金板（缺用途）\t8544422900\t-\t-\t-\t待核对\n申报要素 8\t镍合金带（附图读取失败）\t8544422900\t8544422900\t-\t-\t待核对\n申报要素 9\t钢制紧固件（原码未填）\t-\t8544422900\t-\t-\t原码缺失\n申报要素 10\t钢制法兰（原码异常）\tABC\t8544422900\t-\t-\t原码异常\n申报要素 11\t铜制管件（技术失败行）\t8544422900\t-\t-\t-\t未产生\n申报要素 12\t铝制型材（查询失败）\t8544422900\t8544422900\t-\t-\t待核对",
+    "v2_table_rows": 8,
+    "workspace_geometry": {
+      "viewport": 1440,
+      "root": 1440,
+      "content": 1440,
+      "body": 1440
+    },
+    "summary_selector": "#run-detail",
+    "v2_summary": "AI 预审\n失败\n总数 8\n完成 7\n失败 1\n处理中 0\n\n模拟结果，不可作为审核依据。\n\n申报要素 第5行 · 已完成 · 编码一致\n申报要素 第7行 · 已完成 · 待核对\n申报要素 第8行 · 已完成 · 待核对\n申报要素 第6行 · 已完成 · 编码不一致\n申报要素 第9行 · 已完成 · 原码缺失\n申报要素 第12行 · 已完成 · 待核对\n申报要素 第11行 · 失败 · mock 模拟的技术失败：上游模型超时\n申报要素 第10行 · 已完成 · 原码异常",
+    "item_card": "不锈钢制无缝管（一致样例）\n申报要素 · 第5行\n\n本商品预审来自模拟结果，不能用于正式审核。\n\n供应商原编码\n8544422900\nAI 建议编码\n8544422900\n业务确认编码\n未确认\n提交编码\n未提交\n专家终值\n未决定\n申报要素原文\n品名:不锈钢制无缝管（一致样例）|规格型号:SPEC-5\n附图 H5 · available",
+    "v1_run": "AI 预审\n已完成\n总数 2\n完成 2\n失败 0\n处理中 0\n\n模拟结果，不可作为审核依据。\n\n申报要素 第6行 · 已完成 · 编码不一致\n申报要素 第5行 · 已完成 · 编码一致",
+    "v1_summary": "AI 预审\n已完成\n总数 2\n完成 2\n失败 0\n处理中 0\n\n模拟结果，不可作为审核依据。\n\n申报要素 第6行 · 已完成 · 编码不一致\n申报要素 第5行 · 已完成 · 编码一致",
+    "v1_items_text": "来源\t商品\t原编码\tAI 建议\t业务确认\t专家终值\t比较\n申报要素 5\t不锈钢制无缝管（一致样例）\t8544422900\t8544422900\t-\t-\t编码一致\n申报要素 6\t不锈钢制焊接管（不一致样例）\t7306290000\t8544422900\t-\t-\t编码不一致",
+    "v1_table_rows": 2,
+    "logout": {
+      "user_visible": true,
+      "workspace_visible": false,
+      "task_visible": false,
+      "path": "/"
+    }
+  },
+  "mobile": {
+    "viewport": [
+      390,
+      844
+    ],
+    "js_errors": [],
+    "http_errors": [
+      [
+        401,
+        "/api/v1/me"
+      ],
+      [
+        401,
+        "/api/v1/auth/login"
+      ],
+      [
+        404,
+        "/api/v1/versions/67bb3011-d2cc-4e32-909b-72dfe66b3a07/import"
+      ],
+      [
+        404,
+        "/api/v1/versions/03e40773-bb30-4945-99cf-0ddb7e5c7158/import"
+      ],
+      [
+        401,
+        "/api/v1/me"
+      ]
+    ],
+    "responses": [
+      {
+        "items": 8,
+        "compare": {
+          "consistent": 1,
+          "inconsistent": 1,
+          "needs_confirmation": 3,
+          "supplier_missing": 1,
+          "supplier_invalid": 1,
+          "none": 1
+        }
+      },
+      {
+        "run": {
+          "total": 8,
+          "queued": 0,
+          "running": 0,
+          "succeeded": 7,
+          "failed": 1
+        },
+        "mode": "mock"
+      },
+      {
+        "items": 2,
+        "compare": {
+          "consistent": 1,
+          "inconsistent": 1
+        }
+      },
+      {
+        "run": {
+          "total": 2,
+          "queued": 0,
+          "running": 0,
+          "succeeded": 2,
+          "failed": 0
+        },
+        "mode": "mock"
+      }
+    ],
+    "images": {
+      "mobile-login.png": "690deda9102144313dc93d8214aba4a45915fe7c6f06b92554f620b1a19cec20",
+      "mobile-workspace.png": "47f894d3e1ee7f428a2f76637f914ddc6693a3f860562baffcfc906277e41c17",
+      "mobile-data.png": "f7430e7db4d7c12191756d146d38e6cb38c3f63506152b105f2d95b4816f969e",
+      "mobile-item.png": "b4ce250a4e221810ccdc756f5a3812e43ad1095a09761d2042a9f01cbaa163a9"
+    },
+    "themes": {},
+    "direct_login_status": 404,
+    "login_path": "/",
+    "login_text": "关\n关务审核工作台\n单证预审与人工审核\n登录\n账号\n密码\n登录",
+    "login_geometry": {
+      "viewport": 390,
+      "root": 390,
+      "content": 390,
+      "body": 390
+    },
+    "login_labels": [
+      [
+        "账号"
+      ],
+      [
+        "密码"
+      ]
+    ],
+    "login_workspace_visible": false,
+    "tab_from_user": "password",
+    "wrong_status": 401,
+    "login_error_feedback": "用户名或密码不正确",
+    "wrong_password_text": "关\n关务审核工作台\n单证预审与人工审核\n用户名或密码不正确\n登录\n账号\n密码\n登录",
+    "workspace_path": "/",
+    "identity": "业务员甲 · 业务员",
+    "workspace_palette": [
+      [
+        "rgb(244, 246, 245)",
+        "rgb(37, 54, 58)",
+        "none"
+      ],
+      [
+        "rgba(0, 0, 0, 0)",
+        "rgb(37, 54, 58)",
+        "none"
+      ],
+      [
+        "rgba(0, 0, 0, 0)",
+        "rgb(37, 54, 58)",
+        "none"
+      ],
+      [
+        "rgb(23, 103, 95)",
+        "rgb(255, 255, 255)",
+        "none"
+      ]
+    ],
+    "task_counts": {
+      "initial": 3
+    },
+    "task_detail": "契约演示-主流程\n待业务确认\n任务 c7af58ef-a2f6-4ec1-b87b-8e3d5d23c839\n供应商 供应商甲\n修订 1\n\n当前结果为模拟数据，不能用于正式审核。\n\nV1 · 契约演示-V1.xlsx\nV2 · 契约演示-V2.xlsx",
+    "v2_run": "AI 预审\n失败\n总数 8\n完成 7\n失败 1\n处理中 0\n\n模拟结果，不可作为审核依据。\n\n申报要素 第5行 · 已完成 · 编码一致\n申报要素 第7行 · 已完成 · 待核对\n申报要素 第8行 · 已完成 · 待核对\n申报要素 第6行 · 已完成 · 编码不一致\n申报要素 第9行 · 已完成 · 原码缺失\n申报要素 第12行 · 已完成 · 待核对\n申报要素 第11行 · 失败 · mock 模拟的技术失败：上游模型超时\n申报要素 第10行 · 已完成 · 原码异常",
+    "v2_items_text": "来源\t商品\t原编码\tAI 建议\t业务确认\t专家终值\t比较\n申报要素 5\t不锈钢制无缝管（一致样例）\t8544422900\t8544422900\t-\t-\t编码一致\n申报要素 6\t不锈钢制焊接管（不一致样例）\t7306290000\t8544422900\t-\t-\t编码不一致\n申报要素 7\t镍合金板（缺用途）\t8544422900\t-\t-\t-\t待核对\n申报要素 8\t镍合金带（附图读取失败）\t8544422900\t8544422900\t-\t-\t待核对\n申报要素 9\t钢制紧固件（原码未填）\t-\t8544422900\t-\t-\t原码缺失\n申报要素 10\t钢制法兰（原码异常）\tABC\t8544422900\t-\t-\t原码异常\n申报要素 11\t铜制管件（技术失败行）\t8544422900\t-\t-\t-\t未产生\n申报要素 12\t铝制型材（查询失败）\t8544422900\t8544422900\t-\t-\t待核对",
+    "v2_table_rows": 8,
+    "workspace_geometry": {
+      "viewport": 390,
+      "root": 390,
+      "content": 390,
+      "body": 390
+    },
+    "summary_selector": "#run-detail",
+    "v2_summary": "AI 预审\n失败\n总数 8\n完成 7\n失败 1\n处理中 0\n\n模拟结果，不可作为审核依据。\n\n申报要素 第5行 · 已完成 · 编码一致\n申报要素 第7行 · 已完成 · 待核对\n申报要素 第8行 · 已完成 · 待核对\n申报要素 第6行 · 已完成 · 编码不一致\n申报要素 第9行 · 已完成 · 原码缺失\n申报要素 第12行 · 已完成 · 待核对\n申报要素 第11行 · 失败 · mock 模拟的技术失败：上游模型超时\n申报要素 第10行 · 已完成 · 原码异常",
+    "item_card": "不锈钢制无缝管（一致样例）\n申报要素 · 第5行\n\n本商品预审来自模拟结果，不能用于正式审核。\n\n供应商原编码\n8544422900\nAI 建议编码\n8544422900\n业务确认编码\n未确认\n提交编码\n未提交\n专家终值\n未决定\n申报要素原文\n品名:不锈钢制无缝管（一致样例）|规格型号:SPEC-5\n附图 H5 · available",
+    "v1_run": "AI 预审\n已完成\n总数 2\n完成 2\n失败 0\n处理中 0\n\n模拟结果，不可作为审核依据。\n\n申报要素 第6行 · 已完成 · 编码不一致\n申报要素 第5行 · 已完成 · 编码一致",
+    "v1_summary": "AI 预审\n已完成\n总数 2\n完成 2\n失败 0\n处理中 0\n\n模拟结果，不可作为审核依据。\n\n申报要素 第6行 · 已完成 · 编码不一致\n申报要素 第5行 · 已完成 · 编码一致",
+    "v1_items_text": "来源\t商品\t原编码\tAI 建议\t业务确认\t专家终值\t比较\n申报要素 5\t不锈钢制无缝管（一致样例）\t8544422900\t8544422900\t-\t-\t编码一致\n申报要素 6\t不锈钢制焊接管（不一致样例）\t7306290000\t8544422900\t-\t-\t编码不一致",
+    "v1_table_rows": 2,
+    "logout": {
+      "user_visible": true,
+      "workspace_visible": false,
+      "task_visible": false,
+      "path": "/"
+    }
+  }
+}

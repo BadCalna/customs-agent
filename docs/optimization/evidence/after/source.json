@@ -1,0 +1,6 @@
+{
+  "source": "candidate",
+  "archive": "f66c8fa851fedece88d0e154528b8084c13f089b",
+  "runtime_tree_sha256": "61db79420ac1d0e948026ce121dcea773c05385b220980f035f90f100c9b8ea0",
+  "mode": "Django live + seed_contracts / mock inline / SQLite"
+}
