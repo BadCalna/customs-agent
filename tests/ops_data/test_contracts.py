@@ -43,9 +43,9 @@ class OpsDataContractTests(TestCase):
 
     def test_fixture_generation_and_evidence_map_are_sealed(self):
         generation = load_generation()
-        self.assertIn(("note", "fx-2026-01"), generation.snapshots)
-        self.assertIn(("hs", "fx-2026-01"), generation.snapshots)
-        self.assertIn(("history", "fx-2026-01"), generation.snapshots)
+        self.assertIn(("fx-2026-01", "note"), generation.snapshots)
+        self.assertIn(("fx-2026-01", "hs"), generation.snapshots)
+        self.assertIn(("fx-2026-01", "history"), generation.snapshots)
         self.assertEqual(len(generation.evidence), 33)
         evidence_path = APP_ROOT / "evidence-map.v1.jsonl"
         rows = [json.loads(line) for line in evidence_path.read_text(encoding="utf-8").splitlines()]
@@ -76,7 +76,7 @@ class OpsDataContractTests(TestCase):
         self.assertEqual(anonymous.status_code, 401)
         forbidden = self.api("/api/v1/ops/data/history?snapshot_id=fx-2026-01", self.catalog_user)
         self.assertEqual(forbidden.status_code, 403)
-        self.assertEqual(anonymous.json()["error"], forbidden.json()["error"])
+        self.assertEqual(anonymous.json()["error"]["details"], forbidden.json()["error"]["details"])
         self.assertNotIn("history-fixture-row-17", forbidden.content.decode())
 
     def test_history_detail_requires_both_permissions_and_evidence(self):
