@@ -13,7 +13,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
 ]
-ROOT_URLCONF = "tests.ops_data.urls"
+ROOT_URLCONF = "optional_tests.ops_data.urls"
 TEMPLATES = [{"BACKEND": "django.template.backends.django.DjangoTemplates", "APP_DIRS": True,
               "OPTIONS": {"context_processors": ["django.template.context_processors.request",
                                                     "django.contrib.auth.context_processors.auth"]}}]

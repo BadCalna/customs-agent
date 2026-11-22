@@ -1,6 +1,6 @@
 # install-manifest-03：基础数据中心（reference_browser）
 
-> 03 组交付清单。本文只描述接线，不修改公共 `config/settings.py`、`config/urls.py`、导航或业务表；由 01 组在合并时执行公共接线。
+> **本 PR 只交付未接线的独立模块和合成数据，不交付可用的生产数据中心。** 默认配置不安装此 app，也不开放页面或 API。01 组另行负责公共设置、路由、权限和上线验收；本清单并非接线完成或待合并的证明。
 
 ## 1. 应用与版本
 
@@ -76,16 +76,15 @@ migration 产生下列 `reference_browser` 权限（默认拒绝；通过用户�
 - `record_id` 使用 `[a-z0-9][a-z0-9._:-]{0,191}`；读取端不自推 hash、不跳转最新版；请求必须显式携带 `snapshot_id`。
 - 历史响应只返回预脱敏 synthetic 字段；无权请求不得泄露内容、计数、存在性、locator 或版本差异；审计使用 `customs.ops.events` 的公共 `ops.event` envelope。
 - fixture 不是真实来源，运行时不联网、不写业务表、不把模型输入/历史原文写入请求、日志或 URL。
-- API 审计 `event_type`：`reference_browser.snapshots.read`、`reference_browser.catalog.read`、`reference_browser.history.search`、`reference_browser.history.detail`、`reference_browser.history.export`、`reference_browser.evidence.read`。拒绝事件不写目标 ID 或原始请求参数。
+- API 审计 `event_type`：`reference_browser.snapshots.read`、`reference_browser.catalog.read`、`reference_browser.history.search`、`reference_browser.history.detail`、`reference_browser.history.export`、`reference_browser.evidence.read`。HTML 证据读取和 API 共用审计入口，成功或拒绝各记一条；拒绝不写目标 ID 或原始请求参数。
 
 ## 6. 独立验证与回归命令
 
-03 组使用独立 settings `tests.ops_data.settings`、内存 SQLite 与独立 URLConf `tests/ops_data/urls.py`，不依赖公共 settings、URLConf 或业务迁移：
+03 组使用独立 settings `optional_tests.ops_data.settings`、内存 SQLite 与独立 URLConf `optional_tests.ops_data.urls`。套件不进入默认 Django 发现路径。集成流水线应把下方独立命令作为单独检查，与默认全量并行运行；默认全量通过不代表独立套件通过。
 
 ```bash
-python manage.py test tests.ops_data --settings=tests.ops_data.settings
-# 已安装 pytest 和 pytest-django 时也可运行：
-python -m pytest tests/ops_data --ds=tests.ops_data.settings -q
+python manage.py test tests
+python manage.py test optional_tests.ops_data --settings=optional_tests.ops_data.settings
 ```
 
 01 组接线后，使用公共配置运行 `python manage.py check --deploy --settings=config.settings`。正常部署配置应通过；另在隔离环境显式打开 fixture 开关验证检查报 `reference_browser.E001`。导入/发布/回滚未启用，故当前回归验证这些 URL 不存在，不执行真实写入或切换指针。01 组接线后另行运行完整项目测试与 OpenAPI 契约更新。

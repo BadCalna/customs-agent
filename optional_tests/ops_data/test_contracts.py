@@ -14,7 +14,7 @@ from apps.reference_browser.apps import reference_browser_deploy_check
 from apps.reference_browser.store import APP_ROOT, SnapshotUnreadable, load_generation, parse_generation
 
 
-BASE = {"ROOT_URLCONF": "tests.ops_data.urls", "REFERENCE_BROWSER_FIXTURE_TESTING": True,
+BASE = {"ROOT_URLCONF": "optional_tests.ops_data.urls", "REFERENCE_BROWSER_FIXTURE_TESTING": True,
         "REFERENCE_BROWSER_FIXTURE": False}
 
 

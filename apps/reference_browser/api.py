@@ -1,60 +1,19 @@
 """Mount with `api_v1.add_router('/ops/data', router)`; no write routes."""
-import logging
-from uuid import uuid4
-
 from django.http import JsonResponse
-from django.utils import timezone
-from django.utils.crypto import salted_hmac
 from ninja import Router
 
 from . import services
-from .errors import QUERY_FAILED, ReferenceError, json_response, request_id
-from .permissions import authenticated
-from .store import SnapshotUnreadable
+from .audit import audited_call
+from .errors import json_response
 
 router = Router(tags=["基础数据中心"])
-logger = logging.getLogger("customs.ops.events")
-
-
-def _emit(request, operation, target_type, result, error, *, detail):
-    user = getattr(request, "user", None)
-    target_id = None
-    if error is None and (row := result.get("record")):
-        target_id = "ref_" + salted_hmac(
-            "reference_browser.target", f"{result['snapshot_id']}:{row['record_id']}"
-        ).hexdigest()[:32]
-    if error:
-        outcome = "denied" if error.status in {401, 403, 404} else "failure"
-        summary = error.code
-    else:
-        outcome = "success"
-        summary = result.get("outcome", "ok")
-        if detail:
-            # The service validated this enum before success; no free-form reasons enter audit.
-            summary = request.GET.get("reason", "reference_review").strip()
-    logger.info("ops.event", extra={"ops_event": {
-        "schema_version": 1, "event_id": uuid4().hex, "occurred_at": timezone.now().isoformat(),
-        "event_type": f"reference_browser.{operation}",
-        "actor_id": str(user.pk) if authenticated(user) else None, "request_id": request_id(request),
-        "target_type": target_type, "target_id": target_id, "outcome": outcome, "summary_code": summary,
-    }})
 
 
 def _run(request, operation, target_type, action, *args, detail=False) -> JsonResponse:
-    query = services.Query(request.GET)
-    error = None
-    result = {}
-    try:
-        result = action(getattr(request, "user", None), query, *args)
-    except ReferenceError as exc:
-        error = exc
-    except (SnapshotUnreadable, TimeoutError):
-        error = QUERY_FAILED()
-    except Exception:
-        # A site row policy or unreadable source must fail closed; no unsafe exception
-        # message/traceback is returned or captured in an event.
-        error = QUERY_FAILED()
-    _emit(request, operation, target_type, result, error, detail=detail)
+    result, error = audited_call(
+        request, operation, target_type, action, getattr(request, "user", None),
+        services.Query(request.GET), *args, detail=detail,
+    )
     return json_response(request, result, error=error)
 
 

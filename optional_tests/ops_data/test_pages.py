@@ -9,7 +9,7 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 
 
-@override_settings(ROOT_URLCONF="tests.ops_data.urls", REFERENCE_BROWSER_FIXTURE_TESTING=True,
+@override_settings(ROOT_URLCONF="optional_tests.ops_data.urls", REFERENCE_BROWSER_FIXTURE_TESTING=True,
                    REFERENCE_BROWSER_FIXTURE=False)
 class ReferenceBrowserPageTests(TestCase):
     def setUp(self):
@@ -71,6 +71,26 @@ class ReferenceBrowserPageTests(TestCase):
         self.assertIn("no-store", response.headers["Cache-Control"])
         self.assertEqual(response.headers["Referrer-Policy"], "no-referrer")
         self.assertEqual(self.client.post(self.evidence_url).status_code, 405)
+
+    def test_evidence_audits_every_read_once(self):
+        params = {"kind": "note", "snapshot_id": "fx-2026-01", "record_id": "note-ch84", "anchor": "p2"}
+        for status, outcome in ((401, "denied"), (403, "denied"), (200, "success")):
+            with self.subTest(status=status):
+                if status == 403:
+                    self.client.force_login(self.user)
+                elif status == 200:
+                    self.grant("view_catalog")
+                with self.assertLogs("customs.ops.events", level="INFO") as captured:
+                    response = self.client.get(self.evidence_url, params)
+                self.assertEqual(response.status_code, status)
+                event, = [record.ops_event for record in captured.records]
+                self.assertEqual(event["event_type"], "reference_browser.evidence.read")
+                self.assertEqual(event["outcome"], outcome)
+                self.assertEqual(event["actor_id"], None if status == 401 else str(self.user.pk))
+                if outcome == "denied":
+                    self.assertIsNone(event["target_id"])
+                else:
+                    self.assertRegex(event["target_id"], r"^ref_[0-9a-f]{32}$")
 
     def test_history_evidence_denies_list_only_and_allows_detail_permission(self):
         params = {"kind": "history", "snapshot_id": "fx-2026-01",
