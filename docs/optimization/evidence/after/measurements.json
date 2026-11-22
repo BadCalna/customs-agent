@@ -13,11 +13,11 @@
       ],
       [
         404,
-        "/api/v1/versions/a2a3db8e-60ac-4a92-ab09-79d89f3f9d33/import"
+        "/api/v1/versions/2a721e07-e617-4226-b5e5-fa2e1abb6c7a/import"
       ],
       [
         404,
-        "/api/v1/versions/1339fc42-3ea6-4a74-8337-801cf2d950e3/import"
+        "/api/v1/versions/91f7aa62-14dd-421c-974d-e8100fea5062/import"
       ]
     ],
     "responses": [
@@ -61,15 +61,15 @@
       }
     ],
     "images": {
-      "desktop-login.png": "d27bc4cee036a2d4e5689e9de0a3704d7c659fb7702c7a6507ba48668b686355",
-      "desktop-login-harbor.png": "d27bc4cee036a2d4e5689e9de0a3704d7c659fb7702c7a6507ba48668b686355",
-      "desktop-login-ledger.png": "06be28d80b1e4030fb7f574d3bba40f2f8a4207d4e0a9175b7b7db041c5e0ab6",
-      "desktop-login-night.png": "b3f126778a51cb257bc18c31828b0fd91cbc17d0bc3267a4a2076ebf870d3955",
-      "desktop-workspace.png": "1b6ce2a82a0a3e07f9297686f83cfde0cc86da1f25e6ab13cfd72060f833687a",
-      "desktop-data.png": "492a636ade2a0e0b6d9eda5246f34983daa64da066ac0a2e799531d5e08dffe4",
-      "desktop-workspace-ledger.png": "57cdf0147ab40a0011be298eba3e9c07808f77fc64d45d9a700695d2f27a4ca2",
-      "desktop-workspace-night.png": "929b35c4f0a0f4d3fb12b471372e8de9843e1931d0808126abe5f7f4f52c5e10",
-      "desktop-item.png": "c0589ac5c3a9315db56033ae52108ff174d3505e0aa3fd9593bf3af3ffefcff5"
+      "desktop-login.png": "0bceab4426ef3a1c396c3aa2d5f6c15082188ee57753aeae58f2df9836bc1d27",
+      "desktop-login-harbor.png": "0bceab4426ef3a1c396c3aa2d5f6c15082188ee57753aeae58f2df9836bc1d27",
+      "desktop-login-ledger.png": "622bdc545659140fb713e634955665799257ce96422ee24784014ef79d48451a",
+      "desktop-login-night.png": "70effc5d8f8df7031d88a5812346864a51a911a5f93035684342115b7c66d64d",
+      "desktop-workspace.png": "c570e73aa88689dbc372462d71958824f5f39ccf500b3f1d1d84215bce588668",
+      "desktop-data.png": "63725106bc8b1a1da69510cf464e5997e7415295c302b48c82736729fb7c74d8",
+      "desktop-workspace-ledger.png": "9916b31f55109b0c5f4d022696b1cc530c3684d5db44fae83df19375ae86f30f",
+      "desktop-workspace-night.png": "993645268d5ca64fc288576369f1b37438221919000582f45e74e6196bf5ac4f",
+      "desktop-item.png": "fb63d974607d4815244e8bfcb9129f3219b1d38e8806b39425bef7687e03fa4d"
     },
     "themes": {
       "harbor": {
@@ -213,7 +213,7 @@
     },
     "direct_login_status": 200,
     "login_path": "/login/",
-    "login_text": "跳到账号登录\n关务审核工作台\nCUSTOMS DESK\n主题\n海港青\n档案棕\n夜航蓝\nFIELD ATLAS / 关务图志\nPLATE 01\nPORT OF ENTRY\n\n通关作业志 。\n\n单证流转，逐项有据。\nC / 01\nC / 02\nQUAY\nFIG. 01  港区装箱示意\n\n WORKSPACE ACCESS\n\n登录工作台\n\n使用分配的业务账号，处理单证预审与人工复核。\n\n账号\n密码\n登录\n→\n\n还没有账号，或忘记密码？请联系业务管理员。\n\n关务审核工作台 / 业务访问入口\nCUSTOMS DESK · ACCESS",
+    "login_text": "跳到账号登录\n关务预审工作台\nCUSTOMS DESK\n主题\n海港青\n档案棕\n夜航蓝\nFIELD ATLAS / 关务图志\nPLATE 01\nPORT OF ENTRY\n\n通关作业志 。\n\n单证流转，逐项有据。\nC / 01\nC / 02\nQUAY\nFIG. 01  港区装箱示意\n\n WORKSPACE ACCESS\n\n登录工作台\n\n使用分配的业务账号，处理单证预审与人工复核。\n\n账号\n密码\n登录\n→\n\n还没有账号，或忘记密码？请联系业务管理员。\n\n关务预审工作台 / 业务访问入口\nCUSTOMS DESK · ACCESS",
     "login_geometry": {
       "viewport": 1440,
       "root": 1440,
@@ -239,7 +239,7 @@
     "tab_from_user": "password",
     "wrong_status": 401,
     "login_error_feedback": "账号或密码不正确，请检查后重试。",
-    "wrong_password_text": "跳到账号登录\n关务审核工作台\nCUSTOMS DESK\n主题\n海港青\n档案棕\n夜航蓝\nFIELD ATLAS / 关务图志\nPLATE 01\nPORT OF ENTRY\n\n通关作业志 。\n\n单证流转，逐项有据。\nC / 01\nC / 02\nQUAY\nFIG. 01  港区装箱示意\n\n WORKSPACE ACCESS\n\n登录工作台\n\n使用分配的业务账号，处理单证预审与人工复核。\n\n账号\n密码\n\n账号或密码不正确，请检查后重试。\n\n登录\n→\n\n还没有账号，或忘记密码？请联系业务管理员。\n\n关务审核工作台 / 业务访问入口\nCUSTOMS DESK · ACCESS",
+    "wrong_password_text": "跳到账号登录\n关务预审工作台\nCUSTOMS DESK\n主题\n海港青\n档案棕\n夜航蓝\nFIELD ATLAS / 关务图志\nPLATE 01\nPORT OF ENTRY\n\n通关作业志 。\n\n单证流转，逐项有据。\nC / 01\nC / 02\nQUAY\nFIG. 01  港区装箱示意\n\n WORKSPACE ACCESS\n\n登录工作台\n\n使用分配的业务账号，处理单证预审与人工复核。\n\n账号\n密码\n\n账号或密码不正确，请检查后重试。\n\n登录\n→\n\n还没有账号，或忘记密码？请联系业务管理员。\n\n关务预审工作台 / 业务访问入口\nCUSTOMS DESK · ACCESS",
     "workspace_path": "/",
     "identity": "业务员甲 · 业务员",
     "workspace_palette": [
@@ -274,11 +274,11 @@
       "stage": 1,
       "stage_reset": 3
     },
-    "search_text": "契约演示-主流程\n待业务确认 · V2\n供应商甲 · 5ac50601-4b51-4ae2-9996-b84a98ca7347",
+    "search_text": "契约演示-主流程\n待业务确认 · V2\n供应商甲 · 5dc04535-a9f2-4528-9c25-14b0209b1f2a",
     "no_results_text": "没有匹配的任务。可调整条件或清除筛选。",
-    "stage_text": "契约演示-专家改码\n已通过 · V1\n供应商甲 · 76ebb2e2-e179-4da2-9b2d-f624540d1ffc",
-    "task_detail": "契约演示-主流程\n待业务确认\n任务 5ac50601-4b51-4ae2-9996-b84a98ca7347\n供应商 供应商甲\n修订 1\n\n当前结果为模拟数据，不能用于正式审核。\n\nV1 · 契约演示-V1.xlsx\nV2 · 契约演示-V2.xlsx",
-    "v2_run": "AI 预审\n失败\n总数 8\n完成 7\n失败 1\n处理中 0\n\n模拟结果，不可作为审核依据。\n\n申报要素 第6行 · 已完成 · 编码不一致\n申报要素 第7行 · 已完成 · 待核对\n申报要素 第9行 · 已完成 · 原码缺失\n申报要素 第8行 · 已完成 · 待核对\n申报要素 第11行 · 失败 · mock 模拟的技术失败：上游模型超时\n申报要素 第12行 · 已完成 · 待核对\n申报要素 第10行 · 已完成 · 原码异常\n申报要素 第5行 · 已完成 · 编码一致",
+    "stage_text": "契约演示-专家改码\n已通过 · V1\n供应商甲 · 4d34bbae-b2a0-432a-a4c8-f3fdc0d7d7a5",
+    "task_detail": "契约演示-主流程\n待业务确认\n任务 5dc04535-a9f2-4528-9c25-14b0209b1f2a\n供应商 供应商甲\n修订 1\n\n当前结果为模拟数据，不能用于正式审核。\n\nV1 · 契约演示-V1.xlsx\nV2 · 契约演示-V2.xlsx",
+    "v2_run": "AI 预审\n失败\n总数 8\n完成 7\n失败 1\n处理中 0\n\n模拟结果，不可作为审核依据。\n\n申报要素 第8行 · 已完成 · 待核对\n申报要素 第11行 · 失败 · mock 模拟的技术失败：上游模型超时\n申报要素 第7行 · 已完成 · 待核对\n申报要素 第5行 · 已完成 · 编码一致\n申报要素 第12行 · 已完成 · 待核对\n申报要素 第10行 · 已完成 · 原码异常\n申报要素 第9行 · 已完成 · 原码缺失\n申报要素 第6行 · 已完成 · 编码不一致",
     "v2_items_text": "来源\t商品\t原编码\tAI 建议\t业务确认\t专家终值\t比较\n申报要素 5\t不锈钢制无缝管（一致样例）\t8544422900\t8544422900\t-\t-\t编码一致\n申报要素 6\t不锈钢制焊接管（不一致样例）\t7306290000\t8544422900\t-\t-\t编码不一致\n申报要素 7\t镍合金板（缺用途）\t8544422900\t-\t-\t-\t待核对\n申报要素 8\t镍合金带（附图读取失败）\t8544422900\t8544422900\t-\t-\t待核对\n申报要素 9\t钢制紧固件（原码未填）\t-\t8544422900\t-\t-\t原码缺失\n申报要素 10\t钢制法兰（原码异常）\tABC\t8544422900\t-\t-\t原码异常\n申报要素 11\t铜制管件（技术失败行）\t8544422900\t-\t-\t-\t未产生\n申报要素 12\t铝制型材（查询失败）\t8544422900\t8544422900\t-\t-\t待核对",
     "v2_table_rows": 8,
     "workspace_geometry": {
@@ -305,7 +305,7 @@
     ],
     "v2_total": "8条商品",
     "item_card": "不锈钢制焊接管（不一致样例）\n申报要素 · 第6行\n\n本商品预审来自模拟结果，不能用于正式审核。\n\n供应商原编码\n7306290000\nAI 建议编码\n8544422900\n业务确认编码\n未确认\n提交编码\n未提交\n专家终值\n未决定\n申报要素原文\n品名:不锈钢制焊接管（不一致样例）|规格型号:SPEC-6\n\n建议编码与原码不一致",
-    "v1_run": "AI 预审\n已完成\n总数 2\n完成 2\n失败 0\n处理中 0\n\n模拟结果，不可作为审核依据。\n\n申报要素 第6行 · 已完成 · 编码不一致\n申报要素 第5行 · 已完成 · 编码一致",
+    "v1_run": "AI 预审\n已完成\n总数 2\n完成 2\n失败 0\n处理中 0\n\n模拟结果，不可作为审核依据。\n\n申报要素 第5行 · 已完成 · 编码一致\n申报要素 第6行 · 已完成 · 编码不一致",
     "v1_summary": "版本审核概览\n\n历史版本 · V1 · 契约演示-V1.xlsx\n\n2条商品\n\n含模拟结果，不可作为正式审核依据。\n\n各阶段编码记录\n\n有编码的商品数 / 本版本明细数\n\n预审建议\n2 / 2\n业务确认\n0 / 2\n提交留档\n0 / 2\n专家终值\n0 / 2\n供应商原码与预审比较\n\n每条商品只计一次；编码一致不等于审核通过。\n\n编码不一致\n1 条\n编码一致\n1 条\n定位需核对的商品按明细顺序，最多列 3 条\n不锈钢制焊接管（不一致样例）\n编码不一致 · 申报要素 · 第 6 行\n查看统计口径",
     "v1_items_text": "来源\t商品\t原编码\tAI 建议\t业务确认\t专家终值\t比较\n申报要素 5\t不锈钢制无缝管（一致样例）\t8544422900\t8544422900\t-\t-\t编码一致\n申报要素 6\t不锈钢制焊接管（不一致样例）\t7306290000\t8544422900\t-\t-\t编码不一致",
     "v1_table_rows": 2,
@@ -340,11 +340,11 @@
       ],
       [
         404,
-        "/api/v1/versions/a2a3db8e-60ac-4a92-ab09-79d89f3f9d33/import"
+        "/api/v1/versions/2a721e07-e617-4226-b5e5-fa2e1abb6c7a/import"
       ],
       [
         404,
-        "/api/v1/versions/1339fc42-3ea6-4a74-8337-801cf2d950e3/import"
+        "/api/v1/versions/91f7aa62-14dd-421c-974d-e8100fea5062/import"
       ]
     ],
     "responses": [
@@ -388,11 +388,11 @@
       }
     ],
     "images": {
-      "mobile-login.png": "a3749ebb5aa79c5a863e803bdca5f901aed35312deebfe8c8b72c17aad2d61f2",
-      "mobile-selected-position.png": "afede04d5ddef8b0f3bc6160dd080908a029eb5463d454bf59478baaf5cd6301",
-      "mobile-workspace.png": "3675cdc7273d13236366621991b0b4409feab4b97dc4dd5a8fd928c0c5c179b2",
+      "mobile-login.png": "b89aa3d45966804dce8a31d4100c379065ce2690dce1be4e61a273a8ec77e891",
+      "mobile-selected-position.png": "f9c2f8b7c6dd35cb75e80227e2bbe8d701b21a7401ca6ff31ae4381c3075aabb",
+      "mobile-workspace.png": "d8482ef4309108b7ae12e9788b58e6a1e1d13217c5b92dcde073da3485c3d87a",
       "mobile-data.png": "129a6f5e99e619d32ef0f859150a34badb66baafcce7648d24d83cd132392336",
-      "mobile-item.png": "aaf7c4ceee9e95eab56c22b581e8f45df3ae9cf8a5ad4c3f2aede91344472cd4"
+      "mobile-item.png": "01595bff9f9c8464e8c13fe49c921739056b6719fce584b5e88438d97cf1633b"
     },
     "themes": {
       "harbor": {
@@ -536,7 +536,7 @@
     },
     "direct_login_status": 200,
     "login_path": "/login/",
-    "login_text": "跳到账号登录\n关务审核工作台\nCUSTOMS DESK\n主题\n海港青\n档案棕\n夜航蓝\nPORT OF ENTRY\nC / 01\nC / 02\nQUAY\n\n WORKSPACE ACCESS\n\n登录工作台\n\n使用分配的业务账号，处理单证预审与人工复核。\n\n账号\n密码\n登录\n→\n\n还没有账号，或忘记密码？请联系业务管理员。\n\n关务审核工作台 / 业务访问入口",
+    "login_text": "跳到账号登录\n关务预审工作台\nCUSTOMS DESK\n主题\n海港青\n档案棕\n夜航蓝\nPORT OF ENTRY\nC / 01\nC / 02\nQUAY\n\n WORKSPACE ACCESS\n\n登录工作台\n\n使用分配的业务账号，处理单证预审与人工复核。\n\n账号\n密码\n登录\n→\n\n还没有账号，或忘记密码？请联系业务管理员。\n\n关务预审工作台 / 业务访问入口",
     "login_geometry": {
       "viewport": 390,
       "root": 390,
@@ -562,7 +562,7 @@
     "tab_from_user": "password",
     "wrong_status": 401,
     "login_error_feedback": "账号或密码不正确，请检查后重试。",
-    "wrong_password_text": "跳到账号登录\n关务审核工作台\nCUSTOMS DESK\n主题\n海港青\n档案棕\n夜航蓝\nPORT OF ENTRY\nC / 01\nC / 02\nQUAY\n\n WORKSPACE ACCESS\n\n登录工作台\n\n使用分配的业务账号，处理单证预审与人工复核。\n\n账号\n密码\n\n账号或密码不正确，请检查后重试。\n\n登录\n→\n\n还没有账号，或忘记密码？请联系业务管理员。\n\n关务审核工作台 / 业务访问入口",
+    "wrong_password_text": "跳到账号登录\n关务预审工作台\nCUSTOMS DESK\n主题\n海港青\n档案棕\n夜航蓝\nPORT OF ENTRY\nC / 01\nC / 02\nQUAY\n\n WORKSPACE ACCESS\n\n登录工作台\n\n使用分配的业务账号，处理单证预审与人工复核。\n\n账号\n密码\n\n账号或密码不正确，请检查后重试。\n\n登录\n→\n\n还没有账号，或忘记密码？请联系业务管理员。\n\n关务预审工作台 / 业务访问入口",
     "workspace_path": "/",
     "identity": "业务员甲 · 业务员",
     "workspace_palette": [
@@ -597,11 +597,11 @@
       "stage": 1,
       "stage_reset": 3
     },
-    "search_text": "契约演示-主流程\n待业务确认 · V2\n供应商甲 · 5ac50601-4b51-4ae2-9996-b84a98ca7347",
+    "search_text": "契约演示-主流程\n待业务确认 · V2\n供应商甲 · 5dc04535-a9f2-4528-9c25-14b0209b1f2a",
     "no_results_text": "没有匹配的任务。可调整条件或清除筛选。",
-    "stage_text": "契约演示-专家改码\n已通过 · V1\n供应商甲 · 76ebb2e2-e179-4da2-9b2d-f624540d1ffc",
-    "task_detail": "契约演示-主流程\n待业务确认\n任务 5ac50601-4b51-4ae2-9996-b84a98ca7347\n供应商 供应商甲\n修订 1\n\n当前结果为模拟数据，不能用于正式审核。\n\nV1 · 契约演示-V1.xlsx\nV2 · 契约演示-V2.xlsx",
-    "v2_run": "AI 预审\n失败\n总数 8\n完成 7\n失败 1\n处理中 0\n\n模拟结果，不可作为审核依据。\n\n申报要素 第6行 · 已完成 · 编码不一致\n申报要素 第7行 · 已完成 · 待核对\n申报要素 第9行 · 已完成 · 原码缺失\n申报要素 第8行 · 已完成 · 待核对\n申报要素 第11行 · 失败 · mock 模拟的技术失败：上游模型超时\n申报要素 第12行 · 已完成 · 待核对\n申报要素 第10行 · 已完成 · 原码异常\n申报要素 第5行 · 已完成 · 编码一致",
+    "stage_text": "契约演示-专家改码\n已通过 · V1\n供应商甲 · 4d34bbae-b2a0-432a-a4c8-f3fdc0d7d7a5",
+    "task_detail": "契约演示-主流程\n待业务确认\n任务 5dc04535-a9f2-4528-9c25-14b0209b1f2a\n供应商 供应商甲\n修订 1\n\n当前结果为模拟数据，不能用于正式审核。\n\nV1 · 契约演示-V1.xlsx\nV2 · 契约演示-V2.xlsx",
+    "v2_run": "AI 预审\n失败\n总数 8\n完成 7\n失败 1\n处理中 0\n\n模拟结果，不可作为审核依据。\n\n申报要素 第8行 · 已完成 · 待核对\n申报要素 第11行 · 失败 · mock 模拟的技术失败：上游模型超时\n申报要素 第7行 · 已完成 · 待核对\n申报要素 第5行 · 已完成 · 编码一致\n申报要素 第12行 · 已完成 · 待核对\n申报要素 第10行 · 已完成 · 原码异常\n申报要素 第9行 · 已完成 · 原码缺失\n申报要素 第6行 · 已完成 · 编码不一致",
     "v2_items_text": "来源\t商品\t原编码\tAI 建议\t业务确认\t专家终值\t比较\n申报要素 5\t不锈钢制无缝管（一致样例）\t8544422900\t8544422900\t-\t-\t编码一致\n申报要素 6\t不锈钢制焊接管（不一致样例）\t7306290000\t8544422900\t-\t-\t编码不一致\n申报要素 7\t镍合金板（缺用途）\t8544422900\t-\t-\t-\t待核对\n申报要素 8\t镍合金带（附图读取失败）\t8544422900\t8544422900\t-\t-\t待核对\n申报要素 9\t钢制紧固件（原码未填）\t-\t8544422900\t-\t-\t原码缺失\n申报要素 10\t钢制法兰（原码异常）\tABC\t8544422900\t-\t-\t原码异常\n申报要素 11\t铜制管件（技术失败行）\t8544422900\t-\t-\t-\t未产生\n申报要素 12\t铝制型材（查询失败）\t8544422900\t8544422900\t-\t-\t待核对",
     "v2_table_rows": 8,
     "workspace_geometry": {
@@ -628,7 +628,7 @@
     ],
     "v2_total": "8条商品",
     "item_card": "不锈钢制焊接管（不一致样例）\n申报要素 · 第6行\n\n本商品预审来自模拟结果，不能用于正式审核。\n\n供应商原编码\n7306290000\nAI 建议编码\n8544422900\n业务确认编码\n未确认\n提交编码\n未提交\n专家终值\n未决定\n申报要素原文\n品名:不锈钢制焊接管（不一致样例）|规格型号:SPEC-6\n\n建议编码与原码不一致",
-    "v1_run": "AI 预审\n已完成\n总数 2\n完成 2\n失败 0\n处理中 0\n\n模拟结果，不可作为审核依据。\n\n申报要素 第6行 · 已完成 · 编码不一致\n申报要素 第5行 · 已完成 · 编码一致",
+    "v1_run": "AI 预审\n已完成\n总数 2\n完成 2\n失败 0\n处理中 0\n\n模拟结果，不可作为审核依据。\n\n申报要素 第5行 · 已完成 · 编码一致\n申报要素 第6行 · 已完成 · 编码不一致",
     "v1_summary": "版本审核概览\n\n历史版本 · V1 · 契约演示-V1.xlsx\n\n2条商品\n\n含模拟结果，不可作为正式审核依据。\n\n各阶段编码记录\n\n有编码的商品数 / 本版本明细数\n\n预审建议\n2 / 2\n业务确认\n0 / 2\n提交留档\n0 / 2\n专家终值\n0 / 2\n供应商原码与预审比较\n\n每条商品只计一次；编码一致不等于审核通过。\n\n编码不一致\n1 条\n编码一致\n1 条\n定位需核对的商品按明细顺序，最多列 3 条\n不锈钢制焊接管（不一致样例）\n编码不一致 · 申报要素 · 第 6 行\n查看统计口径",
     "v1_items_text": "来源\t商品\t原编码\tAI 建议\t业务确认\t专家终值\t比较\n申报要素 5\t不锈钢制无缝管（一致样例）\t8544422900\t8544422900\t-\t-\t编码一致\n申报要素 6\t不锈钢制焊接管（不一致样例）\t7306290000\t8544422900\t-\t-\t编码不一致",
     "v1_table_rows": 2,

@@ -23,8 +23,10 @@ def score(path):
     def versions(d):
         return [d['v2_table_rows'],d['v1_table_rows']]==[8,2] and sorted(r['items'] for r in d['responses'] if 'items' in r)==[2,8] and '总数 2' in d['v1_run'] and '总数 8' in d['v2_run'] and '铝制型材' not in d['v1_items_text']
     def key(d): return d['tab_from_user']=='password' and d['identity'] and not d['js_errors']
+    source=json.loads((Path(path)/'source.json').read_text())['source']
+    brand={'baseline':'关务审核工作台', 'candidate':'关务预审工作台'}[source]
     tests={
-        'A1':lambda d: all(d['login_labels']) and '关务审核工作台' in d['login_text'] and '登录' in d['login_text'] and not d['login_workspace_visible'],
+        'A1':lambda d: all(d['login_labels']) and brand in d['login_text'].splitlines() and '登录' in d['login_text'] and not d['login_workspace_visible'],
         'A2':lambda d: '单证预审' in d['login_text'] and any(w in d['login_text'] for w in ['人工审核','人工复核']),
         'A3':lambda d: d['wrong_status']==401 and d['login_error_feedback'] and d['identity'],
         'A4':lambda d: d['logout']['user_visible'] and not d['logout']['workspace_visible'] and not d['logout']['task_visible'],

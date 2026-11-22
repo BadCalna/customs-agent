@@ -55,7 +55,7 @@
     "sample_kind": "synthetic",
     "status": "passed",
     "returncode": 0,
-    "tests_run": 1985,
+    "tests_run": 1986,
     "skipped": 47,
     "failures": 0,
     "errors": 0,
@@ -91,12 +91,29 @@
       "tests/optimization",
       "--noinput",
       "--verbosity",
-      "1"
+      "2"
     ],
-    "started_at": "2026-11-22T01:02:08.896673+08:00",
-    "finished_at": "2026-11-22T01:02:52.737531+08:00"
+    "started_at": "2026-11-22T09:13:18.238922+08:00",
+    "finished_at": "2026-11-22T09:14:32.026562+08:00",
+    "commit": "d2877a1"
   },
-  "candidate_postgres_journeys": {
+  "limits": "Counts overlap across suites. SQLite core skips environment-specific cases. No production traffic, real AI quality, Redis workers or live disaster recovery claim.",
+  "original_optimization_p22": {
+    "status": "passed",
+    "tests_run": 83,
+    "skipped": 3,
+    "failures": 0,
+    "errors": 0,
+    "command": [
+      "python",
+      "manage.py",
+      "test",
+      "tests/p22",
+      "--noinput"
+    ],
+    "note": "Script behavior tests; not a live container or failover exercise."
+  },
+  "original_optimization_postgres_journeys": {
     "backend": "postgres",
     "scope": "integration",
     "engine": "mock",
@@ -119,21 +136,5 @@
     ],
     "started_at": "2026-11-22T00:55:02.979867+08:00",
     "finished_at": "2026-11-22T00:55:10.725739+08:00"
-  },
-  "candidate_p22": {
-    "status": "passed",
-    "tests_run": 83,
-    "skipped": 3,
-    "failures": 0,
-    "errors": 0,
-    "command": [
-      "python",
-      "manage.py",
-      "test",
-      "tests/p22",
-      "--noinput"
-    ],
-    "note": "Script behavior tests; not a live container or failover exercise."
-  },
-  "limits": "Counts overlap across suites. SQLite core skips environment-specific cases. No production traffic, real AI quality, Redis workers or live disaster recovery claim."
+  }
 }
