@@ -83,8 +83,9 @@ def _section_rules(text: str, title: str, count: int) -> dict[int, str]:
         number = len(rules) + 1
         if line.startswith(f"{number}. ") and line.partition(". ")[2].strip():
             rules[number] = line
-        elif rules and re.fullmatch(r" {3}(?![\s\d#`~])\S.*", line):
-            # The checked-in Skill continues rule 7 with indented prose.
+        elif rules and re.fullmatch(r" {3}(?!(?:\d+[.)][ \t]|#{1,6}[ \t]|```|~~~))\S.*", line):
+            # Three-space prose is a continuation, including numeric and inline-code
+            # text. Reject only unambiguous nested-list, heading, or fence markers.
             rules[number - 1] += "\n" + line
         else:
             raise ValueError("unexpected rule boundary or numbering")

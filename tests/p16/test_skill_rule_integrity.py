@@ -43,7 +43,19 @@ class SkillRuleIntegrityTests(TestCase):
             ("nested pseudo-rule", "   对钢材类商品", "   8. SYNTHETIC\n   对钢材类商品"),
         ])
 
-    def test_packet_only_rewrites_require_unique_anchors(self):
+    def test_numeric_and_inline_code_continuations_are_valid(self):
+        original = _load_skill(DEFAULT_SKILL_PATH)
+        changed = self.source.replace(
+            "   对钢材类商品，只要供应商申报要素填有成分百分比，就另做合计校验：逐一识别同一商品的元素及其百分数，按原值相加，目标为100%。明确数值合计不等于100%时，在`预审结论`披露已列成分、合计及与100%的差额，要求供应商核实或补齐；即使HS一致也不能省略。若只列部分元素、写“铁/Fe余量”、使用含量区间或数值单位不明，说明已列数值合计及无法核实总量的原因，不擅自把差额补为铁含量或修改原申报要素。",
+            "   100%成分仍需逐项核对。\n   `10位编码`需保留来源上下文。",
+        )
+        self.path.write_text(changed, encoding="utf-8")
+        result = _load_skill(self.path)
+        self.assertIn("100%成分仍需逐项核对。", result["rules"])
+        self.assertIn("`10位编码`需保留来源上下文。", result["rules"])
+        self.assertNotEqual(result["sha256"], original["sha256"])
+
+
         for marker in ("读取`references`", "在映射底表`申报要素明细`取完整字段及必填标记"):
             self.check_rejected([("removed anchor", marker, "SYNTHETIC"),
                                  ("doubled anchor", marker, marker * 2)])
