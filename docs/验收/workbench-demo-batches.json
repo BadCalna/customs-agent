@@ -1,0 +1,193 @@
+{
+  "manifest_kind": "synthetic_workbench_acceptance_plan",
+  "source_command": "python manage.py seed_workbench --json",
+  "result_mode": "mock",
+  "engine_version": "workbench-synthetic-v1",
+  "disclaimer": "合成脱敏流程验收数据；编码、建议与依据均非真实归类结论，不证明专业有效性。",
+  "note": "原始基线的合成验收计划，不表示 main 签收或当前 API 提供所有字段；初始态须使用独立新库。",
+  "link_note": "api_path 均为相对路径，须先用该角色登录到指向对应数据库的服务。",
+  "accounts": [
+    {
+      "username": "workbench_supplier",
+      "display_name": "工作台验收供应商",
+      "role": "supplier",
+      "user_id": "0503f06f-ff08-55ca-86da-da0f4418ccb5"
+    },
+    {
+      "username": "workbench_operator",
+      "display_name": "工作台验收业务员",
+      "role": "operator",
+      "user_id": "7349a828-76f0-5c70-b3df-53263fd89fb6"
+    },
+    {
+      "username": "workbench_expert",
+      "display_name": "工作台验收专家",
+      "role": "expert",
+      "user_id": "015789b3-b254-5327-ba08-be507af5e693"
+    }
+  ],
+  "batches": [
+    {
+      "scenario": "approve",
+      "title": "工作台验收-整批通过",
+      "task_id": "ccd6ba4c-7180-5865-a208-d41a9754a93c",
+      "expected_action": "approve",
+      "current_version_id": "cf8482a2-20b6-56ab-9fe2-b91f90e1da48",
+      "versions": [
+        {
+          "number": 1,
+          "version_id": "cf8482a2-20b6-56ab-9fe2-b91f90e1da48",
+          "is_current": true,
+          "items": [
+            {
+              "item_id": "098b1fb7-b5b2-5f0d-96cd-bbf2db9e9807",
+              "row": 5,
+              "name": "合成线缆组件 A",
+              "supplier_hs": "8544422900",
+              "suggested_hs": "8536901900",
+              "expected_confirmation_hs": "8544422900",
+              "choice": "supplier",
+              "card_api_path": "/api/v1/versions/cf8482a2-20b6-56ab-9fe2-b91f90e1da48/items/098b1fb7-b5b2-5f0d-96cd-bbf2db9e9807",
+              "initial_business_confirmed_hs": null,
+              "initial_submitted_hs": null,
+              "initial_expert_final_hs": null,
+              "initial_review_issues": []
+            },
+            {
+              "item_id": "23f291c0-5775-543a-bbd8-5af0fc7c9f9a",
+              "row": 6,
+              "name": "合成控制模块 B",
+              "supplier_hs": "8537109090",
+              "suggested_hs": "8543709990",
+              "expected_confirmation_hs": "8543709990",
+              "choice": "ai",
+              "card_api_path": "/api/v1/versions/cf8482a2-20b6-56ab-9fe2-b91f90e1da48/items/23f291c0-5775-543a-bbd8-5af0fc7c9f9a",
+              "initial_business_confirmed_hs": null,
+              "initial_submitted_hs": null,
+              "initial_expert_final_hs": null,
+              "initial_review_issues": []
+            },
+            {
+              "item_id": "2ce31872-4fa6-5b65-a9b6-6ad6055a7376",
+              "row": 7,
+              "name": "合成安装支架 C",
+              "supplier_hs": "7326909000",
+              "suggested_hs": "7616999000",
+              "expected_confirmation_hs": "3926909090",
+              "choice": "manual",
+              "card_api_path": "/api/v1/versions/cf8482a2-20b6-56ab-9fe2-b91f90e1da48/items/2ce31872-4fa6-5b65-a9b6-6ad6055a7376",
+              "initial_business_confirmed_hs": null,
+              "initial_submitted_hs": null,
+              "initial_expert_final_hs": null,
+              "initial_review_issues": []
+            }
+          ],
+          "items_api_path": "/api/v1/versions/cf8482a2-20b6-56ab-9fe2-b91f90e1da48/items"
+        }
+      ],
+      "task_api_path": "/api/v1/tasks/ccd6ba4c-7180-5865-a208-d41a9754a93c",
+      "expected_initial_stage": "awaiting_confirmation",
+      "expected_current_review_issues": [],
+      "expected_current_submission_id": null
+    },
+    {
+      "scenario": "return",
+      "title": "工作台验收-整批退回",
+      "task_id": "a286802f-6708-50e6-b541-be293e860b05",
+      "expected_action": "return",
+      "current_version_id": "2cfab3fd-3aa2-5106-826f-43068ce3a36d",
+      "versions": [
+        {
+          "number": 1,
+          "version_id": "71796930-76d8-561d-9086-3b1ed32e116f",
+          "is_current": false,
+          "items": [
+            {
+              "item_id": "790fc96d-c8bb-545d-9f35-67029a2a7a10",
+              "row": 5,
+              "name": "合成传感组件 R1",
+              "supplier_hs": "9026100000",
+              "suggested_hs": "9026809000",
+              "expected_confirmation_hs": "9026809000",
+              "choice": "ai",
+              "card_api_path": "/api/v1/versions/71796930-76d8-561d-9086-3b1ed32e116f/items/790fc96d-c8bb-545d-9f35-67029a2a7a10"
+            },
+            {
+              "item_id": "34e1eafa-1f03-5821-a23f-15364c5c1fde",
+              "row": 6,
+              "name": "合成连接组件 R2",
+              "supplier_hs": "8536690000",
+              "suggested_hs": "8544422900",
+              "expected_confirmation_hs": "8536690000",
+              "choice": "supplier",
+              "card_api_path": "/api/v1/versions/71796930-76d8-561d-9086-3b1ed32e116f/items/34e1eafa-1f03-5821-a23f-15364c5c1fde"
+            }
+          ],
+          "items_api_path": "/api/v1/versions/71796930-76d8-561d-9086-3b1ed32e116f/items"
+        },
+        {
+          "number": 2,
+          "version_id": "2cfab3fd-3aa2-5106-826f-43068ce3a36d",
+          "is_current": true,
+          "items": [
+            {
+              "item_id": "8a226944-e5d7-5df5-b40a-3c84868a680d",
+              "row": 5,
+              "name": "合成传感组件 R1",
+              "supplier_hs": "9026201090",
+              "suggested_hs": "9026900090",
+              "expected_confirmation_hs": "9026900090",
+              "choice": "ai",
+              "card_api_path": "/api/v1/versions/2cfab3fd-3aa2-5106-826f-43068ce3a36d/items/8a226944-e5d7-5df5-b40a-3c84868a680d",
+              "initial_business_confirmed_hs": null,
+              "initial_submitted_hs": null,
+              "initial_expert_final_hs": null,
+              "initial_review_issues": []
+            },
+            {
+              "item_id": "c4306791-7a32-5451-86ce-863263836334",
+              "row": 6,
+              "name": "合成连接组件 R2",
+              "supplier_hs": "8536909000",
+              "suggested_hs": "8544492900",
+              "expected_confirmation_hs": "8536909000",
+              "choice": "supplier",
+              "card_api_path": "/api/v1/versions/2cfab3fd-3aa2-5106-826f-43068ce3a36d/items/c4306791-7a32-5451-86ce-863263836334",
+              "initial_business_confirmed_hs": null,
+              "initial_submitted_hs": null,
+              "initial_expert_final_hs": null,
+              "initial_review_issues": []
+            }
+          ],
+          "items_api_path": "/api/v1/versions/2cfab3fd-3aa2-5106-826f-43068ce3a36d/items"
+        }
+      ],
+      "task_api_path": "/api/v1/tasks/a286802f-6708-50e6-b541-be293e860b05",
+      "expected_initial_stage": "awaiting_confirmation",
+      "expected_current_review_issues": [],
+      "expected_current_submission_id": null,
+      "historical_return": {
+        "version_id": "71796930-76d8-561d-9086-3b1ed32e116f",
+        "submission_id": "29819e51-260f-5f84-98d7-25a767eaed0a",
+        "submission_status": "returned",
+        "decision_id": "bd23d9f3-63db-5d20-9963-35df8db1aff1",
+        "action": "return",
+        "return_to": "supplier",
+        "reason": "合成 V1 历史退回：传感组件缺少量程与用途，连接组件缺少材质与连接方式；请补料重传。",
+        "issues": [
+          {
+            "issue_id": "113a9aae-5b20-5559-98d9-9760e529ae1c",
+            "item_id": "790fc96d-c8bb-545d-9f35-67029a2a7a10",
+            "message": "合成 V1：请补充传感组件量程与具体用途，旧版结论不能作为 V2 的确认。"
+          },
+          {
+            "issue_id": "6a0de381-afd2-53cb-bc5e-0cc56df73a48",
+            "item_id": "34e1eafa-1f03-5821-a23f-15364c5c1fde",
+            "message": "合成 V1：请补充连接组件材质与连接方式，新版仍需逐行重新确认。"
+          }
+        ],
+        "note": "V1 的历史确认、提交、退回问题只归属 V1；同名同源行的 V2 使用新 ID 与新编码且没有人工结论。"
+      }
+    }
+  ]
+}
