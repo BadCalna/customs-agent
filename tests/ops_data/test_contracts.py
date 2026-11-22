@@ -111,6 +111,19 @@ class OpsDataContractTests(TestCase):
         self.assertIsNone(conflict["tax_rate"])
         self.assertEqual(len(conflict["source_variants"]), 2)
 
+    def test_unavailable_snapshots_are_distinct_from_no_match(self):
+        for route, user, state in (
+            ("catalog?tab=note&snapshot_id=fx-input-missing", self.catalog_user, "input_missing"),
+            ("catalog?tab=hs&snapshot_id=fx-not-provided", self.catalog_user, "not_provided"),
+            ("history?snapshot_id=fx-unsupported", self.history_user, "unsupported"),
+            ("history?snapshot_id=fx-2026-01&name=nonexistent", self.history_user, "no_match"),
+        ):
+            with self.subTest(state=state):
+                response = self.api(f"/api/v1/ops/data/{route}", user)
+                self.assertEqual(response.status_code, 200)
+                body = response.json()
+                self.assertEqual((body["outcome"], body["items"]), (state, []))
+
     def test_history_success_candidate_excludes_empty_outcome(self):
         response = self.api("/api/v1/ops/data/history?snapshot_id=fx-2026-01", self.history_user)
         self.assertEqual(response.status_code, 200)
@@ -246,6 +259,23 @@ class OpsDataContractTests(TestCase):
         payload[-1] ^= 1
         with self.assertRaises(SnapshotUnreadable):
             parse_generation(manifest, bytes(payload), evidence)
+
+    def test_resealed_snapshots_reject_invalid_note_text(self):
+        manifest = json.loads((APP_ROOT / "fixtures/generation.v1.json").read_bytes())
+        original = (APP_ROOT / "fixtures/snapshots.v1.json").read_bytes()
+        evidence = (APP_ROOT / "evidence-map.v1.jsonl").read_bytes()
+        for check in ("hash", "reassembly"):
+            with self.subTest(check=check), self.assertRaises(SnapshotUnreadable):
+                payload = json.loads(original)
+                note = payload["snapshots"][0]["records"][0]["note"]
+                if check == "hash":
+                    note["text_sha256"] = "0" * 64
+                else:
+                    part = note["sections"][0]
+                    part["text"] = "X" + part["text"][1:]  # Preserve character counts.
+                modified = json.dumps(payload).encode()
+                sealed = {**manifest, "snapshots_sha256": sha256(modified).hexdigest()}
+                parse_generation(json.dumps(sealed).encode(), modified, evidence)
 
     def test_resealed_evidence_still_rejects_invalid_rows(self):
         manifest = json.loads((APP_ROOT / "fixtures/generation.v1.json").read_bytes())
