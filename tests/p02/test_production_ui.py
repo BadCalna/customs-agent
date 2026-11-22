@@ -8,6 +8,15 @@ from django.test import SimpleTestCase, TestCase, override_settings
 
 
 class ProductionEntryTests(SimpleTestCase):
+    def test_product_name_on_every_web_entry(self):
+        import re
+
+        for page in (Path(settings.BASE_DIR) / "web").rglob("*.html"):
+            with self.subTest(page=page.name):
+                title = re.search(r"<title>(.*?)</title>", page.read_text(encoding="utf-8"))
+                self.assertIsNotNone(title)
+                self.assertIn("关务预审工作台", title.group(1))
+
     def test_decision_drafts_survive_poll_and_submit_the_edited_values(self):
         if not shutil.which("node"):
             self.skipTest("Node.js is unavailable")

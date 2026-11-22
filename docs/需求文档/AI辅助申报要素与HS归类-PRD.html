@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AI辅助申报要素与HS归类 · 产品需求文档（PRD）</title>
+<title>关务预审工作台 · 产品需求文档（PRD）</title>
 <style>
 :root{
   --pm-accent:#5b5bd6;
@@ -96,7 +96,7 @@ th, td { border:1px solid var(--pm-line); padding:10px 12px; text-align:left; wo
 
 <!-- ===== 正文开始 ===== -->
 
-<h1 class="doc-title">AI辅助申报要素与HS归类 · 产品需求文档（PRD）</h1>
+<h1 class="doc-title">关务预审工作台 · 产品需求文档（PRD）</h1>
 <p class="doc-sub">供应商 / 业务员 / 专家 · 轻量网页应用 · 2026-11-12两阶段流程修订</p>
 <section id="current-workflow">
 <div class="alert"><b>当前执行口径（2026-11-12）</b>：供应商上传 → 上传后自动预审 → AI独立归类并比较供应商HS → 业务员退回/导出补料/提交专家 → 专家核查要素、附图、退税及法规 → 专家决定通过或退回给具体人员。本节、当前流程图及Skill优先；下方V1.0保留为折叠历史，现有原型尚未实现本次两阶段逻辑。</div>
@@ -122,7 +122,7 @@ th, td { border:1px solid var(--pm-line); padding:10px 12px; text-align:left; wo
 
 <h2>📋 项目信息</h2>
 <table class="meta-table"><tbody>
-<tr><td>项目名称</td><td>AI辅助申报要素与HS归类（报关全流程AI化重构）</td></tr>
+<tr><td>历史需求名称</td><td>AI辅助申报要素与HS归类（报关全流程AI化重构）</td></tr>
 <tr><td>版本号</td><td>V1.0（初稿）</td></tr>
 <tr><td>文档负责人</td><td>待定</td></tr>
 <tr><td>需求状态</td><td>历史V1.0方案；待按2026-11-04流程重写详细方案</td></tr>
@@ -667,7 +667,7 @@ function savePRD(){
   var blob = new Blob([html], {type:'text/html;charset=utf-8'});
   var a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'AI辅助申报要素与HS归类-PRD.html';
+  a.download = '关务预审工作台-PRD.html';
   a.click(); URL.revokeObjectURL(a.href);
 }
 // ===== 通用编辑模块（PMEdit）=====

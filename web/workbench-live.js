@@ -136,7 +136,7 @@ export async function mountWorkbench(root) {
   }
   function gate(error = null) {
     reset(); user=null;
-    root.innerHTML = `<main class="wb-login"><h1>关务审核工作台</h1><p>使用已分配的业务账号登录。</p><form id="wb-login">
+    root.innerHTML = `<main class="wb-login"><h1>关务预审工作台</h1><p>使用已分配的业务账号登录。</p><form id="wb-login">
       <label>账号<input name="username" autocomplete="username" required></label><label>密码<input name="password" type="password" autocomplete="current-password" required></label>
       <button class="btn primary" type="submit">登录</button></form><div id="wb-auth-error">${error ? errorHtml(error) : ''}</div></main>`;
     $('#wb-login').onsubmit = async e => {

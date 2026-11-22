@@ -50,7 +50,7 @@ dispatcher:
 	$(MANAGE) dispatch_runs --watch
 
 workbench:
-	@echo "关务作业台：http://$(BIND)/（未登录自动进入 /login/）"
+	@echo "关务预审工作台：http://$(BIND)/（未登录自动进入 /login/）"
 	@echo "  运行与导出：/workbench/ ；上传与认领：/uploads/ 。三个入口共享业务会话。"
 	@echo "  请核对任务版本与结果来源；模拟结果不能作为申报依据。"
 	$(MANAGE) runserver $(BIND)

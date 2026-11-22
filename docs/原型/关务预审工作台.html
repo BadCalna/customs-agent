@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>关务审核工作台 · 交互原型</title>
+<title>关务预审工作台 · 交互原型</title>
 <style>
 /* ---------- tokens ---------- */
 :root{
@@ -528,7 +528,7 @@ table{border-collapse:collapse;width:100%}
 <div id="modal-root"></div>
 <script>
 /* =========================================================================
-   关务审核工作台 · 交互原型
+   关务预审工作台 · 交互原型
    口径：docs/开发文档/阶段0（D1 业务与流程约定 / D2 数据与版本约定）
    范围：仅前端交互演示。不接后端、不做真实文件解析与归类。
    演示数据取自参考模板（象盛镍业 · 苏州淳鑫）结构，编码不构成归类结论。
@@ -1031,7 +1031,7 @@ function roleOf(){
 function viewGate(){
   return `<div class="gate">
     <div class="gate-top">
-      <div class="brand">${brandMark()}<span class="brand-name">关务审核工作台</span><span class="brand-sub">采购合同 → 专家确认</span></div>
+      <div class="brand">${brandMark()}<span class="brand-name">关务预审工作台</span><span class="brand-sub">采购合同 → 专家确认</span></div>
       <span class="demo-chip">交互原型 · 演示数据</span>
     </div>
     <main class="gate-main">
@@ -1162,7 +1162,7 @@ function shell(role, active, crumbs, body, opts = {}){
   const nav = navFor(role);
   return `<div class="app">
     <aside class="rail">
-      <div class="rail-brand">${brandMark(22)}<span class="brand-name">关务审核工作台</span></div>
+      <div class="rail-brand">${brandMark(22)}<span class="brand-name">关务预审工作台</span></div>
       <nav class="rail-nav" aria-label="主导航">
         <div class="rail-label">工作区</div>
         ${nav.map(n => `<a class="rail-link" href="#/${role}/${n.id}" ${active === n.id ? 'aria-current="page"' : ''}>

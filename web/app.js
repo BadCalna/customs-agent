@@ -144,7 +144,7 @@ function renderTopbar(state) {
         <path d="M22 18.5v6M19 21.5h6" stroke="#BE3E2B" stroke-width="1.5" stroke-linecap="round"/>
       </svg>
       <div>
-        <div class="brand-name">关务审核工作台</div>
+        <div class="brand-name">关务预审工作台</div>
         <div class="brand-sub">P02 组件演示壳 · 契约 v1</div>
       </div>
     </div>

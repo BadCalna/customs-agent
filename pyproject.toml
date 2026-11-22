@@ -1,5 +1,6 @@
 [project]
 name = "customs-agent"
+description = "关务预审工作台"
 version = "0.1.0"
 requires-python = ">=3.12,<3.15"
 dependencies = [
