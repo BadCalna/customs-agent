@@ -1,0 +1,35 @@
+{% extends 'ops_admin/base.html' %}
+{% load static %}
+{% block script %}{% if state == 'unauthenticated' %}<script type="module" src="{% static 'ops_admin/access.js' %}"></script>{% endif %}{% endblock %}
+{% block main %}
+<main id="ops-main" class="gate-wrap" tabindex="-1">
+  <div class="gate">
+    <aside class="gate-plate">
+      <p class="plate-index"><span>01</span> / OPERATIONS</p>
+      <div class="gate-grid" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+      <p>受控<br>访问区<span aria-hidden="true">.</span></p>
+      <small>系统日常运维入口 · 与业务工作台分离</small>
+    </aside>
+    <section class="gate-body" aria-labelledby="gate-title">
+      {% if state == 'unauthenticated' %}
+      <p class="section-code">01 / 会话验证</p>
+      <h1 id="gate-title">登录系统管理</h1>
+      <p class="intro">请使用具有系统运维权限的账号。登录后仅显示该账号获准访问的工作区。</p>
+      <noscript><p class="feedback" data-tone="error">此登录页需要 JavaScript。</p></noscript>
+      <form id="ops-login" class="gate-form" method="post" hidden>
+        {% csrf_token %}
+        <label>用户名<input name="username" autocomplete="username" autocapitalize="none" maxlength="150" required></label>
+        <label>密码<input name="password" type="password" autocomplete="current-password" required></label>
+        <button class="primary" type="submit">进入控制台 <span aria-hidden="true">↗</span></button>
+      </form>
+      <p id="login-feedback" class="feedback" aria-live="polite" hidden></p>
+      {% else %}
+      <p class="section-code">403 / 权限受限</p>
+      <h1 id="gate-title">未授予运维权限</h1>
+      <p class="intro">当前会话已登录，但没有可访问的系统管理工作区。请联系授权管理员核对显式权限。</p>
+      {% endif %}
+      <a class="return-link" href="{% url 'production-index' %}">← 返回关务工作台</a>
+    </section>
+  </div>
+</main>
+{% endblock %}

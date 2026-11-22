@@ -1,0 +1,27 @@
+{% load static %}<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>{% block title %}系统管理 · 关务预审工作台{% endblock %}</title>
+  <link rel="stylesheet" href="{% static 'ops_admin/console.css' %}">
+  {% block script %}{% endblock %}
+</head>
+<body>
+  <a class="skip-link" href="#ops-main">跳到内容</a>
+  <header class="masthead">
+    <div class="mast-inner">
+      <a class="brand" href="{% url 'production-index' %}">
+        <span class="brand-stamp" aria-hidden="true"><i></i><i></i><i></i></span>
+        <span><strong>关务预审工作台</strong><small lang="en">CUSTOMS DESK</small></span>
+      </a>
+      <span class="mast-rule" aria-hidden="true"></span>
+      <span class="mast-deck">{% block deck %}系统管理控制台{% endblock %}</span>
+      {% block mast_tools %}{% endblock %}
+    </div>
+  </header>
+  {% block main %}{% endblock %}
+  <footer class="console-foot"><span>关务预审工作台<span aria-hidden="true"> / </span>系统运营</span><span lang="en">CUSTOMS DESK · OPERATIONS</span></footer>
+</body>
+</html>

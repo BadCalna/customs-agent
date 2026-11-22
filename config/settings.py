@@ -197,3 +197,39 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 TEST_RUNNER = "config.test_runner.TaskRunner"
 # CSRF 失败返回 JSON 错误体，而不是 Django 默认 HTML 页面（D3 第 1 节）。
 CSRF_FAILURE_VIEW = "apps.accounts.csrf.csrf_failure"
+
+# Other ops modules supply trusted install manifests; none are installed by default.
+INSTALLED_APPS += ['apps.ops_admin']
+MIDDLEWARE.insert(MIDDLEWARE.index('django.contrib.auth.middleware.AuthenticationMiddleware') + 1,
+                  'apps.ops_admin.middleware.OpsMiddleware')
+OPS_ADMIN_MODULE_INSTALLERS = ()
+OPS_ADMIN_CRITICAL_EVENTS = frozenset()
+OPS_ADMIN_SERVICE_VERSION = os.environ.get('CUSTOMS_SERVICE_VERSION', '0.1.0')[:64]
+OPS_ADMIN_SECRET_TTL_SECONDS = 900
+OPS_ADMIN_RESERVED_GROUPS = ('ops_system_admin',)
+OPS_ADMIN_RESERVED_USERNAMES = tuple(s.strip() for s in os.environ.get('CUSTOMS_OPS_RESERVED_USERS', '').split(',') if s.strip())
+OPS_ADMIN_TRUSTED_EMAIL_ENABLED = os.environ.get('CUSTOMS_OPS_TRUSTED_EMAIL') == '1'
+OPS_ADMIN_SECRET_PUBLIC_URL = os.environ.get('CUSTOMS_OPS_SECRET_PUBLIC_URL', '')
+if OPS_ADMIN_TRUSTED_EMAIL_ENABLED:
+    from urllib.parse import urlsplit
+
+    ops_url = urlsplit(OPS_ADMIN_SECRET_PUBLIC_URL)
+    if (ops_url.scheme != 'https' or not ops_url.hostname or ops_url.username or ops_url.password or ops_url.query
+            or ops_url.fragment or ops_url.path != '/ops/admin/secret/'
+            or any(c.isspace() or ord(c) < 32 for c in OPS_ADMIN_SECRET_PUBLIC_URL)):
+        raise ImproperlyConfigured('CUSTOMS_OPS_SECRET_PUBLIC_URL must be an HTTPS /ops/admin/secret/ URL')
+    EMAIL_HOST = os.environ.get('CUSTOMS_OPS_SMTP_HOST', '')
+    EMAIL_PORT = byte_setting('CUSTOMS_OPS_SMTP_PORT', 587)
+    EMAIL_HOST_USER = os.environ.get('CUSTOMS_OPS_SMTP_USER', '')
+    EMAIL_HOST_PASSWORD = os.environ.get('CUSTOMS_OPS_SMTP_PASSWORD', '')
+    DEFAULT_FROM_EMAIL = os.environ.get('CUSTOMS_OPS_SMTP_FROM', '')
+    EMAIL_USE_TLS = True
+    EMAIL_TIMEOUT = 5
+    if not EMAIL_HOST or not DEFAULT_FROM_EMAIL:
+        raise ImproperlyConfigured('Trusted ops mail requires CUSTOMS_OPS_SMTP_HOST and CUSTOMS_OPS_SMTP_FROM')
+
+LOGGING = {
+    'version': 1, 'disable_existing_loggers': False,
+    'handlers': {'ops_events': {'class': 'apps.ops_admin.events.OpsEventHandler'}},
+    'loggers': {'customs.ops.events': {'handlers': ['ops_events'], 'level': 'INFO', 'propagate': False}},
+}
