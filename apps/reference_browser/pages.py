@@ -2,9 +2,8 @@
 from django.http import HttpResponseNotAllowed
 from django.shortcuts import render
 from django.utils.cache import add_never_cache_headers, patch_vary_headers
-from django.utils.html import json_script
 
-from .errors import ReferenceError, QUERY_FAILED, json_response, request_id
+from .errors import ReferenceError
 from . import services
 from .store import SnapshotUnreadable
 

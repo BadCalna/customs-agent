@@ -46,7 +46,7 @@ api_v1.add_router("/ops/data", reference_browser_router)
 提供的只读端点：
 
 - `GET /ops/data/`（`?tab=note|hs|history`）
-- `GET /ops/data/evidence/`
+- `GET /ops/data/evidence`
 - `GET /api/v1/ops/data/snapshots`
 - `GET /api/v1/ops/data/catalog`
 - `GET /api/v1/ops/data/catalog/{kind}/{record_id}`
