@@ -206,7 +206,9 @@ def update_user(request, user_id, data):
     require(request.user, "change_user")
     target = get_user(user_id, lock=True)
     fields = _field_values(data)
-    if reserved_account(target):
+    if data:
+        _target_guard(request.user, target)
+    elif reserved_account(target):
         fail(403, "reserved_account", "保留账号须通过原生维护流程管理")
     previous_role = target.role
     role_changed = fields.get("role", target.role) != target.role
@@ -214,7 +216,6 @@ def update_user(request, user_id, data):
         require(request.user, "change_business_role")
         if request.user.pk == target.pk:
             fail(403, "self_escalation", "不能为自己变更业务角色")
-        _target_guard(request.user, target)
         _confirmed(data.get("confirm"))
     groups = _groups(target, data["groups"], request.user, data.get("confirm")) if "groups" in data else None
     before = _active_admin_capabilities() if groups is not None else set()

@@ -9,6 +9,7 @@ from uuid import uuid4
 
 from django.apps import apps
 from django.contrib.auth.models import Group, Permission
+from django.contrib.sessions.models import Session
 from django.db import DatabaseError
 from django.test import Client, TestCase
 from django.urls import resolve, reverse
@@ -16,6 +17,7 @@ from django.utils import timezone
 
 from apps.accounts.models import User
 from apps.ops_admin.catalog import Manifest, sync_catalog
+from apps.ops_admin.lifecycle.models import AccountLifecycle, SecretTicket
 from apps.ops_admin.middleware import record_error
 from apps.ops_admin.models import AuditRecord, ErrorLog, ModuleRegistration, MutationReceipt
 
@@ -105,6 +107,42 @@ class SystemTests(TestCase):
         self.assertNotIn(ticket, saved)
         self.assertNotIn(PASSWORD, saved)
         self.assertNotIn('recipient@example.test', saved)
+
+    def test_account_updates_require_scope_over_existing_target_grants(self):
+        catalog = Permission.objects.filter(content_type__app_label='ops_admin', content_type__model='permissioncatalog')
+        editor = User.objects.create_user(username='scoped-editor', password=PASSWORD)
+        editor.user_permissions.add(catalog.get(codename='change_user'))
+        higher_grant = catalog.get(codename='view_audit_event')
+        privileged_group = Group.objects.create(name='audit-scope-fixture')
+        privileged_group.permissions.add(higher_grant)
+        ordinary_group = Group.objects.create(name='ordinary-scope-fixture')
+        client, issuer = self.browser(editor), self.browser(self.operator)
+
+        for source in ('direct', 'group'):
+            target = User.objects.create_user(username=f'scope-target-{source}', password=PASSWORD, display_name='Original')
+            if source == 'direct':
+                target.user_permissions.add(higher_grant)
+            else:
+                target.groups.add(privileged_group)
+            AccountLifecycle.objects.create(user=target, status=AccountLifecycle.Status.ACTIVE)
+            target_session = self.browser(target).session.session_key
+            path = f'users/{target.pk}'
+            issued = self.write(issuer, f'{path}/secret/reset', {'delivery_mode': 'offline'})
+            self.assertEqual(issued.status_code, 200)
+
+            rows = (User.objects.filter(pk=target.pk), AccountLifecycle.objects.filter(user=target),
+                    Session.objects.filter(pk=target_session), SecretTicket.objects.filter(user=target))
+            before = [row.values().get() for row in rows]
+            groups = set(target.groups.values_list('pk', flat=True))
+            grants = set(target.user_permissions.values_list('pk', flat=True))
+            for update in ({'display_name': 'Updated'}, {'groups': sorted(groups | {ordinary_group.pk})}):
+                with self.subTest(source=source, field=next(iter(update))):
+                    response = self.write(client, path, update, method='patch')
+                    self.assertEqual((response.status_code, response.json()['error']['code']), (403, 'delegation_denied'))
+                    self.assertEqual([row.values().get() for row in rows], before)
+                    self.assertEqual(set(target.groups.values_list('pk', flat=True)), groups)
+                    self.assertEqual(set(target.user_permissions.values_list('pk', flat=True)), grants)
+                    self.assertFalse(AuditRecord.objects.filter(event_type='ops.user.changed').exists())
 
     def test_dashboard_partial_and_permission_fields(self):
         self.ungranted.user_permissions.add(Permission.objects.get(content_type__app_label='ops_admin', codename='view_ops_dashboard'))
