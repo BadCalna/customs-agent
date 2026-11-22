@@ -52,7 +52,7 @@ class OpsDataContractTests(TestCase):
         self.assertEqual(len(rows), len(generation.evidence))
         for row in rows:
             self.assertEqual(set(row), {"kind", "snapshot_id", "record_id", "anchor", "label", "source_locator"})
-            self.assertNotRegex(json.dumps(row), r"/|\\|1[3-9][0-9]{9}")
+            self.assertNotRegex(json.dumps(row, ensure_ascii=False), r"/|\\\\|1[3-9][0-9]{9}")
 
     def test_catalog_and_hs_pin_requested_snapshot(self):
         response = self.api("/api/v1/ops/data/catalog?tab=note&snapshot_id=fx-2026-01", self.catalog_user)
