@@ -46,8 +46,9 @@ def test_admin_probe_to_user_live_result_and_revoked_visibility(settings, tmp_pa
     settings.OPS_DEBUG_EVIDENCE_MAP_ROOT = str(map_root.parent)
     manager = get_user_model().objects.create_user(username="connection-manager")
     manage = Permission.objects.get(content_type__app_label="agent_debug", codename="manage_connections")
+    view_payload = Permission.objects.get(content_type__app_label="agent_debug", codename="view_trace_payload")
     manager.user_permissions.add(manage)
-    user.user_permissions.remove(manage)
+    user.user_permissions.remove(manage, view_payload)
     admin, operator = _client(manager), _client(user)
     assert admin.get("/ops/debug/connections/").status_code == 200
     assert operator.get("/ops/debug/").status_code == 200
@@ -81,6 +82,18 @@ def test_admin_probe_to_user_live_result_and_revoked_visibility(settings, tmp_pa
         before = len(calls)
         preview = _post(operator, "previews", {"mode": mode, "sample_id": sample}, 201)
         assert len(calls) == before
+        assert set(preview) == {"ticket", "expires_at", "destination", "request_bytes",
+                                "packet_digest", "versions", "warnings"}
+        assert set(preview["destination"]) == {"target", "host", "model"}
+        expected_versions = {"engine_version", "prompt_version", "rules_version"}
+        if mode == "live":
+            expected_versions.update({"bundle_id", "snapshot_id", "bundle_fingerprint",
+                                      "map_digest", "rules_digest", "prompt_digest"})
+        assert set(preview["versions"]) == expected_versions
+        assert type(preview["request_bytes"]) is int and preview["request_bytes"] > 0
+        preview_json = json.dumps(preview, ensure_ascii=False)
+        for text in ("演示连接线", "低压传输", "测试样例", "塑料", "测试用途", "UNIT-CONTRACT-p14_tariff"):
+            assert text not in preview_json
         body = {"ticket": preview["ticket"], "confirm_external": False}
         key = str(uuid4())
         queued = _post(operator, "runs", body, 202, key)
@@ -95,15 +108,21 @@ def test_admin_probe_to_user_live_result_and_revoked_visibility(settings, tmp_pa
         assert len(calls) == before + count
         assert d["outbound_counts"] == {"attempts": count, "responses": count, "parsed": count}
         if mode == "live":
-            # Displayed packet is the exact object that was serialized and sent.
+            # The metadata describes the exact bytes still sent by the worker.
+            assert preview["request_bytes"] == len(calls[-1])
             assert digest(calls[-1]) == preview["packet_digest"]
-            assert json.loads(calls[-1]) == preview["redacted_packet"]
+            request = json.loads(calls[-1])
+            assert json.dumps(request["messages"][0]["content"], ensure_ascii=False) not in preview_json
+            packet = json.loads(request["messages"][1]["content"])
+            assert packet["reference_packet"]["catalog_recall"]["dataset"]["dataset_id"] == "UNIT-CONTRACT-p14_tariff"
             assert d["business_status"] == "needs_facts"
 
     assert admin.get(API + run_path).status_code == 403
     steps = operator.get(API + f"{run_path}/steps").json()["items"]
     assert [s["kind"] for s in steps] == ["prepare", "model", "parse", "postcheck"]
     payload_path = API + f"{run_path}/steps/2/payload"
+    assert operator.get(payload_path).status_code == 403
+    user.user_permissions.add(view_payload)
     payload = operator.get(payload_path)
     assert payload.status_code == 200 and payload.json()["payload_state"] == "available"
     assert "测试样例".encode() not in payload.content

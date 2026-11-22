@@ -300,7 +300,11 @@
     const e = document.querySelector("#previewView");
     e.hidden = false;
     e.className = "preview-card reveal";
-    e.innerHTML = `<div class="destination"><span class="pill">${esc(p.destination?.target || "mock")}</span><strong>${esc(p.destination?.host || "本地")} · ${esc(p.destination?.model || "—")}</strong></div><div class="callout">将处理 <b>${esc((p.fields || []).join("、"))}</b>。${p.destination?.target === "external" ? "内容将离开本机。" : ""}</div><pre>${esc(typeof p.redacted_packet === "string" ? p.redacted_packet : JSON.stringify(p.redacted_packet || {}, null, 2))}</pre><div class="form-foot"><span class="hint">有效至 ${esc(fmt(p.expires_at))}</span><button class="button primary" id="runBtn">确认并运行 →</button></div>`;
+    const versions = Object.entries(p.versions || {}).map(([k, v]) => `${k}=${v}`).join(" · ");
+    e.innerHTML = `<div class="destination"><span class="pill">${esc(p.destination?.target || "mock")}</span><strong>${esc(p.destination?.host || "本地")} · ${esc(p.destination?.model || "—")}</strong></div>
+      <div class="callout">${esc((p.warnings || []).join("；"))}。预览仅显示技术元数据，不显示事实、消息、提示词或资料正文。</div>
+      <dl><dt>报文摘要（SHA-256）</dt><dd class="mono">${esc(p.packet_digest || "—")}</dd><dt>报文大小</dt><dd>${esc(p.request_bytes ?? "—")} 字节</dd><dt>版本</dt><dd>${esc(versions || "—")}</dd></dl>
+      <div class="form-foot"><span class="hint">有效至 ${esc(fmt(p.expires_at))}</span><button class="button primary" id="runBtn">确认并运行 →</button></div>`;
     const s = document.querySelector("#resultStatus");
     s.textContent = "预览已生成";
     s.className = "status good";
@@ -314,7 +318,7 @@
     )
       return;
     const external = p.destination?.target === "external";
-    if (external && !window.confirm("确认将脱敏字段发送至外部目标？")) return;
+    if (external && !window.confirm("确认将已审批的报文发送至外部目标？")) return;
     const { key, generation: submittedGeneration } = previewAttempt;
     submitBusy = true;
     const button = document.querySelector("#runBtn");

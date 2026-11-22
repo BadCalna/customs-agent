@@ -162,9 +162,9 @@ def create_preview(user, data):
                                 sample_kind=kind, sample_id=sample_id, mode=data.mode,
                                 input_ciphertext=seal_data(protected, f"preview:{ticket_hash}"), input_digest=input_hash(protected),
                                 packet_digest=packet_digest, connection=connection, config_snapshot=config, expires_at=expires)
+    # Browser response allowlist: do not include or deserialize the request body.
     return {"ticket": ticket, "expires_at": expires.isoformat(), "destination": destination,
-            "fields": ["name", *(f"attributes.{key}" for key in source["facts"]["attributes"]), "elements_text"],
-            "redacted_packet": json.loads(body), "packet_digest": packet_digest, "versions": versions,
+            "request_bytes": len(body), "packet_digest": packet_digest, "versions": versions,
             "warnings": {"mock": ["合成模拟，不联网"], "local": ["仅发往登记的本机端点"],
                          "external": ["仅获批样例；确认后将出机"]}[destination["target"]]}
 

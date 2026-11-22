@@ -11,7 +11,7 @@ BASE_DIR = Path(__file__).resolve().parents[2]
 SECRET_KEY = token_urlsafe(48)
 DEBUG = True
 ALLOWED_HOSTS = ["testserver", "localhost", "127.0.0.1"]
-ROOT_URLCONF = "tests.ops_debug.urls"
+ROOT_URLCONF = "optional_tests.ops_debug.urls"
 
 INSTALLED_APPS = [
     "django.contrib.auth",
@@ -65,7 +65,6 @@ OPS_DEBUG_ENABLED = True
 OPS_DEBUG_LIVE_ENABLED = False
 OPS_DEBUG_PUBLISHED_DIR = ""
 OPS_DEBUG_EVIDENCE_MAP_ROOT = ""
-OPS_DEBUG_SNAPSHOT_ACCESS = "tests.ops_debug.conftest.snapshot_access"
 
 SESSION_COOKIE_SECURE = False
 CSRF_COOKIE_SECURE = False

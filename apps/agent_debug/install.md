@@ -1,12 +1,12 @@
 # Agent 调试台：安装与运行
 
-此模块使用独立 Django 表、执行器、保留策略和权限，不接管正式审核或正式 Run。先在隔离环境跑合成样例；本地 Web 页面不代表云端调用的数据不出机。
+本 PR **仅交付独立的非生产调试包**，用于隔离环境的合成样例验收；不会在现有工作台启用调试台、不接管正式审核或正式 Run。共享 Django 应用、路由、迁移、静态资源和运行/清理服务的生产接入仍由 [#45](https://github.com/BadCalna/customs-agent/issues/45) 指定的 01 系统管理集成方另行完成；资料快照准入及证据映射仍由 C 提供。本地 Web 页面不代表云端调用的数据不出机。
 
-## 应用接入（由集成方操作）
+## 隔离环境接入（不用于生产）
 
 1. 在项目已有的 Python 环境安装附加依赖：`uv pip install -r apps/agent_debug/requirements.txt`（使用带 pip 的虚拟环境也可运行 `python -m pip install -r apps/agent_debug/requirements.txt`）。
 2. 在 `INSTALLED_APPS` 加入 `apps.agent_debug`。Django 页面 URLConf 在根 `urlpatterns` 加入 `path("", include("apps.agent_debug.urls"))`，该 URLConf 自带 `/ops/debug/` 前缀。现有 v1 Ninja API 注册 `api_v1.add_router("/ops/debug/", agent_debug_router)`，其中 `from apps.agent_debug.api import router as agent_debug_router`；完整 API 前缀是 `/api/v1/ops/debug/`。保留项目的会话、CSRF 中间件及异常处理。即使绕开页面调用 API，写请求也须提供同会话 CSRF token。
-3. `python manage.py migrate agent_debug`；生产静态资源执行既有 `collectstatic` 流程；`python manage.py check`。共享运行环境使用 PostgreSQL 行锁；SQLite 只用于开发/隔离测试，不用于多执行器并发。
+3. `python manage.py migrate agent_debug`；`python manage.py check`。SQLite 只用于开发/隔离测试，不用于多执行器并发；共享运行环境需要 PostgreSQL 行锁。
 4. 按需授权 `agent_debug.use_debug`（预览、运行、本人摘要）、`agent_debug.manage_connections`（连接/探针）、`agent_debug.view_all_runs`（叠加 `use_debug` 才能读其他人摘要）、`agent_debug.view_trace_payload`（还需该运行的读取权）。真实资料另需 `reference_browser.view_catalog` 以及 C 对对应快照和指纹的准入；缺任一项不放行。不要把上述权限与 Django staff 身份混为一谈。
 
 ## Web、worker 与清理进程配置
@@ -36,6 +36,8 @@
 
 外部审批：先在隔离、受控运维环境登记端点及非敏感样例。`apps.agent_debug.services.external_packet(sample_id, endpoint_id, model)` 是离线管理辅助函数，返回最终正文且不发请求；只允许授权运维在受控环境检查，不向终端日志、工单或聊天复制正文。关务与出网负责人审查**精确正文**、目标域名和模型，确认仅含批准样例和公开摘录。随后用同模块 `external_packet_digest(sample_id, endpoint_id, model)` 计算摘要并登记，部署同版配置。样例、模型、资料、模板等改动若导致正文摘要改变，必须重审。启用 live 后，管理员在受保护页面保存 revision → 用无业务资料探针验证模型身份、鉴权和结构化回复 → 按当前默认指针版本激活；启用/撤销写入带 `expected_default_version` 的 CAS，冲突后刷新重新确认。普通用户外发前仍须逐次明确确认。
 
+发送预览只返回技术元数据（目标类型、主机、模型、报文字节数、SHA-256、版本、确认票据和提示），不返回原报文、事实字段和值、消息、提示词或资料正文。服务端仍按精确字节生成并校验审批摘要；逐次确认和出站发送流程不变。
+
 ## 执行、审计与清理
 
 ```sh
@@ -56,4 +58,15 @@ python manage.py ops_debug_cleanup
 - 轮换供应商 Key 时新建 revision、探测再切默认；泄露时立即撤销旧 revision 并在供应商侧吊销 Key。应用不自动迁移 AES 密文；切换主密钥前协调停机、退役旧版本并重新录入凭证，避免用新密钥覆盖旧密钥后误认为还能读旧密文；切换数据密钥会使未过期旧报文不可读，需先按保留政策完成计划或离线迁移。不得回退明文。密文目录中的废弃凭证按批准的运维策略单独处置，常规清理不会删除它们。
 - 故障回退先关闭 `OPS_DEBUG_LIVE_ENABLED` 并停调试 worker（包括全部探针）；需要时关闭 `OPS_DEBUG_ENABLED`。按政策撤销问题 revision，运行清理标记超时，核对送达未知、费用与外发；保留系统审计及加密表，不以删库回退。正式工作台和正式队列保持原状。
 
-本地验收使用 `python -m pytest tests/ops_debug -q`（已安装项目测试依赖时）。先用 mock 和假 transport，外部实际鉴权、出机与关务业务效果必须在另行批准的环境核验；CI 通过不代表可推广正式归类。
+## 显式运行隔离验收
+
+在仓库根目录的项目虚拟环境中执行（无需修改共享 Django 配置）：
+
+```sh
+uv pip install -r apps/agent_debug/requirements.txt pytest pytest-django
+python -m pytest -c optional_tests/ops_debug/pytest.ini optional_tests/ops_debug -q
+python manage.py check --settings=optional_tests.ops_debug.settings
+python manage.py makemigrations agent_debug --check --dry-run --settings=optional_tests.ops_debug.settings
+```
+
+该可选测试套件不属于默认 Django 测试发现；使用隔离配置和 SQLite，并以合成样例与假 transport 验证，不发真实供应商请求。生产鉴权、出机与关务业务效果必须在另行批准的环境核验；本地测试通过不代表可用于正式归类。

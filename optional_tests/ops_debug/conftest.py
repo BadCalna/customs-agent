@@ -20,6 +20,7 @@ def _test_keys(tmp_path, settings):
     settings.OPS_DEBUG_ENABLED = True
     settings.OPS_DEBUG_LIVE_ENABLED = True
     settings.OPS_DEBUG_LOCAL_FREE_INPUT = True
+    settings.OPS_DEBUG_SNAPSHOT_ACCESS = snapshot_access
     settings.OPS_DEBUG_ENDPOINTS = [
         {"id": "loopback-test", "url": "http://127.0.0.1:8765/v1/chat/completions", "models": ["debug-model"], "auth_mode": "none", "target": "local", "label": "测试本机"},
         {"id": "external-test", "url": "https://provider.invalid/v1/chat/completions", "models": ["debug-model"], "auth_mode": "bearer", "target": "external", "label": "测试外部"},
