@@ -1,0 +1,6 @@
+{
+  "source": "baseline",
+  "archive": "f66c8fa851fedece88d0e154528b8084c13f089b",
+  "runtime_tree_sha256": "fe89ab58eccfde25d29384a9f6ae79e626c8f698942d975d45a8f60d99825536",
+  "mode": "Django live + seed_contracts / mock inline / SQLite"
+}

@@ -17,9 +17,12 @@ Django 开发服务器只会自动服务 app 内部的 ``static/`` 目录，而�
 原型/fixture 入口继续只在开发模式提供。
 """
 from pathlib import Path
+from urllib.parse import urlencode
 
 from django.conf import settings
-from django.http import FileResponse, Http404
+from django.http import FileResponse, Http404, HttpResponseRedirect
+from django.views.decorators.cache import never_cache
+from django.views.decorators.csrf import ensure_csrf_cookie
 
 WEB_ROOT = Path(settings.BASE_DIR) / "web"
 FIXTURE_ROOT = Path(settings.BASE_DIR) / "contracts" / "fixtures"
@@ -105,13 +108,42 @@ def tasks_index(request):
     return _served_file(WEB_ROOT, "pages/p08.html")
 
 
+def _entry_target(request, path):
+    """Only carry review coordinates between the two fixed same-site pages."""
+    query = urlencode([(key, request.GET[key]) for key in ("task", "version") if request.GET.get(key)])
+    return f"{path}?{query}" if query else path
+
+
+def _has_business_session(request):
+    # A session opened in /admin/ without a business role is not a desk login.
+    from apps.accounts.models import Role
+
+    return request.user.is_authenticated and request.user.role in Role.values
+
+
+@never_cache
 def production_index(request):
+    if not _has_business_session(request):
+        return HttpResponseRedirect(_entry_target(request, "/login/"))
     return _production_file("production.html")
 
 
+@never_cache
+@ensure_csrf_cookie
+def production_login(request):
+    if _has_business_session(request):
+        return HttpResponseRedirect(_entry_target(request, "/"))
+    return _production_file("login.html")
+
+
+PRODUCTION_ASSETS = frozenset({
+    "production.js", "production.css", "appearance.js", "login.js", "api.js",
+    "components/message-list.js", "styles/messages.css", "review-insights.js", "insights.css",
+})
+
+
 def production_asset(request, path: str):
-    allowed = {"production.js", "production.css", "api.js", "components/message-list.js", "styles/messages.css"}
-    if path not in allowed:
+    if path not in PRODUCTION_ASSETS:
         raise Http404("资源不存在")
     return _production_file(path)
 

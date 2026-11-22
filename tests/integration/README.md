@@ -59,7 +59,7 @@ python tests/integration/run.py --backend sqlite --core-regression
 python tests/integration/run.py --backend postgres --core-regression
 ```
 
-实际范围是 `tests/p00` 至 `tests/p20`，另加 `tests/p15_pg`、`tests/p16_real`、`tests/p23` 和本目录。P22 容器部署及恢复演练不在该范围内。默认报告分别为 `.local/p21/core-sqlite.json`、`.local/p21/core-postgres.json` 及同名日志。
+实际范围是 `tests/p00` 至 `tests/p20`，另加 `tests/p15_pg`、`tests/p16_real`、`tests/p23`、`tests/optimization` 和本目录。P22 容器部署及恢复演练不在该范围内。默认报告分别为 `.local/p21/core-sqlite.json`、`.local/p21/core-postgres.json` 及同名日志。
 
 部分 P20 专项需要可导入 openpyxl 的独立解释器。若当前运行环境不含该库，可通过已有的 `CUSTOMS_OPENPYXL_PYTHON` 配置实际解释器；`run.py` 会显式保留这个变量。没有相应条件时须查看跳过或失败原因，不能只看新增集成测试的结果。
 

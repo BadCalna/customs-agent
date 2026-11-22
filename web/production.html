@@ -1,53 +1,182 @@
 <!doctype html>
 <html lang="zh-CN">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>关务审核工作台</title>
-  <link rel="stylesheet" href="/app/assets/production.css">
-  <link rel="stylesheet" href="/app/assets/styles/messages.css">
-</head>
-<body>
-  <header class="topbar">
-    <div class="brand"><span class="brand-mark">关</span><div><strong>关务审核工作台</strong><small>单证预审与人工审核</small></div></div>
-    <div class="account"><span id="identity"></span><button id="messages-toggle" type="button" hidden aria-expanded="false" aria-controls="messages-area">消息 <span id="messages-count" class="p19-badge">0</span></button><button id="logout" type="button" hidden>退出</button></div>
-  </header>
-  <main>
-    <div id="notice" role="status" aria-live="polite" hidden></div>
-    <div id="messages-area" hidden></div>
-    <section id="login-panel" class="login-panel">
-      <h1>登录</h1>
-      <form id="login-form">
-        <label>账号<input name="username" autocomplete="username" required></label>
-        <label>密码<input name="password" type="password" autocomplete="current-password" required></label>
-        <button class="primary" type="submit">登录</button>
-      </form>
-    </section>
-    <div id="workspace" class="workspace" hidden>
-      <aside>
-        <div class="section-heading"><h2>任务</h2><button id="refresh" type="button" title="刷新任务">刷新</button></div>
-        <div id="task-list"></div><button id="more-tasks" type="button" hidden>加载更多</button>
-        <div id="claim-area" hidden><div class="section-heading"><h2>待认领</h2></div><div id="claim-list"></div>
-          <button id="more-claims" type="button" hidden>加载更多</button></div>
-      </aside>
-      <div class="content">
-        <section id="upload-area" hidden>
-          <div class="section-heading"><h2>上传单证</h2></div>
-          <form id="upload-form" class="form-row">
-            <label>上传位置<select name="target" id="upload-target"><option value="new">新任务</option><option value="replace">当前任务新版本</option></select></label>
-            <label>Excel 原件<input type="file" name="file" accept=".xlsx,.xlsm,.xltx" required></label>
-            <button class="primary" type="submit">上传</button>
-          </form>
-          <div id="duplicate-area" hidden><span>该文件与已有版本相同。</span><button id="duplicate-confirm" type="button">确认创建新版本</button></div>
-        </section>
-        <section id="task-detail" hidden></section>
-        <section id="run-detail" hidden></section>
-        <section id="item-area" hidden><div class="section-heading"><h2>商品明细</h2></div><div id="item-list"></div></section>
-        <section id="item-detail" hidden></section>
-        <section id="history-area" hidden></section>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>关务预审工作台</title>
+    <script src="/app/assets/appearance.js"></script>
+    <link rel="stylesheet" href="/app/assets/styles/messages.css" />
+    <link rel="stylesheet" href="/app/assets/production.css" />
+    <link rel="stylesheet" href="/app/assets/insights.css" />
+  </head>
+  <body class="desk-page">
+    <a class="skip-link" href="#workspace">跳到工作区</a>
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">
+          <i></i>
+          <i></i>
+          <i></i>
+        </span>
+        <div>
+          <strong>关务预审工作台</strong>
+          <small lang="en">CUSTOMS DESK</small>
+        </div>
       </div>
-    </div>
-  </main>
-  <script type="module" src="/app/assets/production.js"></script>
-</body>
+      <div class="account">
+        <label class="theme-control">
+          <span>主题</span>
+          <select data-theme-picker aria-label="界面主题">
+            <option value="harbor">海港青</option>
+            <option value="ledger">档案棕</option>
+            <option value="night">夜航蓝</option>
+          </select>
+        </label>
+        <span id="identity"></span>
+        <button id="messages-toggle" type="button" hidden aria-expanded="false" aria-controls="messages-area">
+          消息
+          <span id="messages-count" class="p19-badge">0</span>
+        </button>
+        <button id="logout" type="button" hidden>退出</button>
+      </div>
+    </header>
+    <main class="desk-main">
+      <div id="notice" role="status" aria-live="polite" hidden></div>
+      <div id="messages-area" hidden></div>
+      <section id="login-panel" class="session-panel">
+        <p>正在连接工作台…</p>
+        <a href="/login/">前往账号登录</a>
+      </section>
+      <div id="workspace" class="workspace" tabindex="-1" hidden>
+        <div class="workspace-title">
+          <div>
+            <p class="eyebrow">
+              <span class="index-dash"></span>
+              OPERATIONS DESK
+            </p>
+            <h1>关务预审工作台</h1>
+          </div>
+          <p>
+            任务分派
+            <span>/</span>
+            单证预审
+            <span>/</span>
+            人工复核
+          </p>
+        </div>
+        <aside class="queue-pane" aria-labelledby="queue-heading">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">
+                01
+                <i>/</i>
+                QUEUE
+              </p>
+              <h2 id="queue-heading">任务队列</h2>
+            </div>
+            <button id="refresh" type="button" title="刷新任务">刷新</button>
+          </div>
+          <div class="queue-filters">
+            <label for="task-search">查找任务</label>
+            <input id="task-search" type="search" placeholder="名称、编号或供应商" />
+            <div class="filter-row">
+              <label for="task-stage" class="sr-only">任务阶段</label>
+              <select id="task-stage">
+                <option value="">不限阶段</option>
+                <option value="uploaded">已上传</option>
+                <option value="prechecking">预审中</option>
+                <option value="awaiting_confirmation">待业务确认</option>
+                <option value="submitted">待专家审核</option>
+                <option value="approved">已通过</option>
+                <option value="returned">已退回</option>
+              </select>
+              <button id="task-reset" type="button">重置</button>
+            </div>
+          </div>
+          <p id="task-count" class="queue-count" role="status"></p>
+          <div id="task-list"></div>
+          <button id="more-tasks" type="button" hidden>加载更多</button>
+          <div id="claim-area" hidden>
+            <div class="section-heading"><h2>待认领</h2></div>
+            <div id="claim-list"></div>
+            <button id="more-claims" type="button" hidden>加载更多</button>
+          </div>
+        </aside>
+        <div class="content">
+          <section id="upload-area" hidden>
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">
+                  INTAKE
+                  <i>/</i>
+                  单证接收
+                </p>
+                <h2>上传单证</h2>
+              </div>
+            </div>
+            <form id="upload-form" class="form-row">
+              <label>
+                上传位置
+                <select name="target" id="upload-target">
+                  <option value="new">新任务</option>
+                  <option value="replace">当前任务新版本</option>
+                </select>
+              </label>
+              <label>
+                Excel 原件
+                <input type="file" name="file" accept=".xlsx,.xlsm,.xltx" required />
+              </label>
+              <button class="primary" type="submit">上传</button>
+            </form>
+            <div id="duplicate-area" hidden>
+              <span>该文件与已有版本相同。</span>
+              <button id="duplicate-confirm" type="button">确认创建新版本</button>
+            </div>
+          </section>
+          <div id="detail-status" role="status" aria-live="polite"></div>
+          <section id="workbench-empty" class="empty-desk">
+            <div class="empty-graphic" aria-hidden="true">
+              <svg viewBox="0 0 120 76" fill="none" stroke="currentColor" stroke-linejoin="round">
+                <path d="m9 46 43-25 59 20-44 28Z" />
+                <path d="m9 40 43-25 59 20-44 28Z" />
+                <path class="sheet" d="M9 34 53 9l59 20-44 28Z" />
+                <path d="m28 34 22 7m-13-12 32 11m-23-17 33 11m-23-17 12 4" />
+              </svg>
+            </div>
+            <p class="eyebrow">DOCUMENT REVIEW</p>
+            <h2>选择任务，开始审核</h2>
+            <p>从任务队列打开一份单证，查看版本、商品明细与审核记录。</p>
+          </section>
+          <section id="task-detail" hidden></section>
+          <section id="review-insights" aria-label="选定版本审核概览" hidden></section>
+          <section id="run-detail" hidden></section>
+          <section id="item-area" hidden>
+            <div class="section-heading"><h2>商品明细</h2></div>
+            <div id="item-list"></div>
+          </section>
+          <section id="item-detail" hidden></section>
+          <section id="history-area" hidden></section>
+        </div>
+      </div>
+      <footer class="folio-footer desk-footer">
+        <span>
+          关务预审工作台
+          <i>/</i>
+          业务作业区
+        </span>
+        <nav aria-label="专项工具">
+          <a href="/workbench/">
+            运行与导出
+            <span aria-hidden="true">↗</span>
+          </a>
+          <a href="/uploads/">
+            上传与认领
+            <span aria-hidden="true">↗</span>
+          </a>
+        </nav>
+      </footer>
+    </main>
+    <script type="module" src="/app/assets/production.js"></script>
+  </body>
 </html>

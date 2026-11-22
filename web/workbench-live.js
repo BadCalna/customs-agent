@@ -136,7 +136,7 @@ export async function mountWorkbench(root) {
   }
   function gate(error = null) {
     reset(); user=null;
-    root.innerHTML = `<main class="wb-login"><h1>关务审核工作台</h1><p>使用已分配的业务账号登录。</p><form id="wb-login">
+    root.innerHTML = `<main class="wb-login"><h1>关务预审工作台</h1><p>使用已分配的业务账号登录。</p><form id="wb-login">
       <label>账号<input name="username" autocomplete="username" required></label><label>密码<input name="password" type="password" autocomplete="current-password" required></label>
       <button class="btn primary" type="submit">登录</button></form><div id="wb-auth-error">${error ? errorHtml(error) : ''}</div></main>`;
     $('#wb-login').onsubmit = async e => {
@@ -223,7 +223,7 @@ export async function mountWorkbench(root) {
   }
   async function workspace() {
     reset();const ticket=session;
-    root.innerHTML=`<header class="wb-header"><h1>关务审核工作台</h1><span>${esc(user.display_name||user.username)} · ${esc(user.role_label||user.role)}</span><a href="/uploads/">上传 / 认领</a><button class="btn" id="wb-messages-toggle" aria-expanded="false" aria-controls="wb-messages">消息 <span id="wb-messages-count" class="p19-badge">0</span></button><button class="btn" id="wb-logout">退出</button></header>
+    root.innerHTML=`<header class="wb-header"><h1>运行与导出</h1><a href="/" id="wb-home">返回作业台</a><span>${esc(user.display_name||user.username)} · ${esc(user.role_label||user.role)}</span><a href="/uploads/">上传 / 认领</a><button class="btn" id="wb-messages-toggle" aria-expanded="false" aria-controls="wb-messages">消息 <span id="wb-messages-count" class="p19-badge">0</span></button><button class="btn" id="wb-logout">退出</button></header>
       <section id="wb-messages" hidden></section>
       <p class="wb-banner">按任务版本查看商品、审核记录和执行进度。模拟结果会明确标注，不能作为申报依据。</p>
       <main class="wb-layout"><aside id="wb-tasks"></aside><section class="wb-detail"><h1 id="wb-title">选择左侧任务</h1><div id="wb-context-error"></div><div id="wb-toolbar" class="wb-toolbar"></div><p id="wb-summary"></p>
