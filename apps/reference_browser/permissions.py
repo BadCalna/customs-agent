@@ -1,5 +1,6 @@
 """Reference permissions are independent of business roles and task rows."""
 from django.conf import settings
+from django.contrib.auth.models import Permission
 from django.utils.module_loading import import_string
 
 from .errors import FORBIDDEN, UNAUTHORIZED
@@ -14,7 +15,17 @@ def authenticated(user):
 
 
 def actor_can(user, codename):
-    return authenticated(user) and user.has_perm(f"reference_browser.{codename}")
+    """Require an explicit direct/group grant; superuser/staff status is not enough."""
+    if not authenticated(user):
+        return False
+    permissions = Permission.objects.filter(
+        content_type__app_label="reference_browser",
+        content_type__model="referenceaccess",
+        codename=codename,
+    )
+    direct = user.user_permissions.filter(pk__in=permissions.values("pk")).exists()
+    groups = user.groups.filter(permissions__in=permissions).exists()
+    return direct or groups
 
 
 def require_permission(user, codename):

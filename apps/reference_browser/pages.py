@@ -2,6 +2,11 @@
 from django.http import HttpResponseNotAllowed
 from django.shortcuts import render
 from django.utils.cache import add_never_cache_headers, patch_vary_headers
+from django.utils.html import json_script
+
+from .errors import ReferenceError, QUERY_FAILED, json_response, request_id
+from . import services
+from .store import SnapshotUnreadable
 
 from .permissions import VIEW_CATALOG, VIEW_HISTORY, VIEW_HISTORY_DETAIL, actor_can, authenticated
 
@@ -26,12 +31,17 @@ def _page(request, template):
     if not (can_catalog or can_history):
         return _private(render(request, "reference_browser/access.html", {"state": "forbidden"}, status=403))
 
-    return _private(render(request, template, {
-        "can_catalog": can_catalog,
-        "can_history": can_history,
-        "can_history_detail": can_history_detail,
-        "operator": request.user.get_username(),
-    }))
+    context = {"can_catalog": can_catalog, "can_history": can_history,
+               "can_history_detail": can_history_detail, "operator": request.user.get_username()}
+    if template.endswith("evidence.html"):
+        try:
+            result = services.evidence(request.user, services.Query(request.GET))
+        except ReferenceError as exc:
+            return _private(render(request, "reference_browser/access.html", {"state": exc.code}, status=exc.status))
+        except (SnapshotUnreadable, TimeoutError, Exception):
+            return _private(render(request, "reference_browser/access.html", {"state": "query_failed"}, status=503))
+        context["evidence_payload"] = result
+    return _private(render(request, template, context))
 
 
 def browser(request):

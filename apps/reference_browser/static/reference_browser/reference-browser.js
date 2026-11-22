@@ -222,7 +222,10 @@ function startEvidence() {
   const content = $('#evidence-content');
   const back = $('#evidence-back');
   back.href = url(back.pathname, { tab: params.kind, snapshot_id: params.snapshot_id }).href;
+  const seeded = document.getElementById('reference-evidence-payload');
+  const initial = seeded ? JSON.parse(seeded.textContent) : null;
   async function load() {
+    if (initial) { content.replaceChildren(renderRecord(params.kind, initial.record, initial.snapshot, initial)); return; }
     content.replaceChildren(el('div', 'loading-line', '正在解析证据引用…'));
     try {
       const data = await get('/evidence', params);

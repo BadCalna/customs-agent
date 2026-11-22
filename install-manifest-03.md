@@ -16,14 +16,11 @@
 
 ```python
 INSTALLED_APPS += ["apps.reference_browser"]
+# 生产环境不启用；仅在支持本地调试时由 01 组加入这一布尔映射。
+REFERENCE_BROWSER_FIXTURE = os.environ.get("REFERENCE_BROWSER_FIXTURE") == "1"
 ```
 
-本期不新增数据库连接、不读取业务库、不增加外部服务凭据。可选的本地/测试 fixture 开关：
-
-```text
-REFERENCE_BROWSER_FIXTURE=1
-REFERENCE_BROWSER_FIXTURE_TESTING=True
-```
+本期不新增数据库连接、不读取业务库、不增加外部服务凭据。
 
 - `REFERENCE_BROWSER_FIXTURE=1` 只有 `DEBUG=True` 时生效；仅本地调试使用。
 - `REFERENCE_BROWSER_FIXTURE_TESTING=True` 仅 standalone test URLConf/测试 runner 使用。
@@ -48,7 +45,8 @@ api_v1.add_router("/ops/data", reference_browser_router)
 
 提供的只读端点：
 
-- `GET /ops/data/`
+- `GET /ops/data/`（`?tab=note|hs|history`）
+- `GET /ops/data/evidence/`
 - `GET /api/v1/ops/data/snapshots`
 - `GET /api/v1/ops/data/catalog`
 - `GET /api/v1/ops/data/catalog/{kind}/{record_id}`
@@ -57,11 +55,13 @@ api_v1.add_router("/ops/data", reference_browser_router)
 - `GET /api/v1/ops/data/history/{record_id}`
 - `GET /api/v1/ops/data/evidence`
 
+`GET /api/v1/ops/data/history/export` 仅返回拒绝并写审计，不提供导出能力。
+
 本期**不得挂载**导入、发布、回滚等 POST 路由：`/import/runs`、`/import/{run_id}/validate`、`/import/{run_id}/publish`、`/releases/{release_id}/rollback`。
 
 ## 4. 权限 codename
 
-migration 产生下列 `reference_browser` 权限（deny-by-default）：
+migration 产生下列 `reference_browser` 权限（默认拒绝；通过用户或组显式授予，超级用户身份不自动授权）：
 
 - `view_catalog`：注释、HS、申报要素、出口退税目录及详情。
 - `view_history`：脱敏历史列表/检索。
@@ -76,19 +76,19 @@ migration 产生下列 `reference_browser` 权限（deny-by-default）：
 - `record_id` 使用 `[a-z0-9][a-z0-9._:-]{0,191}`；读取端不自推 hash、不跳转最新版；请求必须显式携带 `snapshot_id`。
 - 历史响应只返回预脱敏 synthetic 字段；无权请求不得泄露内容、计数、存在性、locator 或版本差异；审计使用 `customs.ops.events` 的公共 `ops.event` envelope。
 - fixture 不是真实来源，运行时不联网、不写业务表、不把模型输入/历史原文写入请求、日志或 URL。
+- API 审计 `event_type`：`reference_browser.snapshots.read`、`reference_browser.catalog.read`、`reference_browser.history.search`、`reference_browser.history.detail`、`reference_browser.history.export`、`reference_browser.evidence.read`。拒绝事件不写目标 ID 或原始请求参数。
 
 ## 6. 独立验证与回归命令
 
-03 组使用独立 URLConf `tests/ops_data/urls.py`，不依赖公共 URLConf：
+03 组使用独立 settings `tests.ops_data.settings`、内存 SQLite 与独立 URLConf `tests/ops_data/urls.py`，不依赖公共 settings、URLConf 或业务迁移：
 
 ```bash
-python -m pytest tests/ops_data -q
-python -m pytest tests/ops_data/test_contracts.py tests/ops_data/test_permissions.py -q
-python -m pytest tests/ops_data/test_snapshot_pin.py tests/ops_data/test_publish_rollback.py -q
-python manage.py check --deploy --settings=config.settings
+python manage.py test tests.ops_data --settings=tests.ops_data.settings
+# 已安装 pytest 和 pytest-django 时也可运行：
+python -m pytest tests/ops_data --ds=tests.ops_data.settings -q
 ```
 
-最后一条应证明生产部署检查在 fixture 开关开启时失败；正常配置应通过。01 组接线后另行运行完整项目测试与 OpenAPI 契约更新。
+01 组接线后，使用公共配置运行 `python manage.py check --deploy --settings=config.settings`。正常部署配置应通过；另在隔离环境显式打开 fixture 开关验证检查报 `reference_browser.E001`。导入/发布/回滚未启用，故当前回归验证这些 URL 不存在，不执行真实写入或切换指针。01 组接线后另行运行完整项目测试与 OpenAPI 契约更新。
 
 ## 7. 01 组接线验收清单
 
@@ -96,4 +96,4 @@ python manage.py check --deploy --settings=config.settings
 - [ ] 按上文分别 include 页面和 API；确认 URL 只读、无写入路由。
 - [ ] 执行 `migrate` 生成三项权限；将权限分配到运维组，不默认授予所有用户。
 - [ ] 保持 fixture 开关关闭于生产；执行 `check --deploy`。
-- [ ] 运行 `python -m pytest tests/ops_data -q` 及完整项目回归。
+- [ ] 运行上面的独立测试命令及完整项目回归。
