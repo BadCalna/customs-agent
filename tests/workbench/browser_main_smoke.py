@@ -38,7 +38,7 @@ def main():
                     username = 'workbench_' + role
                     form.locator('[name=username]').fill(username)
                     form.locator('[name=password]').fill(os.environ['WORKBENCH_DEMO_PASSWORD'])
-                    form.get_by_role('button').click()
+                    form.locator('#sign-in').click()
                     expect(page.locator('[data-task]')).to_have_count(2)
                     me_response = context.request.get(args.url.rstrip('/') + '/api/v1/me')
                     assert me_response.ok and me_response.json()['role'] == role
@@ -47,16 +47,21 @@ def main():
                         detail = page.locator('#task-detail')
                         expect(detail).to_contain_text(task)
                         expect(detail).to_contain_text('当前结果为模拟数据，不能用于正式审核')
-                        rows = page.locator('#item-list tr[data-item]')
+                        rows = page.locator('#item-list tbody tr')
                         expect(rows).to_have_count(count)
                         expect(detail.locator('[data-action="submit"], #decision-form')).to_have_count(0)
                         if task == RETURN:
+                            item_ids = []
                             for version, code in ((V1, '9026809000'), (V2, '9026900090')):
                                 detail.locator(f'[data-version="{version}"]').click()
+                                expect(rows).to_have_count(count)
                                 expect(rows.first).to_contain_text(code)
-                                rows.first.click()
+                                item_button = rows.first.locator('button[data-item]')
+                                item_ids.append(item_button.get_attribute('data-item'))
+                                item_button.click()
                                 expect(page.locator('#item-detail')).to_contain_text(code)
                                 expect(page.locator('#confirmation-form')).to_have_count(0)
+                            assert all(item_ids) and len(set(item_ids)) == 2, item_ids
                     print(f'PASS {role}: real login, both batches, distinct V1/V2, mock write gate')
                 finally:
                     context.close()
