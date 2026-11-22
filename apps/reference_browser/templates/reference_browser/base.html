@@ -1,0 +1,25 @@
+{% load static %}<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>{% block title %}基础数据中心 · 关务预审工作台{% endblock %}</title>
+  <link rel="stylesheet" href="{% static 'reference_browser/reference-browser.css' %}">
+  {% block head %}{% endblock %}
+</head>
+<body class="{% block body_class %}{% endblock %}">
+  <a class="skip-link" href="#main-content">跳到主要内容</a>
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="返回关务预审工作台">
+      <span class="wordmark-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+      <span><strong>关务预审工作台</strong><small>CUSTOMS DESK</small></span>
+    </a>
+    <div class="topbar-rule" aria-hidden="true"></div>
+    <span class="topbar-section">基础数据中心 / REFERENCE DATA</span>
+    {% block topbar_tools %}<a class="topbar-link" href="/">返回工作台 ↗</a>{% endblock %}
+  </header>
+  {% block content %}{% endblock %}
+  <footer class="page-foot"><span>参考数据仅供核查与追溯，不替代当期官方依据</span><span class="mono">REFERENCE / READ ONLY</span></footer>
+</body>
+</html>
