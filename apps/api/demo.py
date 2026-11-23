@@ -124,9 +124,13 @@ def _entry_target(request, path):
 
 def _has_business_session(request):
     # A session opened in /admin/ without a business role is not a desk login.
+    # Superusers are a separate super identity: allowed in without a business role.
     from apps.accounts.models import Role
 
-    return request.user.is_authenticated and request.user.role in Role.values
+    user = request.user
+    if not user.is_authenticated:
+        return False
+    return bool(user.is_superuser) or (user.role in Role.values)
 
 
 @never_cache

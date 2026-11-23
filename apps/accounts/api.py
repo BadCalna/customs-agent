@@ -57,7 +57,7 @@ def login(request, payload: LoginIn):
     user = authenticate(request, username=payload.username, password=payload.password)
     if user is None or not user.is_active:
         raise ApiError(401, "invalid_credentials", "用户名或密码不正确")
-    if not user.role:
+    if not user.role and not user.is_superuser:
         raise ApiError(403, "role_missing", "该账号未分配业务角色，不能登录业务接口")
     django_login(request, user)
     return _session_payload(user)

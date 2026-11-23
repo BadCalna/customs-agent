@@ -63,6 +63,8 @@ def visible_tasks(user):
     """当前账号可见的任务集合。未登录直接拒绝，不返回空集合冒充“无数据”。"""
     _require_authenticated(user)
     task_model = _review_model("Task")
+    if getattr(user, "is_superuser", False):
+        return task_model.objects.all()  # 超管看全部任务，不按归属过滤；动作仍走角色矩阵（只读）。
     role = user.role
     if role == Role.SUPPLIER:
         return task_model.objects.filter(supplier=user)
