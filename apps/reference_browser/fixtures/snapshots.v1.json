@@ -1,0 +1,1579 @@
+{
+  "schema_version": "reference-browser.fixture.1",
+  "synthetic": true,
+  "snapshots": [
+    {
+      "snapshot_id": "fx-2026-01",
+      "release_id": "release-fx-2026-01",
+      "kind": "note",
+      "version": "FX2026",
+      "data_status": "provided",
+      "synthetic": true,
+      "review_status": "unreviewed",
+      "reference_only": true,
+      "authoritative": false,
+      "withdrawn": false,
+      "is_active_pointer": true,
+      "published_at": "2026-11-17T10:00:00+08:00",
+      "retrieved_at": "2026-11-17",
+      "effective_from": null,
+      "effective_to": null,
+      "converter_version": "reference-browser.fixture.1",
+      "schema_versions": {
+        "snapshot": "reference-browser.fixture.1",
+        "commentary": "p23.commentary.1",
+        "tariff": "p14.tariff.1",
+        "elements": "p14.elements.1",
+        "export_rebate": "p17.taxrate.1"
+      },
+      "input_fingerprint": "d9c39008a1bc8b4617dbad4446adaf9c2ecff76b18b4128fe412a6fc5eb4a75f",
+      "business_fingerprint": "9bdf77f53d38ec6451a49db5ed5357b8eebad8132f3fce0a59a594b0cbfce7e5",
+      "release_fingerprint": "a14ffe06593d1cffd093ab975aa19e253b65d9223aa1468ae32d84c41dbeb42c",
+      "outcome_fingerprint": "66269c30fc9a816226b9b0d8e9c81b14506010987a7882cd189e782810a3b6ca",
+      "previous_release_id": "release-fx-2025-01",
+      "next_release_id": null,
+      "release_actor": null,
+      "statistics": {
+        "record_count": 8
+      },
+      "statistics_at": "2026-11-17",
+      "source_manifest": [
+        {
+          "source_id": "fixture-note",
+          "sha256": "c694616ba172c863e110aacf0b54d4608a8fd2e95c34cf3e02ae6521c0c42e70",
+          "bytes": 19,
+          "url": null,
+          "publisher": "非官方合成样例",
+          "source_system": "固定合成样例",
+          "retrieved_at": "2026-11-17"
+        }
+      ],
+      "reason": null,
+      "limitations": [
+        "固定合成样例；非官方数据、未经业务复核，不得用于当前申报或审核结论。"
+      ],
+      "datasets": [],
+      "records": [
+        {
+          "record_id": "note-0101",
+          "source_locator": "0101",
+          "status": "imported",
+          "reason": null,
+          "label": "品目",
+          "source_id": "fixture-note",
+          "parent_key": "CH1",
+          "updated_at": "2026-11-17T09:00:00+08:00",
+          "note": {
+            "tariff_no": "0101",
+            "kind": "品目",
+            "title": "合成品目示例",
+            "chapter": "01",
+            "sections": [
+              {
+                "label": "品目注释",
+                "text": "合成品目说明，不代表真实税则。",
+                "anchor": "p1"
+              }
+            ],
+            "text_all": "【品目注释】\n合成品目说明，不代表真实税则。",
+            "text_sha256": "db92bc87090aded15325623eded9e09dc6d151a5e892019844e4c202fcddd278",
+            "text_length": 22,
+            "section_char_total": 15,
+            "source": {
+              "system": "固定合成样例",
+              "document": "fixture-note",
+              "locator": "0101",
+              "url": null,
+              "publisher": "非官方合成样例",
+              "retrieved_at": "2026-11-17"
+            }
+          }
+        },
+        {
+          "record_id": "note-ca1",
+          "source_locator": "CA1",
+          "status": "imported",
+          "reason": null,
+          "label": "类注",
+          "source_id": "fixture-note",
+          "parent_key": null,
+          "updated_at": "2026-11-17T09:00:00+08:00",
+          "note": {
+            "tariff_no": "CA1",
+            "kind": "类注",
+            "title": "合成第 1 类",
+            "chapter": "",
+            "sections": [
+              {
+                "label": "类注",
+                "text": "合成类注 A。",
+                "anchor": "p1"
+              }
+            ],
+            "text_all": "【类注】\n合成类注 A。",
+            "text_sha256": "0eb063dbea612fbd8f994b93a6d74e2d07c5d6f00c03296246fbb8b798537860",
+            "text_length": 12,
+            "section_char_total": 7,
+            "source": {
+              "system": "固定合成样例",
+              "document": "fixture-note",
+              "locator": "CA1",
+              "url": null,
+              "publisher": "非官方合成样例",
+              "retrieved_at": "2026-11-17"
+            }
+          }
+        },
+        {
+          "record_id": "note-ch1",
+          "source_locator": "CH1",
+          "status": "imported",
+          "reason": null,
+          "label": "章注",
+          "source_id": "fixture-note",
+          "parent_key": "CA1",
+          "updated_at": "2026-11-17T09:00:00+08:00",
+          "note": {
+            "tariff_no": "CH1",
+            "kind": "章注",
+            "title": "合成第 1 章",
+            "chapter": "01",
+            "sections": [
+              {
+                "label": "章注",
+                "text": "合成章注 A。",
+                "anchor": "p1"
+              }
+            ],
+            "text_all": "【章注】\n合成章注 A。",
+            "text_sha256": "5107c6921694e901c4e39847571b4a98afe24cfd5f9d45ed17e486fcffe3f228",
+            "text_length": 12,
+            "section_char_total": 7,
+            "source": {
+              "system": "固定合成样例",
+              "document": "fixture-note",
+              "locator": "CH1",
+              "url": null,
+              "publisher": "非官方合成样例",
+              "retrieved_at": "2026-11-17"
+            }
+          }
+        },
+        {
+          "record_id": "note-ca16",
+          "source_locator": "CA16",
+          "status": "imported",
+          "reason": null,
+          "label": "类注",
+          "source_id": "fixture-note",
+          "parent_key": null,
+          "updated_at": "2026-11-17T09:00:00+08:00",
+          "note": {
+            "tariff_no": "CA16",
+            "kind": "类注",
+            "title": "合成第 16 类",
+            "chapter": "",
+            "sections": [
+              {
+                "label": "类注",
+                "text": "合成类注 B。",
+                "anchor": "p1"
+              }
+            ],
+            "text_all": "【类注】\n合成类注 B。",
+            "text_sha256": "caef133fcd42a8c34875faeb78db9fca8b46340a2a237537ea811b0c069ffe44",
+            "text_length": 12,
+            "section_char_total": 7,
+            "source": {
+              "system": "固定合成样例",
+              "document": "fixture-note",
+              "locator": "CA16",
+              "url": null,
+              "publisher": "非官方合成样例",
+              "retrieved_at": "2026-11-17"
+            }
+          }
+        },
+        {
+          "record_id": "note-ch84",
+          "source_locator": "CH84",
+          "status": "imported",
+          "reason": null,
+          "label": "章注",
+          "source_id": "fixture-note",
+          "parent_key": "CA16",
+          "updated_at": "2026-11-17T09:00:00+08:00",
+          "note": {
+            "tariff_no": "CH84",
+            "kind": "章注",
+            "title": "合成第 84 章",
+            "chapter": "84",
+            "sections": [
+              {
+                "label": "章注",
+                "text": "合成章注：不作为归类依据。",
+                "anchor": "p1"
+              },
+              {
+                "label": "子目注释",
+                "text": "章级子目注释：合成示例，关键词传动。",
+                "anchor": "p2"
+              },
+              {
+                "label": "子目注释",
+                "text": "品目级子目注释：合成示例，关键词阀门。",
+                "anchor": "p3"
+              }
+            ],
+            "text_all": "【章注】\n合成章注：不作为归类依据。\n\n【子目注释】\n章级子目注释：合成示例，关键词传动。\n\n【子目注释】\n品目级子目注释：合成示例，关键词阀门。",
+            "text_sha256": "cb43f762b62b3a9a6e094994c4d45b0b7ecd96089771f7d5c7b4fde46fb363fb",
+            "text_length": 73,
+            "section_char_total": 50,
+            "source": {
+              "system": "固定合成样例",
+              "document": "fixture-note",
+              "locator": "CH84",
+              "url": null,
+              "publisher": "非官方合成样例",
+              "retrieved_at": "2026-11-17"
+            }
+          }
+        },
+        {
+          "record_id": "note-ot3",
+          "source_locator": "ot3",
+          "status": "imported",
+          "reason": null,
+          "label": "其他注释",
+          "source_id": "fixture-note",
+          "parent_key": null,
+          "updated_at": "2026-11-17T09:00:00+08:00",
+          "note": {
+            "tariff_no": "ot3",
+            "kind": "其他注释",
+            "title": "合成其他注释 3",
+            "chapter": "",
+            "sections": [
+              {
+                "label": "总注释",
+                "text": "合成说明 3。",
+                "anchor": "p1"
+              }
+            ],
+            "text_all": "【总注释】\n合成说明 3。",
+            "text_sha256": "bc009c704fb483dd50df9795dc9a295ca161e991f7b5a7f1870b5afa3d113ac7",
+            "text_length": 13,
+            "section_char_total": 7,
+            "source": {
+              "system": "固定合成样例",
+              "document": "fixture-note",
+              "locator": "ot3",
+              "url": null,
+              "publisher": "非官方合成样例",
+              "retrieved_at": "2026-11-17"
+            }
+          }
+        },
+        {
+          "record_id": "note-ot4",
+          "source_locator": "ot4",
+          "status": "pending",
+          "reason": "source_version_unverified",
+          "label": "其他注释",
+          "source_id": "fixture-note",
+          "parent_key": null,
+          "updated_at": "2026-11-17T09:00:00+08:00",
+          "note": {
+            "tariff_no": "ot4",
+            "kind": "其他注释",
+            "title": "合成其他注释 4",
+            "chapter": "",
+            "sections": [
+              {
+                "label": "总注释",
+                "text": "合成说明 4。",
+                "anchor": "p1"
+              }
+            ],
+            "text_all": "【总注释】\n合成说明 4。",
+            "text_sha256": "baef89f3208e749c26d02db47d718c186b5725959827cd1577376a09ecd44cb1",
+            "text_length": 13,
+            "section_char_total": 7,
+            "source": {
+              "system": "固定合成样例",
+              "document": "fixture-note",
+              "locator": "ot4",
+              "url": null,
+              "publisher": "非官方合成样例",
+              "retrieved_at": "2026-11-17"
+            }
+          }
+        },
+        {
+          "record_id": "note-ot5",
+          "source_locator": "ot5",
+          "status": "rejected",
+          "reason": "source_row_rejected",
+          "label": "其他注释",
+          "source_id": "fixture-note",
+          "parent_key": null,
+          "updated_at": "2026-11-17T09:00:00+08:00",
+          "note": {
+            "tariff_no": "ot5",
+            "kind": "其他注释",
+            "title": "不可展示的合成行",
+            "chapter": "",
+            "sections": [
+              {
+                "label": "总注释",
+                "text": "拒绝行正文，不得展示。",
+                "anchor": "p1"
+              }
+            ],
+            "text_all": "【总注释】\n拒绝行正文，不得展示。",
+            "text_sha256": "fbedf1fd0c62c302c9d160ca83763ca3db1de6161a3e1ac9a32d8d1075877b67",
+            "text_length": 17,
+            "section_char_total": 11,
+            "source": {
+              "system": "固定合成样例",
+              "document": "fixture-note",
+              "locator": "ot5",
+              "url": null,
+              "publisher": "非官方合成样例",
+              "retrieved_at": "2026-11-17"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "snapshot_id": "fx-2026-01",
+      "release_id": "release-fx-2026-01",
+      "kind": "hs",
+      "version": "FX2026",
+      "data_status": "provided",
+      "synthetic": true,
+      "review_status": "unreviewed",
+      "reference_only": true,
+      "authoritative": false,
+      "withdrawn": false,
+      "is_active_pointer": true,
+      "published_at": "2026-11-17T10:00:00+08:00",
+      "retrieved_at": "2026-11-17",
+      "effective_from": null,
+      "effective_to": null,
+      "converter_version": "reference-browser.fixture.1",
+      "schema_versions": {
+        "snapshot": "reference-browser.fixture.1",
+        "commentary": "p23.commentary.1",
+        "tariff": "p14.tariff.1",
+        "elements": "p14.elements.1",
+        "export_rebate": "p17.taxrate.1"
+      },
+      "input_fingerprint": "18b2bb2fda6d6229a396e0be7c0a39d197d9f67c9e33c56d679608e830f644a7",
+      "business_fingerprint": "a7d528711484fb40ea9378e75b99407b7ec0fd8fad93813bd7604ad2627f1a88",
+      "release_fingerprint": "9fa59be9ea1f070dac49eb9084bb2bc081dae91f9bea212a50a9f5ceb7a348e6",
+      "outcome_fingerprint": "f770f51f90488ac59cc7702aad87bec19c9e20dd44781b5371de1633765f2cf8",
+      "previous_release_id": "release-fx-2025-01",
+      "next_release_id": null,
+      "release_actor": null,
+      "statistics": {
+        "record_count": 6,
+        "code_count": 6,
+        "element_schema_count": 1,
+        "element_count": 2,
+        "tax_rate_count": 4
+      },
+      "statistics_at": "2026-11-17",
+      "source_manifest": [
+        {
+          "source_id": "fixture-hs",
+          "sha256": "b9c0a1f852b70c8526c872df7e038b98a18763fe982d8c6e73405b8b16d49071",
+          "bytes": 17,
+          "url": null,
+          "publisher": "非官方合成样例",
+          "source_system": "固定合成样例",
+          "retrieved_at": "2026-11-17"
+        }
+      ],
+      "reason": null,
+      "limitations": [
+        "固定合成样例；非官方数据、未经业务复核，不得用于当前申报或审核结论。"
+      ],
+      "datasets": [],
+      "records": [
+        {
+          "record_id": "hs-fx2026-0101210000",
+          "source_locator": "FX2026:0101210000",
+          "status": "imported",
+          "reason": null,
+          "label": "HS资料",
+          "source_id": "fixture-hs",
+          "tariff": {
+            "version": "FX2026",
+            "code": "0101210000",
+            "description": "合成示例 A",
+            "state": "active",
+            "chapter": "01",
+            "heading": "0101",
+            "subheading": "010121",
+            "effective_from": "2026-01-01",
+            "source": {
+              "system": "固定合成样例",
+              "document": "fixture-hs",
+              "locator": "FX2026:0101210000",
+              "url": null,
+              "publisher": "非官方合成样例",
+              "retrieved_at": "2026-11-17"
+            }
+          },
+          "element_schema": {
+            "hs_code": "0101210000",
+            "version": "FX2026",
+            "elements": [
+              {
+                "key": "scope",
+                "label": "适用范围",
+                "order": 2,
+                "requirement": "unknown",
+                "value_type": "unknown"
+              },
+              {
+                "key": "usage",
+                "label": "用途",
+                "order": 1,
+                "requirement": "conditional",
+                "value_type": "text",
+                "condition": "合成来源条件；不自动判定"
+              }
+            ],
+            "source": {
+              "system": "固定合成样例",
+              "document": "fixture-elements",
+              "locator": "FX2026:0101210000:elements",
+              "url": null,
+              "publisher": "非官方合成样例",
+              "retrieved_at": "2026-11-17"
+            }
+          },
+          "element_state": "provided",
+          "tax_rate": {
+            "version": "FX2026",
+            "hs_code": "0101210000",
+            "rebate_code": "0101210000",
+            "product_name": "合成示例 A",
+            "rate_kind": "zero_rate",
+            "rate_raw": "0%",
+            "rate_percent": 0,
+            "rate_state": "in_force",
+            "conditions": [],
+            "effective_from": "2026-01-01",
+            "source": {
+              "system": "固定合成样例",
+              "document": "fixture-rebate",
+              "locator": "FX2026:rebate:0101210000",
+              "url": null,
+              "publisher": "非官方合成样例",
+              "retrieved_at": "2026-11-17"
+            }
+          },
+          "tax_state": "provided",
+          "match_level": "exact_10",
+          "units": [
+            "01"
+          ],
+          "regulatory_code_ledger": "AB",
+          "tax_verification_state": "unreviewed",
+          "needs_review": false,
+          "tax_match_warning": null,
+          "source_variants": [],
+          "source_count": 1
+        },
+        {
+          "record_id": "hs-fx2026-8504401900",
+          "source_locator": "FX2026:8504401900",
+          "status": "pending",
+          "reason": "element_schema_unverified",
+          "label": "HS资料",
+          "source_id": "fixture-hs",
+          "tariff": {
+            "version": "FX2026",
+            "code": "8504401900",
+            "description": "合成示例 B",
+            "state": "active",
+            "chapter": "85",
+            "heading": "8504",
+            "subheading": "850440",
+            "effective_from": "2026-01-01",
+            "source": {
+              "system": "固定合成样例",
+              "document": "fixture-hs",
+              "locator": "FX2026:8504401900",
+              "url": null,
+              "publisher": "非官方合成样例",
+              "retrieved_at": "2026-11-17"
+            }
+          },
+          "element_schema": null,
+          "element_state": "pending",
+          "tax_rate": {
+            "version": "FX2026",
+            "hs_code": "85044019",
+            "rebate_code": "85044019",
+            "product_name": "合成示例 B",
+            "rate_kind": "export_rebate",
+            "rate_raw": "13%",
+            "rate_percent": 13,
+            "rate_state": "in_force",
+            "conditions": null,
+            "effective_from": "2026-01-01",
+            "source": {
+              "system": "固定合成样例",
+              "document": "fixture-rebate",
+              "locator": "FX2026:rebate:85044019",
+              "url": null,
+              "publisher": "非官方合成样例",
+              "retrieved_at": "2026-11-17"
+            }
+          },
+          "tax_state": "provided",
+          "match_level": "fallback_8",
+          "units": [
+            null
+          ],
+          "regulatory_code_ledger": null,
+          "tax_verification_state": "unreviewed",
+          "needs_review": true,
+          "tax_match_warning": "10 位数据未核，8 位回退不等于精确匹配",
+          "source_variants": [],
+          "source_count": 1
+        },
+        {
+          "record_id": "hs-fx2026-85044019",
+          "source_locator": "FX2026:85044019",
+          "status": "imported",
+          "reason": null,
+          "label": "HS资料",
+          "source_id": "fixture-hs",
+          "tariff": {
+            "version": "FX2026",
+            "code": "85044019",
+            "description": "合成示例 B（8 位）",
+            "state": "active",
+            "chapter": "85",
+            "heading": "8504",
+            "subheading": "850440",
+            "effective_from": "2026-01-01",
+            "source": {
+              "system": "固定合成样例",
+              "document": "fixture-hs",
+              "locator": "FX2026:85044019",
+              "url": null,
+              "publisher": "非官方合成样例",
+              "retrieved_at": "2026-11-17"
+            }
+          },
+          "element_schema": null,
+          "element_state": "not_provided",
+          "tax_rate": {
+            "version": "FX2026",
+            "hs_code": "85044019",
+            "rebate_code": "85044019",
+            "product_name": "合成示例 B（8 位）",
+            "rate_kind": "export_rebate",
+            "rate_raw": "13%",
+            "rate_percent": 13,
+            "rate_state": "in_force",
+            "conditions": [
+              {
+                "text": "需人工核对的合成条件"
+              }
+            ],
+            "effective_from": "2026-01-01",
+            "source": {
+              "system": "固定合成样例",
+              "document": "fixture-rebate",
+              "locator": "FX2026:rebate:85044019",
+              "url": null,
+              "publisher": "非官方合成样例",
+              "retrieved_at": "2026-11-17"
+            }
+          },
+          "tax_state": "provided",
+          "match_level": "exact_8",
+          "units": [
+            null
+          ],
+          "regulatory_code_ledger": null,
+          "tax_verification_state": "unreviewed",
+          "needs_review": false,
+          "tax_match_warning": null,
+          "source_variants": [],
+          "source_count": 1
+        },
+        {
+          "record_id": "hs-fx2026-0101290000",
+          "source_locator": "FX2026:0101290000",
+          "status": "pending",
+          "reason": "rate_not_obtained",
+          "label": "HS资料",
+          "source_id": "fixture-hs",
+          "tariff": {
+            "version": "FX2026",
+            "code": "0101290000",
+            "description": "合成示例 C",
+            "state": "active",
+            "chapter": "01",
+            "heading": "0101",
+            "subheading": "010129",
+            "effective_from": "2026-01-01",
+            "source": {
+              "system": "固定合成样例",
+              "document": "fixture-hs",
+              "locator": "FX2026:0101290000",
+              "url": null,
+              "publisher": "非官方合成样例",
+              "retrieved_at": "2026-11-17"
+            }
+          },
+          "element_schema": null,
+          "element_state": "pending",
+          "tax_rate": {
+            "version": "FX2026",
+            "hs_code": "0101290000",
+            "rebate_code": "0101290000",
+            "product_name": "合成示例 C",
+            "rate_kind": "unknown",
+            "rate_raw": "",
+            "rate_percent": null,
+            "rate_state": "unknown",
+            "conditions": null,
+            "effective_from": null,
+            "source": {
+              "system": "固定合成样例",
+              "document": "fixture-rebate",
+              "locator": "FX2026:rebate:0101290000",
+              "url": null,
+              "publisher": "非官方合成样例",
+              "retrieved_at": "2026-11-17"
+            }
+          },
+          "tax_state": "provided",
+          "match_level": "exact_10",
+          "units": [
+            null
+          ],
+          "regulatory_code_ledger": null,
+          "tax_verification_state": "unreviewed",
+          "needs_review": true,
+          "tax_match_warning": null,
+          "source_variants": [],
+          "source_count": 1
+        },
+        {
+          "record_id": "hs-fx2026-0101300000",
+          "source_locator": "FX2026:0101300000",
+          "status": "conflict",
+          "reason": "multiple_sources_conflict",
+          "label": "HS资料",
+          "source_id": "fixture-hs",
+          "tariff": {
+            "version": "FX2026",
+            "code": "0101300000",
+            "description": "合成示例 D",
+            "state": "active",
+            "chapter": "01",
+            "heading": "0101",
+            "subheading": "010130",
+            "effective_from": "2026-01-01",
+            "source": {
+              "system": "固定合成样例",
+              "document": "fixture-hs",
+              "locator": "FX2026:0101300000",
+              "url": null,
+              "publisher": "非官方合成样例",
+              "retrieved_at": "2026-11-17"
+            }
+          },
+          "element_schema": null,
+          "element_state": "not_provided",
+          "tax_rate": null,
+          "tax_state": "conflict",
+          "match_level": null,
+          "units": [
+            null
+          ],
+          "regulatory_code_ledger": null,
+          "tax_verification_state": "unreviewed",
+          "needs_review": true,
+          "tax_match_warning": null,
+          "source_variants": [
+            {
+              "source_locator": "FX2026:0101300000:variant:1",
+              "rate_raw": "4%",
+              "sha256": "461a6b36b3afb28bdfbb23408223a5c35e33b4cfb0ba20e55d88de69cd9c622e"
+            },
+            {
+              "source_locator": "FX2026:0101300000:variant:2",
+              "rate_raw": "8%",
+              "sha256": "23ec5e7f20a2bcc3fca42ac6f74643066b90a0458cf4f309bc2dc517869c7f39"
+            }
+          ],
+          "source_count": 2
+        },
+        {
+          "record_id": "hs-fx2026-0101900000",
+          "source_locator": "FX2026:0101900000",
+          "status": "duplicate",
+          "reason": "identical_source_rows",
+          "label": "HS资料",
+          "source_id": "fixture-hs",
+          "tariff": {
+            "version": "FX2026",
+            "code": "0101900000",
+            "description": "合成示例 E",
+            "state": "active",
+            "chapter": "01",
+            "heading": "0101",
+            "subheading": "010190",
+            "effective_from": "2026-01-01",
+            "source": {
+              "system": "固定合成样例",
+              "document": "fixture-hs",
+              "locator": "FX2026:0101900000",
+              "url": null,
+              "publisher": "非官方合成样例",
+              "retrieved_at": "2026-11-17"
+            }
+          },
+          "element_schema": null,
+          "element_state": "not_provided",
+          "tax_rate": null,
+          "tax_state": "not_provided",
+          "match_level": null,
+          "units": [
+            null
+          ],
+          "regulatory_code_ledger": null,
+          "tax_verification_state": "unreviewed",
+          "needs_review": false,
+          "tax_match_warning": null,
+          "source_variants": [
+            {
+              "source_locator": "FX2026:0101900000:variant:1",
+              "rate_raw": "未提供",
+              "sha256": "756762e293f2aaffb9590f45464eabc980da3bfc9c798f27510c74cdcc00e3be"
+            },
+            {
+              "source_locator": "FX2026:0101900000:variant:2",
+              "rate_raw": "未提供",
+              "sha256": "756762e293f2aaffb9590f45464eabc980da3bfc9c798f27510c74cdcc00e3be"
+            }
+          ],
+          "source_count": 2
+        }
+      ]
+    },
+    {
+      "snapshot_id": "fx-2026-01",
+      "release_id": "release-fx-2026-01",
+      "kind": "history",
+      "version": "FX2026",
+      "data_status": "provided",
+      "synthetic": true,
+      "review_status": "unreviewed",
+      "reference_only": true,
+      "authoritative": false,
+      "withdrawn": false,
+      "is_active_pointer": true,
+      "published_at": "2026-11-17T10:00:00+08:00",
+      "retrieved_at": "2026-11-17",
+      "effective_from": null,
+      "effective_to": null,
+      "converter_version": "reference-browser.fixture.1",
+      "schema_versions": {
+        "snapshot": "reference-browser.fixture.1",
+        "commentary": "p23.commentary.1",
+        "tariff": "p14.tariff.1",
+        "elements": "p14.elements.1",
+        "export_rebate": "p17.taxrate.1"
+      },
+      "input_fingerprint": "d63aa66e268e6946aa069a6ff0faed5be1c349f50a56d8ee96e30fa2e577d819",
+      "business_fingerprint": "f17947e66226c98b3aa00b54c4c6667f532e3caadb4e290bf45d875470318534",
+      "release_fingerprint": "5a53fa7b5a411627f5b45344ed57ad44fb30c4dace3944be1933e3bcb3cd3113",
+      "outcome_fingerprint": "8ec74306be895d7c9114772c6f465c4f5d368e763de9ceedad4163e09e7a0671",
+      "previous_release_id": "release-fx-2025-01",
+      "next_release_id": null,
+      "release_actor": null,
+      "statistics": {
+        "record_count": 3
+      },
+      "statistics_at": "2026-11-17",
+      "source_manifest": [
+        {
+          "source_id": "fixture-history",
+          "sha256": "6cf8b3e36219c6f97c15ce0ccab3ac2b9684c467f0db5c8daf8619ecac2910b5",
+          "bytes": 22,
+          "url": null,
+          "publisher": "非官方合成样例",
+          "source_system": "固定合成样例",
+          "retrieved_at": "2026-11-17"
+        }
+      ],
+      "reason": null,
+      "limitations": [
+        "固定合成样例；非官方数据、未经业务复核，不得用于当前申报或审核结论。"
+      ],
+      "datasets": [
+        {
+          "dataset_key": "fixture-history",
+          "synthetic": true,
+          "revision": 2,
+          "record_count": 3,
+          "import_batch": "fixture-history-2026",
+          "status": "provided"
+        }
+      ],
+      "records": [
+        {
+          "record_id": "history-fixture-row-17",
+          "source_locator": "fixture-history:row-17",
+          "status": "pending",
+          "reason": "quality_review_required",
+          "label": "脱敏历史参考",
+          "history_anchor": "row-17",
+          "history": {
+            "dataset_key": "fixture-history",
+            "revision": 2,
+            "historical_hs": "8504401900",
+            "historical_name": "[脱敏] 合成传动件",
+            "recorded_at": "2025/10/17",
+            "source_system": "固定合成样例",
+            "needs_review": true,
+            "blocking_issue_codes": [
+              "version_unverified",
+              "scope_missing"
+            ],
+            "version_status": "version_unverified",
+            "outcome": "放行",
+            "specification": "合成规格 A",
+            "material": "合成金属",
+            "elements": {
+              "function": "合成功能",
+              "用途": "合成用途",
+              "材质": "合成金属"
+            },
+            "scope": null,
+            "effective_from": null,
+            "effective_to": null
+          }
+        },
+        {
+          "record_id": "history-fixture-row-18",
+          "source_locator": "fixture-history:row-18",
+          "status": "pending",
+          "reason": "quality_review_required",
+          "label": "脱敏历史参考",
+          "history_anchor": "row-18",
+          "history": {
+            "dataset_key": "fixture-history",
+            "revision": 2,
+            "historical_hs": "0101210000",
+            "historical_name": "[脱敏] 合成记录 B",
+            "recorded_at": "2025-11",
+            "source_system": "固定合成样例",
+            "needs_review": true,
+            "blocking_issue_codes": [
+              "outcome_missing",
+              "version_unverified"
+            ],
+            "version_status": "version_unverified",
+            "outcome": "",
+            "specification": "合成规格 A",
+            "material": "合成金属",
+            "elements": {
+              "function": "合成功能",
+              "用途": "合成用途",
+              "材质": "合成金属"
+            },
+            "scope": null,
+            "effective_from": null,
+            "effective_to": null
+          }
+        },
+        {
+          "record_id": "history-fixture-row-19",
+          "source_locator": "fixture-history:row-19",
+          "status": "pending",
+          "reason": "quality_review_required",
+          "label": "脱敏历史参考",
+          "history_anchor": "row-19",
+          "history": {
+            "dataset_key": "fixture-history",
+            "revision": 2,
+            "historical_hs": "850440190",
+            "historical_name": "[脱敏] 合成记录 C",
+            "recorded_at": null,
+            "source_system": "固定合成样例",
+            "needs_review": true,
+            "blocking_issue_codes": [
+              "historical_hs_length_anomaly"
+            ],
+            "version_status": "version_unverified",
+            "outcome": "待处理",
+            "specification": "合成规格 A",
+            "material": "合成金属",
+            "elements": {
+              "function": "合成功能",
+              "用途": "合成用途",
+              "材质": "合成金属"
+            },
+            "scope": null,
+            "effective_from": null,
+            "effective_to": null
+          }
+        }
+      ]
+    },
+    {
+      "snapshot_id": "fx-2025-01",
+      "release_id": "release-fx-2025-01",
+      "kind": "note",
+      "version": "FX2025",
+      "data_status": "provided",
+      "synthetic": true,
+      "review_status": "unreviewed",
+      "reference_only": true,
+      "authoritative": false,
+      "withdrawn": false,
+      "is_active_pointer": false,
+      "published_at": "2025-11-17T10:00:00+08:00",
+      "retrieved_at": "2025-11-17",
+      "effective_from": null,
+      "effective_to": null,
+      "converter_version": "reference-browser.fixture.1",
+      "schema_versions": {
+        "snapshot": "reference-browser.fixture.1",
+        "commentary": "p23.commentary.1",
+        "tariff": "p14.tariff.1",
+        "elements": "p14.elements.1",
+        "export_rebate": "p17.taxrate.1"
+      },
+      "input_fingerprint": "6abb33c39d3dd0295ab90b52915cc21a50c401874e4ab55dbf2cdffdd3573b6e",
+      "business_fingerprint": "ba8b0be9b6d80f47e1fd385c5479d231f67dff65af9c83b91e9a0ae7a2b7a575",
+      "release_fingerprint": "d3f22258eeb654ec40e0e2ea395b2a7458debc1ddd5fdcbe5995fea30d19e2c1",
+      "outcome_fingerprint": "e2a0139819bdc9ea69675b6a49b73896e13e6f474cb683062ef48feae155c464",
+      "previous_release_id": null,
+      "next_release_id": "release-fx-2026-01",
+      "release_actor": null,
+      "statistics": {
+        "record_count": 1
+      },
+      "statistics_at": "2025-11-17",
+      "source_manifest": [
+        {
+          "source_id": "fixture-note",
+          "sha256": "8489aed5cfed73ce563f2356b303b4155df3b0a06e684ff3f5577a42cb4c4e5e",
+          "bytes": 19,
+          "url": null,
+          "publisher": "非官方合成样例",
+          "source_system": "固定合成样例",
+          "retrieved_at": "2025-11-17"
+        }
+      ],
+      "reason": null,
+      "limitations": [
+        "固定合成样例；非官方数据、未经业务复核，不得用于当前申报或审核结论。"
+      ],
+      "datasets": [],
+      "records": [
+        {
+          "record_id": "note-ch84",
+          "source_locator": "CH84",
+          "status": "imported",
+          "reason": null,
+          "label": "章注",
+          "source_id": "fixture-note",
+          "parent_key": null,
+          "updated_at": "2026-11-17T09:00:00+08:00",
+          "note": {
+            "tariff_no": "CH84",
+            "kind": "章注",
+            "title": "旧版合成第 84 章",
+            "chapter": "84",
+            "sections": [
+              {
+                "label": "章注",
+                "text": "旧快照合成原文。",
+                "anchor": "p1"
+              }
+            ],
+            "text_all": "【章注】\n旧快照合成原文。",
+            "text_sha256": "f2a19b358b9a5a501c32cec4b18091452a0cb4868d1c55f4890908cb49330761",
+            "text_length": 13,
+            "section_char_total": 8,
+            "source": {
+              "system": "固定合成样例",
+              "document": "fixture-note",
+              "locator": "CH84",
+              "url": null,
+              "publisher": "非官方合成样例",
+              "retrieved_at": "2026-11-17"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "snapshot_id": "fx-2025-01",
+      "release_id": "release-fx-2025-01",
+      "kind": "hs",
+      "version": "FX2025",
+      "data_status": "provided",
+      "synthetic": true,
+      "review_status": "unreviewed",
+      "reference_only": true,
+      "authoritative": false,
+      "withdrawn": false,
+      "is_active_pointer": false,
+      "published_at": "2025-11-17T10:00:00+08:00",
+      "retrieved_at": "2025-11-17",
+      "effective_from": null,
+      "effective_to": null,
+      "converter_version": "reference-browser.fixture.1",
+      "schema_versions": {
+        "snapshot": "reference-browser.fixture.1",
+        "commentary": "p23.commentary.1",
+        "tariff": "p14.tariff.1",
+        "elements": "p14.elements.1",
+        "export_rebate": "p17.taxrate.1"
+      },
+      "input_fingerprint": "cd3b274a41727d3f1056af39b0e1bd6632c3551dfdf9735f0649e81f79aa5c8a",
+      "business_fingerprint": "d8050baf15ae91da8d09e7b515ac12477ba248e8a700f4aa26f1d503319ebc07",
+      "release_fingerprint": "2c594c19dafb6585924e7ab3866f1bc668798f1a0db1437b1270fd3cb4358f0f",
+      "outcome_fingerprint": "150684c852b04ef5a8d79b3f86dbcd2e7d1ec63eadccb83f236114d1b3461345",
+      "previous_release_id": null,
+      "next_release_id": "release-fx-2026-01",
+      "release_actor": null,
+      "statistics": {
+        "record_count": 1,
+        "code_count": 1,
+        "element_schema_count": 0,
+        "element_count": 0,
+        "tax_rate_count": 0
+      },
+      "statistics_at": "2025-11-17",
+      "source_manifest": [
+        {
+          "source_id": "fixture-hs",
+          "sha256": "d3ec7c8105d0883a65a981e0ea3df6ec53ec424d2a59f81d86166b9b133fe89e",
+          "bytes": 17,
+          "url": null,
+          "publisher": "非官方合成样例",
+          "source_system": "固定合成样例",
+          "retrieved_at": "2025-11-17"
+        }
+      ],
+      "reason": null,
+      "limitations": [
+        "固定合成样例；非官方数据、未经业务复核，不得用于当前申报或审核结论。"
+      ],
+      "datasets": [],
+      "records": [
+        {
+          "record_id": "hs-fx2025-0101210000",
+          "source_locator": "FX2025:0101210000",
+          "status": "imported",
+          "reason": null,
+          "label": "HS资料",
+          "source_id": "fixture-hs",
+          "tariff": {
+            "version": "FX2025",
+            "code": "0101210000",
+            "description": "旧版合成示例 A",
+            "state": "active",
+            "chapter": "01",
+            "heading": "0101",
+            "subheading": "010121",
+            "effective_from": "2025-01-01",
+            "source": {
+              "system": "固定合成样例",
+              "document": "fixture-hs",
+              "locator": "FX2025:0101210000",
+              "url": null,
+              "publisher": "非官方合成样例",
+              "retrieved_at": "2026-11-17"
+            }
+          },
+          "element_schema": null,
+          "element_state": "not_provided",
+          "tax_rate": null,
+          "tax_state": "not_provided",
+          "match_level": null,
+          "units": [
+            null
+          ],
+          "regulatory_code_ledger": null,
+          "tax_verification_state": "unreviewed",
+          "needs_review": false,
+          "tax_match_warning": null,
+          "source_variants": [],
+          "source_count": 1
+        }
+      ]
+    },
+    {
+      "snapshot_id": "fx-2025-01",
+      "release_id": "release-fx-2025-01",
+      "kind": "history",
+      "version": "FX2025",
+      "data_status": "provided",
+      "synthetic": true,
+      "review_status": "unreviewed",
+      "reference_only": true,
+      "authoritative": false,
+      "withdrawn": false,
+      "is_active_pointer": false,
+      "published_at": "2025-11-17T10:00:00+08:00",
+      "retrieved_at": "2025-11-17",
+      "effective_from": null,
+      "effective_to": null,
+      "converter_version": "reference-browser.fixture.1",
+      "schema_versions": {
+        "snapshot": "reference-browser.fixture.1",
+        "commentary": "p23.commentary.1",
+        "tariff": "p14.tariff.1",
+        "elements": "p14.elements.1",
+        "export_rebate": "p17.taxrate.1"
+      },
+      "input_fingerprint": "112fed8836a44b5c5bc6b231aea9016f36de425582a785377b48a08d6d69aa5a",
+      "business_fingerprint": "f1f847bf8918973b2281b63338b8c7ba62e6b780e6077e7b2bd7efba6b86ef94",
+      "release_fingerprint": "223f3eedae07a12e9ec953a298a7ed062767e06cedb9bc640bbdd4f03e058738",
+      "outcome_fingerprint": "c8ff4724bcb8d9bd86f3e61769d5164bc07831cc97869792676b9a34d4f863ca",
+      "previous_release_id": null,
+      "next_release_id": "release-fx-2026-01",
+      "release_actor": null,
+      "statistics": {
+        "record_count": 1
+      },
+      "statistics_at": "2025-11-17",
+      "source_manifest": [
+        {
+          "source_id": "fixture-history",
+          "sha256": "9bfd8171eaeb2dd9595dfa3d8d87d83acea65acf5c74db85ce0586ba804a96b6",
+          "bytes": 22,
+          "url": null,
+          "publisher": "非官方合成样例",
+          "source_system": "固定合成样例",
+          "retrieved_at": "2025-11-17"
+        }
+      ],
+      "reason": null,
+      "limitations": [
+        "固定合成样例；非官方数据、未经业务复核，不得用于当前申报或审核结论。"
+      ],
+      "datasets": [
+        {
+          "dataset_key": "fixture-history",
+          "synthetic": true,
+          "revision": 1,
+          "record_count": 1,
+          "import_batch": "fixture-history-2025",
+          "status": "provided"
+        }
+      ],
+      "records": [
+        {
+          "record_id": "history-fixture-row-17",
+          "source_locator": "fixture-history:row-17",
+          "status": "pending",
+          "reason": "quality_review_required",
+          "label": "脱敏历史参考",
+          "history_anchor": "row-17",
+          "history": {
+            "dataset_key": "fixture-history",
+            "revision": 1,
+            "historical_hs": "8504401900",
+            "historical_name": "[脱敏] 旧版合成传动件",
+            "recorded_at": "2025/10/17",
+            "source_system": "固定合成样例",
+            "needs_review": true,
+            "blocking_issue_codes": [
+              "outcome_missing"
+            ],
+            "version_status": "version_unverified",
+            "outcome": null,
+            "specification": "合成规格 A",
+            "material": "合成金属",
+            "elements": {
+              "function": "合成功能",
+              "用途": "合成用途",
+              "材质": "合成金属"
+            },
+            "scope": null,
+            "effective_from": null,
+            "effective_to": null
+          }
+        }
+      ]
+    },
+    {
+      "snapshot_id": "fx-withdrawn",
+      "release_id": "release-fx-withdrawn",
+      "kind": "note",
+      "version": "FX2026",
+      "data_status": "provided",
+      "synthetic": true,
+      "review_status": "unreviewed",
+      "reference_only": true,
+      "authoritative": false,
+      "withdrawn": true,
+      "is_active_pointer": false,
+      "published_at": "2026-11-17T10:00:00+08:00",
+      "retrieved_at": "2026-11-17",
+      "effective_from": null,
+      "effective_to": null,
+      "converter_version": "reference-browser.fixture.1",
+      "schema_versions": {
+        "snapshot": "reference-browser.fixture.1",
+        "commentary": "p23.commentary.1",
+        "tariff": "p14.tariff.1",
+        "elements": "p14.elements.1",
+        "export_rebate": "p17.taxrate.1"
+      },
+      "input_fingerprint": "7cc7e0c517c7b12b98899fa38ed55d099b90cfbffcf649208a7dffffc3d56078",
+      "business_fingerprint": "89217c804ed38b7aa6a20b6880a14e8768a3120acac0ba3a6b5f6978e9cce853",
+      "release_fingerprint": "d9ce02b3544f7351a47eaa1239559aca268a538ae5ffe945009694a010b8edc9",
+      "outcome_fingerprint": "732aba4bd5446f722eb14a9f9a4f8ecd172d4240d09c23b84d534aa75d3e2f8b",
+      "previous_release_id": null,
+      "next_release_id": null,
+      "release_actor": null,
+      "statistics": {
+        "record_count": 1
+      },
+      "statistics_at": "2026-11-17",
+      "source_manifest": [
+        {
+          "source_id": "fixture-note",
+          "sha256": "c694616ba172c863e110aacf0b54d4608a8fd2e95c34cf3e02ae6521c0c42e70",
+          "bytes": 19,
+          "url": null,
+          "publisher": "非官方合成样例",
+          "source_system": "固定合成样例",
+          "retrieved_at": "2026-11-17"
+        }
+      ],
+      "reason": null,
+      "limitations": [
+        "固定合成样例；非官方数据、未经业务复核，不得用于当前申报或审核结论。"
+      ],
+      "datasets": [],
+      "records": [
+        {
+          "record_id": "note-ch84",
+          "source_locator": "CH84",
+          "status": "imported",
+          "reason": null,
+          "label": "章注",
+          "source_id": "fixture-note",
+          "parent_key": null,
+          "updated_at": "2026-11-17T09:00:00+08:00",
+          "note": {
+            "tariff_no": "CH84",
+            "kind": "章注",
+            "title": "合成第 84 章",
+            "chapter": "84",
+            "sections": [
+              {
+                "label": "章注",
+                "text": "合成章注：不作为归类依据。",
+                "anchor": "p1"
+              },
+              {
+                "label": "子目注释",
+                "text": "章级子目注释：合成示例，关键词传动。",
+                "anchor": "p2"
+              },
+              {
+                "label": "子目注释",
+                "text": "品目级子目注释：合成示例，关键词阀门。",
+                "anchor": "p3"
+              }
+            ],
+            "text_all": "【章注】\n合成章注：不作为归类依据。\n\n【子目注释】\n章级子目注释：合成示例，关键词传动。\n\n【子目注释】\n品目级子目注释：合成示例，关键词阀门。",
+            "text_sha256": "cb43f762b62b3a9a6e094994c4d45b0b7ecd96089771f7d5c7b4fde46fb363fb",
+            "text_length": 73,
+            "section_char_total": 50,
+            "source": {
+              "system": "固定合成样例",
+              "document": "fixture-note",
+              "locator": "CH84",
+              "url": null,
+              "publisher": "非官方合成样例",
+              "retrieved_at": "2026-11-17"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "snapshot_id": "fx-withdrawn",
+      "release_id": "release-fx-withdrawn",
+      "kind": "history",
+      "version": "FX2026",
+      "data_status": "provided",
+      "synthetic": true,
+      "review_status": "unreviewed",
+      "reference_only": true,
+      "authoritative": false,
+      "withdrawn": true,
+      "is_active_pointer": false,
+      "published_at": "2026-11-17T10:00:00+08:00",
+      "retrieved_at": "2026-11-17",
+      "effective_from": null,
+      "effective_to": null,
+      "converter_version": "reference-browser.fixture.1",
+      "schema_versions": {
+        "snapshot": "reference-browser.fixture.1",
+        "commentary": "p23.commentary.1",
+        "tariff": "p14.tariff.1",
+        "elements": "p14.elements.1",
+        "export_rebate": "p17.taxrate.1"
+      },
+      "input_fingerprint": "8b81e066fba1c0f9ecc8325bd615efe8b010c6119ec31a50f291456d74fc7127",
+      "business_fingerprint": "fa31ae500cb79e1789206b5dbd269a84763ab9df514a6c15ba32f51b46871a7e",
+      "release_fingerprint": "d46761f4f46ef7d3e0cd439128af14740a8812a831eb888661403615ab524e20",
+      "outcome_fingerprint": "8e61fa22f55752829c9fbaf1ade5963203afee2fb7ef8adb83040d4ba0397417",
+      "previous_release_id": null,
+      "next_release_id": null,
+      "release_actor": null,
+      "statistics": {
+        "record_count": 1
+      },
+      "statistics_at": "2026-11-17",
+      "source_manifest": [
+        {
+          "source_id": "fixture-history",
+          "sha256": "6cf8b3e36219c6f97c15ce0ccab3ac2b9684c467f0db5c8daf8619ecac2910b5",
+          "bytes": 22,
+          "url": null,
+          "publisher": "非官方合成样例",
+          "source_system": "固定合成样例",
+          "retrieved_at": "2026-11-17"
+        }
+      ],
+      "reason": null,
+      "limitations": [
+        "固定合成样例；非官方数据、未经业务复核，不得用于当前申报或审核结论。"
+      ],
+      "datasets": [
+        {
+          "dataset_key": "fixture-history",
+          "synthetic": true,
+          "revision": 2,
+          "record_count": 1,
+          "import_batch": "fixture-history-2026",
+          "status": "provided"
+        }
+      ],
+      "records": [
+        {
+          "record_id": "history-fixture-row-17",
+          "source_locator": "fixture-history:row-17",
+          "status": "pending",
+          "reason": "quality_review_required",
+          "label": "脱敏历史参考",
+          "history_anchor": "row-17",
+          "history": {
+            "dataset_key": "fixture-history",
+            "revision": 2,
+            "historical_hs": "8504401900",
+            "historical_name": "[脱敏] 合成传动件",
+            "recorded_at": "2025/10/17",
+            "source_system": "固定合成样例",
+            "needs_review": true,
+            "blocking_issue_codes": [
+              "version_unverified",
+              "scope_missing"
+            ],
+            "version_status": "version_unverified",
+            "outcome": "放行",
+            "specification": "合成规格 A",
+            "material": "合成金属",
+            "elements": {
+              "function": "合成功能",
+              "用途": "合成用途",
+              "材质": "合成金属"
+            },
+            "scope": null,
+            "effective_from": null,
+            "effective_to": null
+          }
+        }
+      ]
+    },
+    {
+      "snapshot_id": "fx-input-missing",
+      "release_id": "release-fx-input-missing",
+      "kind": "note",
+      "version": "FX2026",
+      "data_status": "input_missing",
+      "synthetic": true,
+      "review_status": "unreviewed",
+      "reference_only": true,
+      "authoritative": false,
+      "withdrawn": false,
+      "is_active_pointer": false,
+      "published_at": "2026-11-17T10:00:00+08:00",
+      "retrieved_at": "2026-11-17",
+      "effective_from": null,
+      "effective_to": null,
+      "converter_version": "reference-browser.fixture.1",
+      "schema_versions": {
+        "snapshot": "reference-browser.fixture.1",
+        "commentary": "p23.commentary.1",
+        "tariff": "p14.tariff.1",
+        "elements": "p14.elements.1",
+        "export_rebate": "p17.taxrate.1"
+      },
+      "input_fingerprint": "bba79137767ed617e2d966836b854488027969bb95818ca4c345a8690c0d0f16",
+      "business_fingerprint": "aa01ebab9d179765ead6d39b532aa8e351af76af65ddf79a8313e21dc4bfd1d2",
+      "release_fingerprint": "8245c0f298c3df4953248dcc490a5c29bf5f6995ad49e004067258b024c6aeac",
+      "outcome_fingerprint": "8c9cf1b43d8837cc2af3c316843ccc30999b8bba3933b091fa42734caae5e9b2",
+      "previous_release_id": null,
+      "next_release_id": null,
+      "release_actor": null,
+      "statistics": {
+        "record_count": 0
+      },
+      "statistics_at": "2026-11-17",
+      "source_manifest": [
+        {
+          "source_id": "fixture-note",
+          "sha256": "c694616ba172c863e110aacf0b54d4608a8fd2e95c34cf3e02ae6521c0c42e70",
+          "bytes": 19,
+          "url": null,
+          "publisher": "非官方合成样例",
+          "source_system": "固定合成样例",
+          "retrieved_at": "2026-11-17"
+        }
+      ],
+      "reason": "input_unavailable",
+      "limitations": [
+        "固定合成样例；非官方数据、未经业务复核，不得用于当前申报或审核结论。"
+      ],
+      "datasets": [],
+      "records": []
+    },
+    {
+      "snapshot_id": "fx-not-provided",
+      "release_id": "release-fx-not-provided",
+      "kind": "hs",
+      "version": "FX2026",
+      "data_status": "not_provided",
+      "synthetic": true,
+      "review_status": "unreviewed",
+      "reference_only": true,
+      "authoritative": false,
+      "withdrawn": false,
+      "is_active_pointer": false,
+      "published_at": "2026-11-17T10:00:00+08:00",
+      "retrieved_at": "2026-11-17",
+      "effective_from": null,
+      "effective_to": null,
+      "converter_version": "reference-browser.fixture.1",
+      "schema_versions": {
+        "snapshot": "reference-browser.fixture.1",
+        "commentary": "p23.commentary.1",
+        "tariff": "p14.tariff.1",
+        "elements": "p14.elements.1",
+        "export_rebate": "p17.taxrate.1"
+      },
+      "input_fingerprint": "478b5133d251fed423b176682865c91876417ca62a25cc0329426ebbfb275c22",
+      "business_fingerprint": "817776fd1f2cd10e7d2b0f75dceece76636b506aa6f87524b6f1516d0e4e3307",
+      "release_fingerprint": "cd82333b0b1a364dc72110829eea4e4f52247ef8be17cd5fb550e23f642bb1b7",
+      "outcome_fingerprint": "11e3364a187aa0fa1234b757248cc647561d66eaad6381b67bd30ab7d0d08208",
+      "previous_release_id": null,
+      "next_release_id": null,
+      "release_actor": null,
+      "statistics": {
+        "record_count": 0,
+        "code_count": 0,
+        "element_schema_count": 0,
+        "element_count": 0,
+        "tax_rate_count": 0
+      },
+      "statistics_at": "2026-11-17",
+      "source_manifest": [
+        {
+          "source_id": "fixture-hs",
+          "sha256": "b9c0a1f852b70c8526c872df7e038b98a18763fe982d8c6e73405b8b16d49071",
+          "bytes": 17,
+          "url": null,
+          "publisher": "非官方合成样例",
+          "source_system": "固定合成样例",
+          "retrieved_at": "2026-11-17"
+        }
+      ],
+      "reason": "source_not_provided",
+      "limitations": [
+        "固定合成样例；非官方数据、未经业务复核，不得用于当前申报或审核结论。"
+      ],
+      "datasets": [],
+      "records": []
+    },
+    {
+      "snapshot_id": "fx-unsupported",
+      "release_id": "release-fx-unsupported",
+      "kind": "history",
+      "version": "FX2026",
+      "data_status": "unsupported",
+      "synthetic": true,
+      "review_status": "unreviewed",
+      "reference_only": true,
+      "authoritative": false,
+      "withdrawn": false,
+      "is_active_pointer": false,
+      "published_at": "2026-11-17T10:00:00+08:00",
+      "retrieved_at": "2026-11-17",
+      "effective_from": null,
+      "effective_to": null,
+      "converter_version": "reference-browser.fixture.1",
+      "schema_versions": {
+        "snapshot": "reference-browser.fixture.1",
+        "commentary": "p23.commentary.1",
+        "tariff": "p14.tariff.1",
+        "elements": "p14.elements.1",
+        "export_rebate": "p17.taxrate.1"
+      },
+      "input_fingerprint": "174c13110698a58b97a710feff963a8762ad7968b1dd342a5fb8db37f494209a",
+      "business_fingerprint": "fb16b0961521494d3806f59b43ad68a864481a57a2a525505889c6454e194d36",
+      "release_fingerprint": "2f700c50988d9f14a1ce3a7db6b96aede216290fa20fa241795284dffe3ad13b",
+      "outcome_fingerprint": "a2aec98b632b51abf854cf0515fd05ce66996440bc7ff28d5840a40475c8220b",
+      "previous_release_id": null,
+      "next_release_id": null,
+      "release_actor": null,
+      "statistics": {
+        "record_count": 0
+      },
+      "statistics_at": "2026-11-17",
+      "source_manifest": [
+        {
+          "source_id": "fixture-history",
+          "sha256": "6cf8b3e36219c6f97c15ce0ccab3ac2b9684c467f0db5c8daf8619ecac2910b5",
+          "bytes": 22,
+          "url": null,
+          "publisher": "非官方合成样例",
+          "source_system": "固定合成样例",
+          "retrieved_at": "2026-11-17"
+        }
+      ],
+      "reason": "source_format_unsupported",
+      "limitations": [
+        "固定合成样例；非官方数据、未经业务复核，不得用于当前申报或审核结论。"
+      ],
+      "datasets": [],
+      "records": []
+    }
+  ]
+}

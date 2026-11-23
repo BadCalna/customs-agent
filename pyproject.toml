@@ -12,6 +12,9 @@ dependencies = [
     "django-rq==3.2.2",
     "rq==2.6.1",
     "redis==6.4.0",
+    # 02 Agent 调试台：连接凭据与运行输入用 AES-GCM 加密，探针/运行走 httpx。
+    "cryptography>=45.0.7,<50",
+    "httpx>=0.28.1,<0.29",
 ]
 
 [tool.uv]

@@ -1,0 +1,97 @@
+{% extends 'reference_browser/base.html' %}
+{% load static %}
+{% block title %}基础数据中心 · 关务预审工作台{% endblock %}
+{% block head %}<script type="module" src="{% static 'reference_browser/reference-browser.js' %}"></script>{% endblock %}
+{% block topbar_tools %}
+  <div class="topbar-tools"><span class="operator">{{ operator }}</span><a class="topbar-link" href="/">返回工作台 ↗</a></div>
+{% endblock %}
+{% block content %}
+<main id="main-content" class="reference-app" data-api-base="/api/v1/ops/data" data-evidence-url="{% url 'reference_browser:evidence' %}" data-can-history-detail="{{ can_history_detail|yesno:'true,false' }}">
+  <section class="intro-band">
+    <div>
+      <p class="eyebrow">03 / REFERENCE LEDGER</p>
+      <h1>基础数据中心<span aria-hidden="true">.</span></h1>
+      <p class="intro-copy">按版本浏览税则注释、HS 申报要素与出口退税、历史参考记录。记录与证据都绑定到指定快照，便于核查与追溯。</p>
+    </div>
+    <div class="intro-stamp" aria-label="只读数据中心"><span>READ</span><strong>ONLY</strong><small>SNAPSHOT BOUND</small></div>
+  </section>
+  <noscript><p class="notice error">请启用 JavaScript 后浏览数据快照。</p></noscript>
+  <div id="global-feedback" class="notice" role="status" hidden></div>
+  <section class="snapshot-strip" aria-labelledby="snapshot-heading">
+    <div><p class="eyebrow">发布指针 / RELEASE POINTER</p><h2 id="snapshot-heading">选择数据快照</h2></div>
+    <label class="snapshot-picker">当前快照<select id="snapshot-select" disabled><option value="">正在读取快照…</option></select></label>
+    <div id="snapshot-meta" class="snapshot-meta" aria-live="polite"></div>
+    <details id="snapshot-lineage" class="snapshot-lineage" hidden><summary>发布信息与来源</summary><div id="snapshot-lineage-content"></div></details>
+  </section>
+
+  <div class="browser-layout">
+    <nav class="section-tabs" aria-label="参考数据类型">
+      {% if can_catalog %}<button class="section-tab" type="button" data-view="note" aria-controls="view-note"><span>01</span><strong>税则注释</strong><small>NOTE CATALOG</small></button>
+      <button class="section-tab" type="button" data-view="hs" aria-controls="view-hs"><span>02</span><strong>HS 申报要素与退税</strong><small>HS CATALOG</small></button>{% endif %}
+      {% if can_history %}<button class="section-tab" type="button" data-view="history" aria-controls="view-history"><span>03</span><strong>历史参考</strong><small>HISTORY CASES</small></button>{% endif %}
+      <div class="tab-foot"><span class="read-dot"></span>只读访问<br><span class="mono">NO WRITE ACTIONS</span></div>
+    </nav>
+
+    <div class="browser-main">
+      {% if can_catalog %}
+      <section class="browser-view" id="view-note" data-view-panel="note" aria-labelledby="note-title" hidden>
+        <div class="view-header"><div><p class="eyebrow">01 / NOTE CATALOG</p><h2 id="note-title">税则注释</h2><p>按类注、章注、品目和段落定位原文，保留来源锚点与文本校验信息。</p></div><button type="button" class="button button-secondary" data-refresh>刷新 ↻</button></div>
+        <form class="filter-panel" data-filter="note" autocomplete="off">
+          <label>层级键或品目号<input name="key" type="search" placeholder="如 CH84、0101" maxlength="30"></label>
+          <label>正文关键词<input name="keyword" type="search" placeholder="按原文子串检索" maxlength="160"></label>
+          <label>分段标签<input name="label" type="search" list="note-labels" placeholder="如 子目注释" maxlength="120"><datalist id="note-labels"><option value="子目注释"><option value="章注"><option value="品目注释"></datalist></label>
+          <button class="button button-primary" type="submit">检索 ↗</button>
+          <details class="filter-more"><summary>更多筛选</summary><div class="filter-options">
+            <label>标题<input name="title" type="search" maxlength="160"></label><label>章次<input name="chapter" maxlength="16"></label>
+            <label>层级<select name="level"><option value="">全部层级</option><option value="section_note">类注</option><option value="chapter_note">章注</option><option value="heading">品目</option><option value="other_note">其他注释</option></select></label>
+            <label>排序<select name="sort"><option value="tariff_no">层级键升序</option><option value="title">标题升序</option><option value="text_length">正文字符数降序</option><option value="updated_at">更新时间降序</option></select></label>
+          </div></details>
+        </form>
+        <div class="result-layout"><details class="tree-panel" open><summary class="panel-label">目录树 / TREE</summary><div id="note-tree" class="tree-list"></div></details><div class="results-column"><div class="result-summary" data-summary="note" role="status"></div><div id="note-results" class="result-list"></div><div class="pager" data-pager="note"></div></div></div>
+      </section>
+
+      <section class="browser-view" id="view-hs" data-view-panel="hs" aria-labelledby="hs-title" hidden>
+        <div class="view-header"><div><p class="eyebrow">02 / HS CATALOG</p><h2 id="hs-title">HS 申报要素与退税</h2><p>查询目录编码、原始申报要素与匹配层级。监管代码不代表监管措施，出口退税也不等于进口税率。</p></div><button type="button" class="button button-secondary" data-refresh>刷新 ↻</button></div>
+        <form class="filter-panel filter-grid" data-filter="hs" autocomplete="off">
+          <label>HS 编码<input name="code" type="search" inputmode="numeric" pattern="[0-9]{1,10}" placeholder="保留前导零" maxlength="10"></label>
+          <label>编码匹配<select name="match"><option value="exact">精确（8 或 10 位）</option><option value="prefix">前缀（1–10 位）</option></select></label>
+          <label>目录品名<input name="name" type="search" placeholder="仅匹配现有品名，不猜码" maxlength="160"></label>
+          <button class="button button-primary" type="submit">检索 ↗</button>
+          <details class="filter-more"><summary>更多筛选</summary><div class="filter-options">
+            <label>状态<select name="state"><option value="">全部状态</option><option value="active">有效</option><option value="expired">失效</option><option value="merged">已合并</option><option value="unknown">待核</option><option value="not_found">未找到</option></select></label>
+            <label>退税匹配<select name="match_level"><option value="">全部匹配</option><option value="exact_10">10 位精确</option><option value="fallback_8">8 位回退</option><option value="exact_8">8 位精确</option></select></label>
+            <label>排序<select name="sort"><option value="code">编码升序</option><option value="rate_percent">退税率降序</option><option value="effective_from">生效日期降序</option><option value="record_id">记录 ID 升序</option></select></label>
+            <label class="check-label"><input name="needs_review" type="checkbox" value="true">仅看待复核</label>
+          </div></details>
+        </form>
+        <div class="result-summary" data-summary="hs" role="status"></div><div id="hs-results" class="result-list"></div><div class="pager" data-pager="hs"></div>
+      </section>
+      {% endif %}
+
+      {% if can_history %}
+      <section class="browser-view" id="view-history" data-view-panel="history" aria-labelledby="history-title" hidden>
+        <div class="view-header"><div><p class="eyebrow">03 / HISTORY CASES</p><h2 id="history-title">历史参考</h2><p>仅作相似记录参考；历史放行不等于当前商品获准。{% if not can_history_detail %}当前账号仅有列表权限。{% endif %}</p></div><button type="button" class="button button-secondary" data-refresh>刷新 ↻</button></div>
+        <form class="filter-panel filter-grid" data-filter="history" autocomplete="off">
+          <label>数据集<select name="dataset_key"><option value="">全部可见数据集</option></select></label>
+          <label>品名<input name="name" type="search" placeholder="检索脱敏品名" maxlength="160"></label>
+          <label>历史 HS 编码<input name="historical_hs" type="search" inputmode="numeric" pattern="([0-9]{8}|[0-9]{10})" placeholder="8 或 10 位" maxlength="10"></label>
+          <button class="button button-primary" type="submit">检索 ↗</button>
+          <details class="filter-more"><summary>更多筛选</summary><div class="filter-options">
+            <label>规格<input name="specification" type="search" maxlength="160"></label><label>材质<input name="material" type="search" maxlength="160"></label>
+            <label>要素键<input name="element_key" type="search" maxlength="100"></label><label>要素值<input name="element_value" type="search" maxlength="160"></label>
+            <label>年份<input name="year" inputmode="numeric" pattern="[0-9]{4}" maxlength="4"></label><label>原始日期<input name="recorded_at" maxlength="40"></label>
+            <label>记录状态<select name="status"><option value="">全部状态</option><option value="imported">已导入</option><option value="duplicate">已去重</option><option value="conflict">冲突</option><option value="pending">待核</option><option value="rejected">拒绝导入</option><option value="not_imported">未导入</option></select></label>
+            <label>排序<select name="sort"><option value="recorded_at">原始日期降序</option><option value="record_id">记录 ID 升序</option></select></label>
+            <label class="check-label"><input name="needs_review" type="checkbox" value="true">仅看待复核</label><label class="check-label"><input name="success_only" type="checkbox" value="true">仅看明确成功候选</label>
+          </div></details>
+          {% if can_history_detail %}<label class="access-reason">打开详情及证据时的访问原因<select name="detail_reason"><option value="reference_review">参考复核</option><option value="quality_review">质量复核</option><option value="source_verification">来源核验</option></select></label>{% endif %}
+        </form>
+        <div class="result-summary" data-summary="history" role="status"></div><div id="history-results" class="result-list"></div><div class="pager" data-pager="history"></div>
+      </section>
+      {% endif %}
+    </div>
+  </div>
+
+  <dialog id="record-dialog" class="record-dialog" aria-labelledby="dialog-title"><div class="dialog-shell"><header class="dialog-header"><div><p class="eyebrow">RECORD / EVIDENCE</p><h2 id="dialog-title">记录详情</h2></div><form method="dialog"><button class="dialog-close" aria-label="关闭详情" autofocus>×</button></form></header><div id="dialog-content" class="dialog-content" aria-live="polite"></div></div></dialog>
+</main>
+{% endblock %}

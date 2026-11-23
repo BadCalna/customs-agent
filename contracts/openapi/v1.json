@@ -255,6 +255,105 @@
         "title": "ConfirmationOut",
         "type": "object"
       },
+      "Consume": {
+        "additionalProperties": false,
+        "properties": {
+          "new_password": {
+            "format": "password",
+            "maxLength": 1024,
+            "minLength": 1,
+            "title": "New Password",
+            "type": "string",
+            "writeOnly": true
+          },
+          "ticket": {
+            "format": "password",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Ticket",
+            "type": "string",
+            "writeOnly": true
+          }
+        },
+        "required": [
+          "ticket",
+          "new_password"
+        ],
+        "title": "Consume",
+        "type": "object"
+      },
+      "CreateUser": {
+        "additionalProperties": false,
+        "properties": {
+          "confirm": {
+            "default": false,
+            "title": "Confirm",
+            "type": "boolean"
+          },
+          "delivery_mode": {
+            "anyOf": [
+              {
+                "enum": [
+                  "offline",
+                  "trusted_email"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delivery Mode"
+          },
+          "display_name": {
+            "default": "",
+            "maxLength": 64,
+            "title": "Display Name",
+            "type": "string"
+          },
+          "email": {
+            "default": "",
+            "maxLength": 254,
+            "title": "Email",
+            "type": "string"
+          },
+          "groups": {
+            "items": {
+              "type": "integer"
+            },
+            "maxItems": 50,
+            "title": "Groups",
+            "type": "array"
+          },
+          "issue_secret": {
+            "default": false,
+            "title": "Issue Secret",
+            "type": "boolean"
+          },
+          "role": {
+            "default": "",
+            "enum": [
+              "",
+              "supplier",
+              "operator",
+              "expert"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "username": {
+            "maxLength": 150,
+            "minLength": 1,
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "username"
+        ],
+        "title": "CreateUser",
+        "type": "object"
+      },
       "CrossVersionCandidate": {
         "description": "跨版本对照只是候选展示，不建立稳定的商品身份。",
         "properties": {
@@ -477,6 +576,27 @@
           "created_at"
         ],
         "title": "DecisionOut",
+        "type": "object"
+      },
+      "DeleteUser": {
+        "additionalProperties": false,
+        "properties": {
+          "confirm": {
+            "title": "Confirm",
+            "type": "boolean"
+          },
+          "reason": {
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason",
+          "confirm"
+        ],
+        "title": "DeleteUser",
         "type": "object"
       },
       "EvidenceEntry": {
@@ -712,6 +832,42 @@
         ],
         "title": "ExpertVerdict",
         "type": "string"
+      },
+      "Export": {
+        "additionalProperties": false,
+        "properties": {
+          "filters": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "boolean"
+                }
+              ]
+            },
+            "maxProperties": 12,
+            "title": "Filters",
+            "type": "object"
+          },
+          "kind": {
+            "enum": [
+              "audit",
+              "errors"
+            ],
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "Export",
+        "type": "object"
       },
       "ExportIn": {
         "properties": {
@@ -2298,6 +2454,31 @@
         "title": "ItemPage",
         "type": "object"
       },
+      "Login": {
+        "additionalProperties": false,
+        "properties": {
+          "password": {
+            "format": "password",
+            "maxLength": 1024,
+            "minLength": 1,
+            "title": "Password",
+            "type": "string",
+            "writeOnly": true
+          },
+          "username": {
+            "maxLength": 150,
+            "minLength": 1,
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "username",
+          "password"
+        ],
+        "title": "Login",
+        "type": "object"
+      },
       "LoginIn": {
         "properties": {
           "password": {
@@ -2473,6 +2654,24 @@
         "title": "MessageReadIn",
         "type": "object"
       },
+      "ModuleStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "status": {
+            "enum": [
+              "active",
+              "disabled"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "ModuleStatus",
+        "type": "object"
+      },
       "OkOut": {
         "properties": {
           "status": {
@@ -2498,6 +2697,44 @@
           "revision"
         ],
         "title": "PrecheckIn",
+        "type": "object"
+      },
+      "Reason": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "Reason",
+        "type": "object"
+      },
+      "Reset": {
+        "additionalProperties": false,
+        "properties": {
+          "delivery_mode": {
+            "anyOf": [
+              {
+                "enum": [
+                  "offline",
+                  "trusted_email"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delivery Mode"
+          }
+        },
+        "title": "Reset",
         "type": "object"
       },
       "ResultMode": {
@@ -3565,6 +3802,85 @@
         "title": "TaskStage",
         "type": "string"
       },
+      "UpdateGroup": {
+        "additionalProperties": false,
+        "properties": {
+          "confirm": {
+            "default": false,
+            "title": "Confirm",
+            "type": "boolean"
+          },
+          "permissions": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 100,
+            "title": "Permissions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "permissions"
+        ],
+        "title": "UpdateGroup",
+        "type": "object"
+      },
+      "UpdateUser": {
+        "additionalProperties": false,
+        "properties": {
+          "confirm": {
+            "default": false,
+            "title": "Confirm",
+            "type": "boolean"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "groups": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "maxItems": 50,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Groups"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "enum": [
+                  "",
+                  "supplier",
+                  "operator",
+                  "expert"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
+          }
+        },
+        "title": "UpdateUser",
+        "type": "object"
+      },
       "VersionEntry": {
         "properties": {
           "is_current": {
@@ -3857,6 +4173,1020 @@
         "summary": "Read Message",
         "tags": [
           "本人消息"
+        ]
+      }
+    },
+    "/api/v1/ops/data/catalog": {
+      "get": {
+        "operationId": "apps_reference_browser_api_catalog",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Catalog",
+        "tags": [
+          "基础数据中心"
+        ]
+      }
+    },
+    "/api/v1/ops/data/catalog/{kind}/{record_id}": {
+      "get": {
+        "operationId": "apps_reference_browser_api_catalog_detail",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "kind",
+            "required": true,
+            "schema": {
+              "title": "Kind",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "title": "Record Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Catalog Detail",
+        "tags": [
+          "基础数据中心"
+        ]
+      }
+    },
+    "/api/v1/ops/data/evidence": {
+      "get": {
+        "operationId": "apps_reference_browser_api_evidence",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Evidence",
+        "tags": [
+          "基础数据中心"
+        ]
+      }
+    },
+    "/api/v1/ops/data/history": {
+      "get": {
+        "operationId": "apps_reference_browser_api_history",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "History",
+        "tags": [
+          "基础数据中心"
+        ]
+      }
+    },
+    "/api/v1/ops/data/history/{record_id}": {
+      "get": {
+        "operationId": "apps_reference_browser_api_history_detail",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "title": "Record Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "History Detail",
+        "tags": [
+          "基础数据中心"
+        ]
+      }
+    },
+    "/api/v1/ops/data/hs/{hs_code}": {
+      "get": {
+        "operationId": "apps_reference_browser_api_hs_detail",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "hs_code",
+            "required": true,
+            "schema": {
+              "title": "Hs Code",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Hs Detail",
+        "tags": [
+          "基础数据中心"
+        ]
+      }
+    },
+    "/api/v1/ops/data/snapshots": {
+      "get": {
+        "operationId": "apps_reference_browser_api_snapshots",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Snapshots",
+        "tags": [
+          "基础数据中心"
+        ]
+      }
+    },
+    "/api/v1/ops/debug/capabilities": {
+      "get": {
+        "operationId": "apps_agent_debug_api_capabilities",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Capabilities",
+        "tags": [
+          "Agent 调试台"
+        ]
+      }
+    },
+    "/api/v1/ops/debug/connections": {
+      "get": {
+        "operationId": "apps_agent_debug_api_connection_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Connection List",
+        "tags": [
+          "Agent 调试台"
+        ]
+      },
+      "post": {
+        "operationId": "apps_agent_debug_api_create_connection",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Create Connection",
+        "tags": [
+          "Agent 调试台"
+        ]
+      }
+    },
+    "/api/v1/ops/debug/connections/{connection_id}/activate": {
+      "post": {
+        "operationId": "apps_agent_debug_api_activate",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "connection_id",
+            "required": true,
+            "schema": {
+              "title": "Connection Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Activate",
+        "tags": [
+          "Agent 调试台"
+        ]
+      }
+    },
+    "/api/v1/ops/debug/connections/{connection_id}/revoke": {
+      "post": {
+        "operationId": "apps_agent_debug_api_revoke",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "connection_id",
+            "required": true,
+            "schema": {
+              "title": "Connection Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Revoke",
+        "tags": [
+          "Agent 调试台"
+        ]
+      }
+    },
+    "/api/v1/ops/debug/connections/{connection_id}/test": {
+      "post": {
+        "operationId": "apps_agent_debug_api_probe",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "connection_id",
+            "required": true,
+            "schema": {
+              "title": "Connection Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Probe",
+        "tags": [
+          "Agent 调试台"
+        ]
+      }
+    },
+    "/api/v1/ops/debug/previews": {
+      "post": {
+        "operationId": "apps_agent_debug_api_preview",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Preview",
+        "tags": [
+          "Agent 调试台"
+        ]
+      }
+    },
+    "/api/v1/ops/debug/probes/{probe_id}": {
+      "get": {
+        "operationId": "apps_agent_debug_api_probe_detail",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "probe_id",
+            "required": true,
+            "schema": {
+              "title": "Probe Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Probe Detail",
+        "tags": [
+          "Agent 调试台"
+        ]
+      }
+    },
+    "/api/v1/ops/debug/runs": {
+      "get": {
+        "operationId": "apps_agent_debug_api_run_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Run List",
+        "tags": [
+          "Agent 调试台"
+        ]
+      },
+      "post": {
+        "operationId": "apps_agent_debug_api_run_create",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Run Create",
+        "tags": [
+          "Agent 调试台"
+        ]
+      }
+    },
+    "/api/v1/ops/debug/runs/{run_id}": {
+      "get": {
+        "operationId": "apps_agent_debug_api_run_detail",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Run Detail",
+        "tags": [
+          "Agent 调试台"
+        ]
+      }
+    },
+    "/api/v1/ops/debug/runs/{run_id}/steps": {
+      "get": {
+        "operationId": "apps_agent_debug_api_steps",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Steps",
+        "tags": [
+          "Agent 调试台"
+        ]
+      }
+    },
+    "/api/v1/ops/debug/runs/{run_id}/steps/{seq}/payload": {
+      "get": {
+        "operationId": "apps_agent_debug_api_payload",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "seq",
+            "required": true,
+            "schema": {
+              "title": "Seq",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Payload",
+        "tags": [
+          "Agent 调试台"
+        ]
+      }
+    },
+    "/api/v1/ops/system/audit": {
+      "get": {
+        "operationId": "apps_ops_admin_api_audit_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Audit List",
+        "tags": [
+          "系统管理"
+        ]
+      }
+    },
+    "/api/v1/ops/system/audit/export": {
+      "post": {
+        "operationId": "apps_ops_admin_api_export",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Export"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Export",
+        "tags": [
+          "系统管理"
+        ]
+      }
+    },
+    "/api/v1/ops/system/audit/{event_id}": {
+      "get": {
+        "operationId": "apps_ops_admin_api_audit_detail",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Event Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Audit Detail",
+        "tags": [
+          "系统管理"
+        ]
+      }
+    },
+    "/api/v1/ops/system/dashboard": {
+      "get": {
+        "operationId": "apps_ops_admin_api_dashboard",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Dashboard",
+        "tags": [
+          "系统管理"
+        ]
+      }
+    },
+    "/api/v1/ops/system/errors": {
+      "get": {
+        "operationId": "apps_ops_admin_api_errors",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Errors",
+        "tags": [
+          "系统管理"
+        ]
+      }
+    },
+    "/api/v1/ops/system/errors/{error_id}/resolve": {
+      "post": {
+        "operationId": "apps_ops_admin_api_resolve",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "error_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Error Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Reason"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Resolve",
+        "tags": [
+          "系统管理"
+        ]
+      }
+    },
+    "/api/v1/ops/system/groups": {
+      "get": {
+        "operationId": "apps_ops_admin_api_groups",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Groups",
+        "tags": [
+          "系统管理"
+        ]
+      }
+    },
+    "/api/v1/ops/system/groups/{group_id}": {
+      "patch": {
+        "operationId": "apps_ops_admin_api_edit_group",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "group_id",
+            "required": true,
+            "schema": {
+              "title": "Group Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateGroup"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Edit Group",
+        "tags": [
+          "系统管理"
+        ]
+      }
+    },
+    "/api/v1/ops/system/login": {
+      "post": {
+        "operationId": "apps_ops_admin_api_login",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Login"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Login",
+        "tags": [
+          "系统管理"
+        ]
+      }
+    },
+    "/api/v1/ops/system/modules": {
+      "get": {
+        "operationId": "apps_ops_admin_api_modules",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Modules",
+        "tags": [
+          "系统管理"
+        ]
+      }
+    },
+    "/api/v1/ops/system/modules/{key}": {
+      "patch": {
+        "operationId": "opsUpdateModule",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "title": "Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModuleStatus"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Change Module",
+        "tags": [
+          "系统管理"
+        ]
+      },
+      "post": {
+        "operationId": "opsRegisterModule",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "title": "Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModuleStatus"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Change Module",
+        "tags": [
+          "系统管理"
+        ]
+      }
+    },
+    "/api/v1/ops/system/nav": {
+      "get": {
+        "operationId": "apps_ops_admin_api_nav",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Nav",
+        "tags": [
+          "系统管理"
+        ]
+      }
+    },
+    "/api/v1/ops/system/permissions/whitelist": {
+      "get": {
+        "operationId": "apps_ops_admin_api_permission_whitelist",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Permission Whitelist",
+        "tags": [
+          "系统管理"
+        ]
+      }
+    },
+    "/api/v1/ops/system/secret/consume": {
+      "post": {
+        "operationId": "apps_ops_admin_api_consume",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Consume"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Consume",
+        "tags": [
+          "系统管理"
+        ]
+      }
+    },
+    "/api/v1/ops/system/session": {
+      "get": {
+        "operationId": "apps_ops_admin_api_session",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Session",
+        "tags": [
+          "系统管理"
+        ]
+      }
+    },
+    "/api/v1/ops/system/users": {
+      "get": {
+        "operationId": "apps_ops_admin_api_users",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Users",
+        "tags": [
+          "系统管理"
+        ]
+      },
+      "post": {
+        "operationId": "apps_ops_admin_api_add_user",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateUser"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Add User",
+        "tags": [
+          "系统管理"
+        ]
+      }
+    },
+    "/api/v1/ops/system/users/{user_id}": {
+      "delete": {
+        "operationId": "apps_ops_admin_api_delete_user",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeleteUser"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Delete User",
+        "tags": [
+          "系统管理"
+        ]
+      },
+      "get": {
+        "operationId": "apps_ops_admin_api_user_detail",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "User Detail",
+        "tags": [
+          "系统管理"
+        ]
+      },
+      "patch": {
+        "operationId": "apps_ops_admin_api_edit_user",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUser"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Edit User",
+        "tags": [
+          "系统管理"
+        ]
+      }
+    },
+    "/api/v1/ops/system/users/{user_id}/disable": {
+      "post": {
+        "operationId": "opsDisableUser",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Reason"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Disable User",
+        "tags": [
+          "系统管理"
+        ]
+      }
+    },
+    "/api/v1/ops/system/users/{user_id}/enable": {
+      "post": {
+        "operationId": "opsEnableUser",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Reason"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Enable User",
+        "tags": [
+          "系统管理"
+        ]
+      }
+    },
+    "/api/v1/ops/system/users/{user_id}/secret/reset": {
+      "post": {
+        "operationId": "apps_ops_admin_api_reset",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Reset"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Reset",
+        "tags": [
+          "系统管理"
         ]
       }
     },

@@ -197,3 +197,58 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 TEST_RUNNER = "config.test_runner.TaskRunner"
 # CSRF 失败返回 JSON 错误体，而不是 Django 默认 HTML 页面（D3 第 1 节）。
 CSRF_FAILURE_VIEW = "apps.accounts.csrf.csrf_failure"
+
+# 运维模块：03 基础数据中心、02 Agent 调试台先装载，01 系统管理最后装载并读取它们的信任清单。
+INSTALLED_APPS += ['apps.reference_browser', 'apps.agent_debug', 'apps.ops_admin']
+MIDDLEWARE.insert(MIDDLEWARE.index('django.contrib.auth.middleware.AuthenticationMiddleware') + 1,
+                  'apps.ops_admin.middleware.OpsMiddleware')
+# 清单来自代码，不来自数据库：未在此登记的应用既没有页面入口，也没有 API 路由。
+OPS_ADMIN_MODULE_INSTALLERS = (
+    'apps.reference_browser.install_manifest.installer',
+    'apps.agent_debug.install_manifest.installer',
+)
+OPS_ADMIN_CRITICAL_EVENTS = frozenset()
+OPS_ADMIN_SERVICE_VERSION = os.environ.get('CUSTOMS_SERVICE_VERSION', '0.1.0')[:64]
+OPS_ADMIN_SECRET_TTL_SECONDS = 900
+OPS_ADMIN_RESERVED_GROUPS = ('ops_system_admin',)
+OPS_ADMIN_RESERVED_USERNAMES = tuple(s.strip() for s in os.environ.get('CUSTOMS_OPS_RESERVED_USERS', '').split(',') if s.strip())
+OPS_ADMIN_TRUSTED_EMAIL_ENABLED = os.environ.get('CUSTOMS_OPS_TRUSTED_EMAIL') == '1'
+OPS_ADMIN_SECRET_PUBLIC_URL = os.environ.get('CUSTOMS_OPS_SECRET_PUBLIC_URL', '')
+if OPS_ADMIN_TRUSTED_EMAIL_ENABLED:
+    from urllib.parse import urlsplit
+
+    ops_url = urlsplit(OPS_ADMIN_SECRET_PUBLIC_URL)
+    if (ops_url.scheme != 'https' or not ops_url.hostname or ops_url.username or ops_url.password or ops_url.query
+            or ops_url.fragment or ops_url.path != '/ops/admin/secret/'
+            or any(c.isspace() or ord(c) < 32 for c in OPS_ADMIN_SECRET_PUBLIC_URL)):
+        raise ImproperlyConfigured('CUSTOMS_OPS_SECRET_PUBLIC_URL must be an HTTPS /ops/admin/secret/ URL')
+    EMAIL_HOST = os.environ.get('CUSTOMS_OPS_SMTP_HOST', '')
+    EMAIL_PORT = byte_setting('CUSTOMS_OPS_SMTP_PORT', 587)
+    EMAIL_HOST_USER = os.environ.get('CUSTOMS_OPS_SMTP_USER', '')
+    EMAIL_HOST_PASSWORD = os.environ.get('CUSTOMS_OPS_SMTP_PASSWORD', '')
+    DEFAULT_FROM_EMAIL = os.environ.get('CUSTOMS_OPS_SMTP_FROM', '')
+    EMAIL_USE_TLS = True
+    EMAIL_TIMEOUT = 5
+    if not EMAIL_HOST or not DEFAULT_FROM_EMAIL:
+        raise ImproperlyConfigured('Trusted ops mail requires CUSTOMS_OPS_SMTP_HOST and CUSTOMS_OPS_SMTP_FROM')
+
+LOGGING = {
+    'version': 1, 'disable_existing_loggers': False,
+    'handlers': {'ops_events': {'class': 'apps.ops_admin.events.OpsEventHandler'}},
+    'loggers': {'customs.ops.events': {'handlers': ['ops_events'], 'level': 'INFO', 'propagate': False}},
+}
+
+# --- 03 基础数据中心 -------------------------------------------------------
+# 只装载随包发布的合成样例；store.load_generation 仍要求 DEBUG 才会读取。
+# 任一开关为真时 `manage.py check --deploy` 报 reference_browser.E001，生产必须关掉。
+REFERENCE_BROWSER_FIXTURE = os.environ.get('CUSTOMS_REFERENCE_FIXTURE') == '1'
+
+# --- 02 Agent 调试台 -------------------------------------------------------
+# 缺省关闭：未开启时页面与 API 统一 404，等同模块不存在。
+OPS_DEBUG_ENABLED = os.environ.get('CUSTOMS_OPS_DEBUG_ENABLED') == '1'
+# 真实商品运行始终另开，演示只用 mock/内置样例，不发出站请求。
+OPS_DEBUG_LIVE_ENABLED = False
+# 连接凭据密文目录必须由部署显式提供（绝对路径、仓库与同步盘之外）；空值即无法保存凭据。
+OPS_DEBUG_SECRET_STORE = os.environ.get('CUSTOMS_OPS_DEBUG_SECRET_STORE', '')
+if OPS_DEBUG_SECRET_STORE and not os.path.isabs(OPS_DEBUG_SECRET_STORE):
+    raise ImproperlyConfigured('CUSTOMS_OPS_DEBUG_SECRET_STORE must be an absolute path')

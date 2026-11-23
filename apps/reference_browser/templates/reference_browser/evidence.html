@@ -1,0 +1,13 @@
+{% extends 'reference_browser/base.html' %}
+{% load static %}
+{% block title %}证据定位 · 基础数据中心{% endblock %}
+{% block head %}<script type="module" src="{% static 'reference_browser/reference-browser.js' %}"></script>{% endblock %}
+{% block content %}
+<main id="main-content" class="reference-app" data-ref-evidence data-api-base="/api/v1/ops/data">
+  <p><a class="text-button" id="evidence-back" href="{% url 'reference_browser:index' %}">← 返回基础数据中心</a></p>
+  <section class="intro-band"><div><p class="eyebrow">03 / EVIDENCE LEDGER</p><h1>证据定位<span aria-hidden="true">.</span></h1><p class="intro-copy">按引用固定的快照定位来源。不会切换到当前发布版本。</p></div></section>
+  <div class="evidence-page" id="evidence-content" aria-live="polite"><div class="loading-line">正在解析证据引用…</div></div>
+  {% if evidence_payload %}{{ evidence_payload|json_script:"reference-evidence-payload" }}{% endif %}
+  <noscript><p class="notice error">请启用 JavaScript 后查看证据。</p></noscript>
+</main>
+{% endblock %}
