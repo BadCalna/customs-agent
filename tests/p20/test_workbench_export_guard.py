@@ -10,6 +10,7 @@
 3. LIVE 模式禁用控件并给出迁移入口，FIXTURE/DEMO 明示样例模式不可导出真实文件。
 """
 from pathlib import Path
+import re
 
 from django.conf import settings
 from django.test import SimpleTestCase
@@ -20,7 +21,9 @@ HTML_PATH = Path(settings.BASE_DIR) / "web" / "workbench.html"
 def inline_script() -> str:
     """只取 workbench 的内联脚本，避免把样式或 HTML 文案当成 JS 断言。"""
     html = HTML_PATH.read_text("utf-8")
-    start = html.index("<script>") + len("<script>")
+    match = re.search(r"<script\b[^>]*>", html)
+    assert match is not None, "workbench.html 缺少内联 script 标签"
+    start = match.end()
     return html[start:html.index("</script>", start)]
 
 

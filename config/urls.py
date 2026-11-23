@@ -15,6 +15,7 @@ from apps.api.demo import (
     upload_index,
     workbench_asset,
     workbench_index,
+    workbench_live_index,
 )
 from apps.api.not_implemented import router as pending_router
 from apps.reviews.api.confirmations import router as confirmations_router
@@ -71,8 +72,9 @@ urlpatterns = [
     path("demo/", demo_index, name="demo-index"),
     path("demo/assets/<path:path>", demo_asset, name="demo-asset"),
     path("demo/fixtures/<path:path>", demo_fixture, name="demo-fixture"),
-    # 正式工作台默认真实会话/API；样例仍只在 DEBUG 下显式访问。
+    # 正式工作台默认真实会话/API；D1=B 双页分工：/workbench/ 为正式审核页，/workbench/live/ 为消息/进度/导出中心。
     path("workbench/assets/<path:path>", workbench_asset, name="workbench-asset"),
+    path("workbench/live/", workbench_live_index, name="workbench-live-index"),
     path("workbench/", workbench_index, name="workbench-index"),
     # P08 独立只读任务列表与运行进度页面入口（仅在 DEBUG=True 开发模式可用；正式工作台为 /workbench/）。
     path("tasks/", tasks_index, name="p08-tasks"),

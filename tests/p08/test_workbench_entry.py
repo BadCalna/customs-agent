@@ -13,8 +13,13 @@ class WorkbenchEntryTests(SimpleTestCase):
         response=self.client.get('/workbench/')
         self.assertEqual(response.status_code,200)
         html=b''.join(response.streaming_content).decode()
-        self.assertIn('/workbench/assets/workbench-live.js',html)
+        self.assertIn('/workbench/assets/api.js',html)
         self.assertNotIn('customs-demo-only',html)
+        center=self.client.get('/workbench/live/')
+        self.assertEqual(center.status_code,200)
+        center_html=b''.join(center.streaming_content).decode()
+        self.assertIn('/workbench/assets/workbench-live.js',center_html)
+        self.assertNotIn('customs-demo-only',center_html)
         upload=self.client.get('/uploads/')
         self.assertEqual(upload.status_code,200);upload.close()
         for path in WORKBENCH_ASSETS:
@@ -31,7 +36,7 @@ class WorkbenchEntryTests(SimpleTestCase):
     def test_formal_entries_module_graph_loads_without_debug(self):
         visited = set()
         pending = []
-        for entry in ('/workbench/', '/uploads/'):
+        for entry in ('/workbench/', '/workbench/live/', '/uploads/'):
             response = self.client.get(entry)
             self.assertEqual(response.status_code, 200, entry)
             body = b''.join(response.streaming_content).decode()

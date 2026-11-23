@@ -56,7 +56,7 @@ class RefreshBrowserTests(LiveServerTestCase):
                 errors, writes = [], []
                 page.on('request', lambda request: writes.append(request.url) if request.method == 'POST' and '/decisions' in request.url else None)
                 page.on('pageerror', lambda error: errors.append(str(error)))
-                page.goto(self.live_server_url + '/workbench/?task=' + str(self.task.pk))
+                page.goto(self.live_server_url + '/workbench/live/?task=' + str(self.task.pk))
                 page.wait_for_load_state('networkidle')
                 page.locator('#wb-login input[name=username]').fill(self.expert.username)
                 page.locator('#wb-login input[name=password]').fill(PASSWORD)
