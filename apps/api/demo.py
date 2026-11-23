@@ -123,10 +123,11 @@ def _entry_target(request, path):
 
 
 def _has_business_session(request):
-    # A session opened in /admin/ without a business role is not a desk login.
     from apps.accounts.models import Role
+    from apps.accounts.permissions import is_readonly_superuser
 
-    return request.user.is_authenticated and request.user.role in Role.values
+    user = request.user
+    return user.is_authenticated and (user.role in Role.values or is_readonly_superuser(user))
 
 
 @never_cache

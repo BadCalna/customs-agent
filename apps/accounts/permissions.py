@@ -59,10 +59,17 @@ def _review_model(name):
     return apps.get_model("reviews", name)
 
 
+def is_readonly_superuser(user) -> bool:
+    """无业务角色的超管只读全览；有业务角色的账号仍按角色和任务归属授权。"""
+    return bool(getattr(user, "is_superuser", False) and not user.role)
+
+
 def visible_tasks(user):
     """当前账号可见的任务集合。未登录直接拒绝，不返回空集合冒充“无数据”。"""
     _require_authenticated(user)
     task_model = _review_model("Task")
+    if is_readonly_superuser(user):
+        return task_model.objects.all()  # 空 role 不在动作矩阵中，不能写入。
     role = user.role
     if role == Role.SUPPLIER:
         return task_model.objects.filter(supplier=user)
