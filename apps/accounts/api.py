@@ -19,6 +19,7 @@ from ninja.errors import AuthenticationError, HttpError, ValidationError as Requ
 from .auth import enforce_csrf, session_auth
 from .errors import ApiError, AuthenticationRequired, error_payload
 from .models import Role
+from .permissions import is_readonly_superuser
 
 router = Router(tags=["身份"])
 
@@ -34,6 +35,7 @@ class SessionOut(Schema):
     display_name: str
     role: str
     role_label: str
+    is_readonly: bool
 
 
 class OkOut(Schema):
@@ -47,6 +49,7 @@ def _session_payload(user) -> dict:
         "display_name": user.display_name or user.username,
         "role": user.role,
         "role_label": dict(Role.choices).get(user.role, ""),
+        "is_readonly": is_readonly_superuser(user),
     }
 
 
@@ -57,7 +60,7 @@ def login(request, payload: LoginIn):
     user = authenticate(request, username=payload.username, password=payload.password)
     if user is None or not user.is_active:
         raise ApiError(401, "invalid_credentials", "用户名或密码不正确")
-    if not user.role and not user.is_superuser:
+    if not user.role and not is_readonly_superuser(user):
         raise ApiError(403, "role_missing", "该账号未分配业务角色，不能登录业务接口")
     django_login(request, user)
     return _session_payload(user)

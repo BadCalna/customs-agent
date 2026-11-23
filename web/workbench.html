@@ -1113,7 +1113,11 @@ window.addEventListener('hashchange', () => {
   }
 });
 function roleOf(){
-  if(LIVE)return WB.user?({operator:'business',expert:'expert',supplier:'supplier'}[WB.user.role]||null):null;
+  if(LIVE){
+    if(!WB.user)return null;
+    if(WB.user.is_readonly)return 'readonly';
+    return {operator:'business',expert:'expert',supplier:'supplier'}[WB.user.role]||null;
+  }
   const r = parseRoute();
   if(r.seg==='supplier'||r.seg==='business'||r.seg==='expert') return r.seg;
   return S.role;
@@ -1220,6 +1224,7 @@ function viewGate(){
 
 /* ---------------------------- 外壳 ---------------------------- */
 function navFor(role){
+  if(role==='readonly')return [{id:'tasks',label:'全部任务',icon:'inbox',count:S.tasks.length}];
   const pending = S.tasks.filter(t=>!isApproved(t)).length;
   if(role==='supplier') return [
     {id:'tasks',label:LIVE?'任务与退回问题':'上传与补充',icon:'upload'}
@@ -1235,7 +1240,7 @@ function navFor(role){
   ];
 }
 function shell(role, active, crumbs, body, opts={}){
-  const r=LIVE?{...ROLE[role],person:WB.user.display_name||WB.user.username}:ROLE[role], nav=navFor(role);
+  const r=LIVE?{person:WB.user.display_name||WB.user.username}:ROLE[role], nav=navFor(role);
   const showRef=!LIVE||(WB.user&&WB.user.role==='admin');
   return `<div class="app">
     <aside class="rail">
@@ -1253,7 +1258,7 @@ function shell(role, active, crumbs, body, opts={}){
         ${LIVE?`<div class="role-chip is-static">
           <span class="avatar">${esc(r.person.slice(-2))}</span>
           <span class="role-chip-meta"><span class="role-chip-name" title="${esc(r.person)}">${esc(r.person)}</span>
-          <span class="role-chip-role">${role==='supplier'?'供应商账号':role==='business'?'物流部 · 业务员':'关务 · 专家'}</span></span>
+          <span class="role-chip-role">${role==='readonly'?'超管 · 只读':role==='supplier'?'供应商账号':role==='business'?'物流部 · 业务员':'关务 · 专家'}</span></span>
         </div>`:`<button class="role-chip" data-act="open-role-menu" aria-haspopup="menu">
           <span class="avatar">${esc(r.person.slice(-2))}</span>
           <span class="role-chip-meta"><span class="role-chip-name" title="${esc(r.person)}">${esc(r.person)}</span>
@@ -1576,24 +1581,26 @@ function viewBusinessOverview(){
     </div>`;
   return shell('business','overview',[{label:'待我确认'}],body);
 }
-function viewBusinessTasks(){
-  WB.lastListRoute='business/tasks';
+function viewTaskList(role){
+  const readonly=role==='readonly';
+  const title=readonly?'全部审核任务':'审核任务';
+  WB.lastListRoute=`${role}/tasks`;
   const body=`
-    <div class="page-hd"><div><div class="hd-kicker">Business Console</div><h1>审核任务</h1>
-    ${LIVE?'':`<p class="sub">一个任务对应一份供应商文件，可含多个版本。点击任务进入逐条审核。</p>`}</div></div>
+    <div class="page-hd"><div><div class="hd-kicker">${readonly?'Read-Only Console':'Business Console'}</div><h1>${title}</h1>
+    ${readonly?`<p class="sub">${S.tasks.length} 个任务 · 可查看审核详情与版本记录，不可修改。</p>`:LIVE?'':`<p class="sub">一个任务对应一份供应商文件，可含多个版本。点击任务进入逐条审核。</p>`}</div></div>
     <div class="panel"><div class="tbl-wrap"><table class="tbl">
-      <thead><tr><th style="width:120px">任务</th><th>合同 / 供应商</th><th style="width:90px">当前版本</th><th style="width:170px">商品进度</th><th style="width:110px">待确认</th><th style="width:130px">阶段</th><th style="width:140px">更新</th></tr></thead>
-      <tbody>${S.tasks.map(t=>{const c=counts(t),st=taskStage(t);const flagged=t.lines.filter(l=>l.verdict&&!l.decision).length;
+      <thead><tr><th style="width:120px">任务</th><th>合同 / 供应商</th><th style="width:90px">当前版本</th>${readonly?'':'<th style="width:170px">商品进度</th><th style="width:110px">待确认</th>'}<th style="width:130px">阶段</th><th style="width:140px">更新</th></tr></thead>
+      <tbody>${S.tasks.length?S.tasks.map(t=>{const c=counts(t),st=taskStage(t);const flagged=t.lines.filter(l=>l.verdict&&!l.decision).length;
         return `<tr tabindex="0" data-act="open-task" data-task="${t.id}">
         <td class="mono" title="${esc(t.id)}">${LIVE?'#'+esc(t.id.slice(0,8)):esc(t.id)}</td>
         <td><span class="name">${esc(t.contract)}</span><span class="alias">${esc(t.supplier)}</span></td>
-        <td class="mono">V${curVersion(t)}</td>
-        <td><div class="task-prog"><span class="prog"><i class="p-ok" style="width:${c.total?c.pass/c.total*100:0}%"></i><i class="p-stop" style="width:${c.total?c.returned/c.total*100:0}%"></i><i class="p-idle" style="width:${c.total?c.left/c.total*100:0}%"></i></span><b>${c.pass}/${c.total}</b></div></td>
-        <td>${flagged?`<span class="pill gold"><i></i>${flagged} 条</span>`:`<span class="dim">—</span>`}</td>
-        <td>${pill(st.tone,st.label)}</td><td class="mono muted">${LIVE&&t.updatedAtRaw?timeEl(t.updatedAtRaw,true):esc(t.updatedAt.slice(5))}</td></tr>`;}).join('')}</tbody>
+        <td class="mono">${curVersion(t)==='—'?'—':`V${curVersion(t)}`}</td>
+        ${readonly?'':`<td><div class="task-prog"><span class="prog"><i class="p-ok" style="width:${c.total?c.pass/c.total*100:0}%"></i><i class="p-stop" style="width:${c.total?c.returned/c.total*100:0}%"></i><i class="p-idle" style="width:${c.total?c.left/c.total*100:0}%"></i></span><b>${c.pass}/${c.total}</b></div></td>
+        <td>${flagged?`<span class="pill gold"><i></i>${flagged} 条</span>`:`<span class="dim">—</span>`}</td>`}
+        <td>${pill(st.tone,st.label)}</td><td class="mono muted">${LIVE&&t.updatedAtRaw?timeEl(t.updatedAtRaw,true):esc(t.updatedAt.slice(5))}</td></tr>`;}).join(''):`<tr><td colspan="${readonly?5:7}"><div class="empty">当前没有可见任务</div></td></tr>`}
     </table></div></div>
     ${LIVE?'':`<div class="callout info" style="margin-top:14px">${svg('info',14,'ic')}<div>任务阶段由商品进度决定：全部商品经专家通过后，任务才显示为「专家已确认」，首期不支持任务内部分商品先通过。</div></div>`}`;
-  return shell('business','tasks',[{label:'审核任务'}],body);
+  return shell(role,'tasks',[{label:title}],body);
 }
 
 /* ---------------------------- 专家 ---------------------------- */
@@ -1688,7 +1695,7 @@ function viewExpertArchive(){
   return shell('expert','archive',[{label:'已确认任务'}],body);
 }
 
-/* ---------------------------- 任务详情（业务员/专家） ---------------------------- */
+/* ---------------------------- 任务详情 ---------------------------- */
 function filteredLines(t){
   let ls=[...t.lines];
   const q=(S.ui.query||'').trim().toLowerCase();
@@ -1709,7 +1716,9 @@ function filteredLines(t){
   return ls;
 }
 function viewTask(role, t, lineId){
-  if(!t||!t.lines.length)return shell(role,'tasks',[],`<div class="empty">${t?'此版本没有可显示商品':'任务不存在或不在当前账号可见范围'}</div>`);
+  if(!t)return shell(role,'tasks',[],`<div class="empty">任务不存在或不在当前账号可见范围</div>`);
+  const readonly=role==='readonly';
+  if(!t.lines.length&&!readonly)return shell(role,'tasks',[],`<div class="empty">此版本没有可显示商品</div>`);
   if(S.ui&&S.ui.task&&S.ui.task!==t.id){
     S.ui={...defaultUi(),collapsed:S.ui.collapsed||[],tab:WB.pendingTab||'hs',task:t.id};
   }else{
@@ -1727,7 +1736,7 @@ function viewTask(role, t, lineId){
     if(WB.lastListRoute==='business/overview'){navActive='overview';backHref='business/overview';backLabel='待我确认';}
     else{navActive='tasks';backHref='business/tasks';backLabel='全部任务';}
   }
-  const roleTag=isExpert?'专家审核':isSup?'供应商回查':'业务员预审';
+  const roleTag=readonly?'超管只读':isExpert?'专家审核':isSup?'供应商回查':'业务员预审';
   const allPassed=isExpert&&lines.every(l=>l.expert&&l.expert.result==='pass');
   const shown=filteredLines(t);
   const sel=S.ui.selected||[];
@@ -1779,17 +1788,17 @@ function viewTask(role, t, lineId){
         ${LIVE?'':`<th style="width:34px"><input type="checkbox" data-act="select-all" ${shown.length&&shown.every(l=>sel.includes(l.id))?'checked':''} aria-label="全选"></th>`}
         <th style="width:36%">商品 / 供应商编码</th><th style="width:15%">AI 推荐</th><th style="width:31%">预审结论</th><th style="width:18%">当前状态</th>
       </tr></thead>
-      <tbody>${shown.length?shown.map(l=>taskTableRow(t,l,cur.id===l.id,role,sel.includes(l.id))).join(''):`<tr><td colspan="${LIVE?4:5}"><div class="empty">没有匹配的记录</div></td></tr>`}</tbody>
+      <tbody>${shown.length?shown.map(l=>taskTableRow(t,l,cur.id===l.id,role,sel.includes(l.id))).join(''):`<tr><td colspan="${LIVE?4:5}"><div class="empty">${lines.length?'没有匹配的记录':'此版本没有可显示商品'}</div></td></tr>`}</tbody>
     </table></div>
     <div class="panel-ft"><span class="note">${LIVE?'点击商品行查看编码对比、要素与留痕。':'点击行查看对比与依据；勾选后可批量处置。'}</span>
       <span class="meta" style="margin-left:auto">${verdictCount('match')} 一致 · ${verdictCount('mismatch')} 不一致 · ${verdictCount('unsure')} 无法确认 · ${verdictCount('missing')} 未填</span></div>
   </div>`;
 
   const summary=`<div class="panel" style="margin:0 0 16px">
-    <div class="panel-hd"><h2>${isExpert?'提交快照':isSup?'当前批次状态':'当前进度'}</h2><span class="meta">${isExpert?'业务员确认并提交的版本':isSup?'只读查看各阶段编码与退回问题':'逐条处理后整批提交'}</span>
+    <div class="panel-hd"><h2>${isExpert?'提交快照':isSup?'当前批次状态':'当前进度'}</h2><span class="meta">${isExpert?'业务员确认并提交的版本':isSup||readonly?'只读查看各阶段编码与退回问题':'逐条处理后整批提交'}</span>
       <div class="hd-r">${pill(st.tone,st.label)}</div></div>
     <div class="panel-bd"><div class="split-3" style="gap:12px">
-      <div><div class="k" style="font-size:11.5px;color:var(--ink-3)">${isSup?'当前版本待处理':'待你处置'}</div><div class="v serif" style="font-size:22px;font-weight:700;margin-top:8px">${isSup?(t.history?.issues||[]).filter(i=>i.version_id===t.viewVersionId&&i.status==='open'&&i.return_to==='supplier').length:isExpert?lines.filter(l=>!(l.expert&&l.expert.result)).length:lines.filter(l=>l.verdict&&!l.decision).length}<small style="font-size:12px;color:var(--ink-4);font-family:var(--sans)"> 条</small></div></div>
+      <div><div class="k" style="font-size:11.5px;color:var(--ink-3)">${isSup?'当前版本待处理':readonly?'待业务员确认':'待你处置'}</div><div class="v serif" style="font-size:22px;font-weight:700;margin-top:8px">${isSup?(t.history?.issues||[]).filter(i=>i.version_id===t.viewVersionId&&i.status==='open'&&i.return_to==='supplier').length:isExpert?lines.filter(l=>!(l.expert&&l.expert.result)).length:lines.filter(l=>l.verdict&&!l.decision).length}<small style="font-size:12px;color:var(--ink-4);font-family:var(--sans)"> 条</small></div></div>
       <div><div class="k" style="font-size:11.5px;color:var(--ink-3)">已形成结论</div><div class="v serif" style="font-size:22px;font-weight:700;margin-top:8px">${isExpert||isSup?lines.filter(l=>l.expert&&l.expert.result).length:lines.filter(l=>l.decision).length}<small style="font-size:12px;color:var(--ink-4);font-family:var(--sans)"> 条</small></div></div>
       <div><div class="k" style="font-size:11.5px;color:var(--ink-3)">时间节点</div><div style="font-size:12px;margin-top:10px;line-height:1.6" class="dim">${isExpert?(t.submittedAtRaw?`提交于 ${timeEl(t.submittedAtRaw)}`:`提交于 ${esc(t.submittedAt||'—')}`):(t.precheckAtRaw?`自动预审于 ${timeEl(t.precheckAtRaw)}`:`自动预审于 ${esc(t.precheckAt||'—')}`)}</div></div>
     </div></div>
@@ -1814,7 +1823,7 @@ function viewTask(role, t, lineId){
     </div>
     <div class="detail">
       <div class="detail-l">${summary}${notesBlock(t,lines)}${listPanel}</div>
-      <aside class="detail-r" id="detail-panel"><div class="dp">${detailPanel(role,t,cur)}</div></aside>
+      ${cur?`<aside class="detail-r" id="detail-panel"><div class="dp">${detailPanel(role,t,cur)}</div></aside>`:''}
     </div>`;
   return shell(role,navActive,[{label:backLabel,href:`#/${backHref}`},{label:t.contract}],body,{wide:true});
 }
@@ -1857,7 +1866,7 @@ function notesBlock(t,lines){
 /* ---------------------------- 详情面板 ---------------------------- */
 function detailPanel(role,t,l){
   const isExpert=role==='expert', st=lineState(l,role);
-  const tabs=[['hs','HS 对比'],['elem','申报要素'],['ev','依据'],...(isExpert?[['check','核查结果']]:[]),['log','记录']];
+  const tabs=[['hs','HS 对比'],['elem','申报要素'],['ev','依据'],...(isExpert||role==='readonly'?[['check','核查结果']]:[]),['log','记录']];
   const active=(S.ui&&S.ui.tab)||'hs';
   const tabBtn=([k,label])=>`<button class="tab" role="tab" aria-selected="${k===active}" data-act="set-tab" data-tab="${k}">${label}${k==='ev'&&l.evidence.length?`<span class="n">${l.evidence.length}</span>`:''}</button>`;
   return `<div class="dp-hd">
@@ -2445,17 +2454,20 @@ function render(){
     if(!WB.user){$('#root').innerHTML=liveLogin();return;}
     const route=parseRoute(), role=roleOf();
     if(!role){$('#root').innerHTML='<div class="empty">该账号没有工作台角色</div>';return;}
-    if(route.seg!==role){go(defaultRoute(role));return;}
+    if(!isValidRoleRoute(role,route)){go(defaultRoute(role));return;}
   }
   const role=roleOf();const r=parseRoute();const root=document.getElementById('root');
   if(!role){root.innerHTML=viewGate();return;}
   S.role=role;
   WB.lastRouteKey=routeScopeKey(r);
   if(r.seg==='supplier'){root.innerHTML=(r.a==='task'&&r.b)?viewSupplierTask(task(r.b)):viewSupplierTasks();return;}
+  if(r.seg==='readonly'&&role==='readonly'){
+    root.innerHTML=r.a==='task'?viewTask(role,task(r.b),r.c):viewTaskList(role);return;
+  }
   if(r.seg==='business'){
     if(r.a==='overview')root.innerHTML=viewBusinessOverview();
     else if(r.a==='task'&&r.b)root.innerHTML=viewTask('business',task(r.b),r.c||'');
-    else root.innerHTML=viewBusinessTasks();return;}
+    else root.innerHTML=viewTaskList('business');return;}
   if(r.seg==='expert'){
     if(r.a==='archive')root.innerHTML=viewExpertArchive();
     else if(r.a==='returned')root.innerHTML=viewExpertReturned();
@@ -2572,7 +2584,7 @@ function mapDataset(data){
     const appAtRaw=t.stage==='approved'?(approveDec?.created_at||t.updated_at):'';
     return {
       id:t.task_id,contract:t.title,supplier:sup,project:'',owner:'',createdAt:fmtDT(t.created_at),createdAtRaw:t.created_at||'',updatedAt:fmtDT(t.updated_at),updatedAtRaw:t.updated_at||'',
-      revision:t.revision,stage:t.stage,currentVersionId:t.current_version_id,viewVersionId:vid,viewNumber:(t.versions||[]).find(v=>v.version_id===vid)?.number,readOnly:vid!==t.current_version_id,submissionId:t.current_submission_id,submissionStatus:t.current_submission_status,history:(data.histories||{})[t.task_id],raw:t,
+      revision:t.revision,stage:t.stage,currentVersionId:t.current_version_id,viewVersionId:vid,viewNumber:(t.versions||[]).find(v=>v.version_id===vid)?.number??t.current_version_number,readOnly:vid!==t.current_version_id,submissionId:t.current_submission_id,submissionStatus:t.current_submission_status,history:(data.histories||{})[t.task_id],raw:t,
       versions:(t.versions||[]).map(v=>({v:v.number,file:v.original_filename,size:'—',at:fmtDT(v.uploaded_at),atRaw:v.uploaded_at||'',by:'供应商',version_id:v.version_id})),
       prechecked:!['uploaded','prechecking'].includes(t.stage),precheckAt:fmtDT(preAtRaw),precheckAtRaw:preAtRaw,
       submitted:t.current_submission_status==='pending'||t.stage==='submitted',submittedAt:fmtDT(subAtRaw),submittedAtRaw:subAtRaw,
@@ -2596,9 +2608,13 @@ async function allPages(read){
   return rows;
 }
 async function loadLive(){
-  const route=parseRoute(),entries=await allPages(cursor=>API.listTasks({limit:100,cursor}));
+  const role=roleOf(),route=parseRoute(),entries=await allPages(cursor=>API.listTasks({limit:100,cursor}));
   const tasks=[],items={},cards={},histories={};
   for(const entry of entries){
+    // 全量任务只读列表直接使用摘要；仅打开某条任务后加载其历史与商品卡。
+    if(role==='readonly'&&(route.seg!=='readonly'||route.a!=='task'||route.b!==entry.task_id)){
+      tasks.push(entry);continue;
+    }
     const [t,h]=await Promise.all([API.getTask(entry.task_id),API.taskHistory(entry.task_id)]);
     const vid=route.b===t.task_id&&route.version?route.version:t.current_version_id;
     if(vid&&!(t.versions||[]).some(v=>v.version_id===vid))throw new Error('请求的版本不属于当前任务');
@@ -2628,7 +2644,7 @@ function defaultRoute(role){return role==='business'?'business/overview':`${role
 function isValidRoleRoute(role,r){
   if(!role||!r||r.seg!==role)return false;
   if(r.a==='task')return Boolean(r.b);
-  if(role==='supplier')return r.a==='tasks';
+  if(role==='supplier'||role==='readonly')return r.a==='tasks';
   if(role==='business')return r.a==='overview'||r.a==='tasks';
   if(role==='expert')return r.a==='queue'||r.a==='returned'||r.a==='archive';
   return false;
@@ -2639,7 +2655,7 @@ function liveFeedback(){
 function liveLogin(){
   return `<main class="login-shell"><div class="login-card"><div class="login-card-hd">
     <div class="brand">${brandMark(26)}<span class="brand-name">关务预审工作台</span></div>
-    <h1>登录工作台</h1><p>使用业务账号登录，角色与可见任务由服务端确定。</p>
+    <h1>登录工作台</h1><p>使用业务账号或超管账号登录，权限与可见任务由服务端确定。</p>
   </div><div class="login-card-bd">
     ${liveFeedback()}
     <form id="live-login-form">
@@ -2680,7 +2696,7 @@ async function refreshLiveRoute(){
 function liveTaskActions(role,t){
   const history=`<button class="btn" data-act="live-history" data-task="${t.id}">版本与问题记录</button>`;
   if(t.readOnly)return history+'<span class="pill gold">旧版本只读</span>';
-  if(role==='supplier')return history;
+  if(role==='supplier'||role==='readonly')return history;
   if(role==='expert')return history+(t.submitted?`<button class="btn danger" data-act="live-open-decision" data-task="${t.id}" data-mode="return">整批退回</button><button class="btn primary" data-act="live-open-decision" data-task="${t.id}" data-mode="approve">整批通过</button>`:`<span class="pill idle">${isApproved(t)?'已通过':'没有待审提交'}</span>`);
   return history+`<button class="btn primary" data-act="open-submit" data-task="${t.id}" ${t.submitted||isApproved(t)||!t.lines.length||t.lines.some(l=>!l.confirmationId)?'disabled':''}>${t.submitted?'已提交专家':'整批提交专家'}</button>`;
 }
@@ -2808,6 +2824,7 @@ function liveCheckPanel(l){
   </div>`;
 }
 function liveDetailFooter(role,t,l){
+  if(role==='readonly')return `<div class="dp-ft"><span class="note">当前账号只读，不可修改审核记录</span></div>`;
   if(t.readOnly||role==='supplier'||isApproved(t))return `<div class="dp-ft"><span class="note">${t.readOnly?'旧版本只读回查':isApproved(t)?'任务已通过，编码已归档':'供应商只读查看'}</span></div>`;
   if(role==='expert')return `<div class="dp-ft"><span class="note">${t.submitted?'人工结论保存为整批裁决':'没有待审提交'}</span><div class="dp-ft-actions">${t.submitted?`<button class="btn sm danger" data-act="live-open-decision" data-task="${t.id}" data-line="${l.id}" data-mode="return">退回此商品问题</button><button class="btn sm primary" data-act="live-open-decision" data-task="${t.id}" data-mode="approve">审核整批</button>`:''}</div></div>`;
   if(t.submitted)return `<div class="dp-ft"><span class="note">已提交专家 · 快照编码 <b class="mono">${esc(l.submittedCode||'—')}</b></span></div>`;

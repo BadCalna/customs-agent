@@ -3131,6 +3131,10 @@
             "title": "Id",
             "type": "string"
           },
+          "is_readonly": {
+            "title": "Is Readonly",
+            "type": "boolean"
+          },
           "role": {
             "title": "Role",
             "type": "string"
@@ -3149,7 +3153,8 @@
           "username",
           "display_name",
           "role",
-          "role_label"
+          "role_label",
+          "is_readonly"
         ],
         "title": "SessionOut",
         "type": "object"

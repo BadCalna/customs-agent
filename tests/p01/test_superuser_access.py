@@ -12,6 +12,8 @@ from django.core.exceptions import PermissionDenied
 from django.test import Client, override_settings
 
 from apps.accounts import permissions
+from apps.accounts.models import Role
+from apps.reviews.models import Confirmation
 from apps.reviews.serializers import allowed_actions
 
 from .factories import PASSWORD, make_user
@@ -50,7 +52,43 @@ class SuperuserLoginTests(PermissionFixture):
         body = response.json()
         self.assertEqual(body["username"], "superadmin")
         self.assertEqual(body["role"], "")
-        self.assertEqual(client.get("/api/v1/me").status_code, 200)
+        self.assertIs(body["is_readonly"], True)
+        me = client.get("/api/v1/me")
+        self.assertEqual(me.status_code, 200)
+        self.assertEqual(me.json(), body)
+
+    def test_superuser_with_business_role_keeps_assigned_scope(self):
+        operator = self.operator_a
+        operator.is_superuser = True
+        operator.save(update_fields=["is_superuser"])
+        response = self._login(self.client, operator.username, PASSWORD)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["role"], Role.OPERATOR)
+        self.assertIs(response.json()["is_readonly"], False)
+        tasks = self.client.get("/api/v1/tasks")
+        self.assertEqual(tasks.status_code, 200)
+        self.assertEqual([row["task_id"] for row in tasks.json()["items"]], [str(self.task_a.pk)])
+        self.assertEqual(self.client.get(f"/api/v1/tasks/{self.task_b.pk}").status_code, 404)
+
+    def test_readonly_session_cannot_confirm_with_valid_csrf(self):
+        client = Client(enforce_csrf_checks=True)
+        self.assertEqual(self._login(client, self.superuser.username, PASSWORD).status_code, 200)
+        item = self.item_b
+        version = self.version_b
+        path = f"/api/v1/versions/{version.pk}/items/{item.pk}"
+        self.assertEqual(client.get(path).status_code, 200)
+        revision = item.revision
+        response = client.patch(
+            f"{path}/confirmation",
+            data=json.dumps({"confirmed_hs": "8544422900", "expected_revision": revision}),
+            content_type="application/json",
+            HTTP_X_CSRFTOKEN=client.cookies["csrftoken"].value,
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["error"]["code"], "forbidden")
+        item.refresh_from_db()
+        self.assertEqual(item.revision, revision)
+        self.assertFalse(Confirmation.objects.filter(item=item).exists())
 
     def test_staff_flag_alone_does_not_open_business_login(self):
         staff = make_user("staff_only", "")
