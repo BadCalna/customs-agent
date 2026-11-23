@@ -72,6 +72,20 @@
       "description": "退回时使用：supplier 或 operator",
       "title": "Return To",
       "type": "string"
+    },
+    "revision": {
+      "anyOf": [
+        {
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "当前 Task.revision；兼容旧客户端可省略",
+      "title": "Revision"
     }
   },
   "required": [

@@ -13,6 +13,133 @@
       "title": "Action",
       "type": "string"
     },
+    "HistoryIssue": {
+      "description": "人工问题的确切归属。旧记录无法证明的引用保留 null，不猜测到当前版本。",
+      "properties": {
+        "created_at": {
+          "title": "Created At",
+          "type": "string"
+        },
+        "created_by": {
+          "default": "",
+          "title": "Created By",
+          "type": "string"
+        },
+        "decision_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Decision Id"
+        },
+        "issue_id": {
+          "title": "Issue Id",
+          "type": "string"
+        },
+        "item_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Item Id"
+        },
+        "kind": {
+          "title": "Kind",
+          "type": "string"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "return_to": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Return To"
+        },
+        "run_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Run Id"
+        },
+        "source_location": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SourceLocation"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "status": {
+          "title": "Status",
+          "type": "string"
+        },
+        "submission_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Submission Id"
+        },
+        "task_id": {
+          "title": "Task Id",
+          "type": "string"
+        },
+        "version_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Version Id"
+        }
+      },
+      "required": [
+        "issue_id",
+        "task_id",
+        "kind",
+        "message",
+        "status",
+        "created_at"
+      ],
+      "title": "HistoryIssue",
+      "type": "object"
+    },
     "ResultMode": {
       "description": "结果来源模式。mock 结果必须在页面上可识别，不冒充真实引擎结论。",
       "enum": [
@@ -41,6 +168,31 @@
       ],
       "title": "RunStatus",
       "type": "string"
+    },
+    "SourceLocation": {
+      "description": "商品行在原 Excel 中的位置；行号为 1 起始。",
+      "properties": {
+        "cells": {
+          "default": "",
+          "title": "Cells",
+          "type": "string"
+        },
+        "row_number": {
+          "minimum": 1,
+          "title": "Row Number",
+          "type": "integer"
+        },
+        "sheet_name": {
+          "title": "Sheet Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "sheet_name",
+        "row_number"
+      ],
+      "title": "SourceLocation",
+      "type": "object"
     },
     "SubmissionStatus": {
       "enum": [
@@ -200,6 +352,13 @@
     },
     "result_mode": {
       "$ref": "#/$defs/ResultMode"
+    },
+    "review_issues": {
+      "items": {
+        "$ref": "#/$defs/HistoryIssue"
+      },
+      "title": "Review Issues",
+      "type": "array"
     },
     "revision": {
       "title": "Revision",
