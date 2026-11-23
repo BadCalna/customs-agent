@@ -13,6 +13,7 @@ from apps.accounts.permissions import DECIDE, require_action
 
 from ..models import AuditEvent, Decision, DecisionItem, Issue, Submission, Task
 from ..schemas import DecisionLineOut, DecisionOut
+from ..serializers import issue_to_history
 from . import idempotency
 from .confirmations import normalize_hs
 from .submissions import lock_submission
@@ -102,6 +103,12 @@ def decide(user, submission_id: str, payload, idempotency_key: str | None = None
         return replay
 
     _require_active_submission(submission, task)
+    if payload.revision is not None and payload.revision != task.revision:
+        raise ApiError(
+            409, "stale_revision",
+            "任务内容已变化，请刷新后基于最新修订重新审核",
+            {"current_revision": task.revision},
+        )
     if payload.action == Decision.Action.APPROVE:
         if not payload.items:
             raise ApiError(422, "empty_decision", "整批通过必须逐行给出终值")
@@ -141,8 +148,9 @@ def decide(user, submission_id: str, payload, idempotency_key: str | None = None
         issues = _return(user, submission, payload, decision)
         for issue in issues:
             Issue.objects.create(
-                task=task, item_id=issue.item_id if issue.item_id else None,
-                kind="expert_return", message=issue.message, created_by=user,
+                task=task, version=submission.version, submission=submission, decision=decision,
+                item_id=issue.item_id or None,
+                kind="expert_return", message=issue.message.strip(), created_by=user,
             )
         submission.status = Submission.Status.RETURNED
         task.stage = Task.Stage.RETURNED
@@ -158,6 +166,7 @@ def decide(user, submission_id: str, payload, idempotency_key: str | None = None
         details={
             "decision_id": str(decision.pk), "submission_id": str(submission.pk),
             "return_to": decision.return_to,
+            "issue_ids": [str(pk) for pk in decision.issues.values_list("pk", flat=True)],
         },
     )
 
@@ -185,6 +194,9 @@ def decision_to_out(decision, submission, task, replay=False) -> DecisionOut:
         return_to=decision.return_to or None,
         reason=decision.reason,
         items=rows,
+        issues=[issue_to_history(issue) for issue in decision.issues.select_related(
+            "item", "decision", "created_by",
+        ).order_by("created_at", "pk")],
         submission_status=submission.status,
         task_stage=task.stage,
         task_revision=task.revision,

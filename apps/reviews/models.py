@@ -386,7 +386,10 @@ class DecisionItem(FixedInputModel):
 
 
 class Issue(models.Model):
-    """问题记录：可按商品或任务级；技术失败、证据不足、业务待确认分开记录（B09）。"""
+    """问题记录：归属固定版本/提交，不以品名推断跨版本身份（B09、D2）。
+
+    旧数据无法证明归属时保留空值，仅在历史展示；新退回由服务显式填写版本。
+    """
 
     class Status(models.TextChoices):
         OPEN = "open", "未解决"
@@ -394,6 +397,18 @@ class Issue(models.Model):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name="issues", verbose_name="审核任务")
+    version = models.ForeignKey(
+        FileVersion, on_delete=models.PROTECT, null=True, blank=True,
+        related_name="issues", verbose_name="文件版本",
+    )
+    submission = models.ForeignKey(
+        Submission, on_delete=models.PROTECT, null=True, blank=True,
+        related_name="issues", verbose_name="提交快照",
+    )
+    decision = models.ForeignKey(
+        Decision, on_delete=models.PROTECT, null=True, blank=True,
+        related_name="issues", verbose_name="退回决定",
+    )
     item = models.ForeignKey(
         Item, on_delete=models.SET_NULL, null=True, blank=True, related_name="issues", verbose_name="商品行",
     )
@@ -413,6 +428,36 @@ class Issue(models.Model):
         verbose_name = "问题"
         verbose_name_plural = "问题"
         ordering = ["-created_at"]
+
+    def clean(self):
+        decision = _related_or_none(self, "decision")
+        run = _related_or_none(self, "run")
+        if decision is not None:
+            if self.submission_id and self.submission_id != decision.submission_id:
+                raise ValidationError("问题的决定与提交快照不一致。")
+            self.submission = decision.submission
+        if run is not None and run.submission_id:
+            if self.submission_id and self.submission_id != run.submission_id:
+                raise ValidationError("问题的执行与提交快照不一致。")
+            self.submission = run.submission
+
+        submission = _related_or_none(self, "submission")
+        item = _related_or_none(self, "item")
+        versions = [row.version for row in (submission, item, run) if row is not None]
+        version = _related_or_none(self, "version")
+        if version is not None:
+            versions.append(version)
+        if versions:
+            version = versions[0]
+            if any(row.task_id != self.task_id or row.pk != version.pk for row in versions):
+                raise ValidationError("问题的任务、版本、商品、提交与执行必须属于同一版本。")
+            self.version = version
+        if submission is not None and item is not None and not submission.items.filter(item=item).exists():
+            raise ValidationError("问题商品必须属于该提交快照。")
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        return super().save(*args, **kwargs)
 
 
 class AuditEvent(models.Model):

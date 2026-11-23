@@ -11,6 +11,7 @@ from apps.accounts.permissions import RETURN_TASK, get_visible_task, require_act
 
 from ..models import AuditEvent, Issue, Submission, Task
 from ..schemas import TaskReturnOut
+from ..serializers import issue_to_history
 from . import idempotency
 from .submissions import _get_version
 
@@ -65,8 +66,8 @@ def return_version(user, task_id: str, payload, idempotency_key: str | None = No
                 {"item_id": issue.item_id},
             )
         rows.append(Issue.objects.create(
-            task=task, item_id=issue.item_id or None,
-            kind="operator_return", message=issue.message, created_by=user,
+            task=task, version=version, item_id=issue.item_id or None,
+            kind="operator_return", message=issue.message.strip(), created_by=user,
         ))
 
     task.stage = Task.Stage.RETURNED
@@ -84,7 +85,8 @@ def return_version(user, task_id: str, payload, idempotency_key: str | None = No
     response = TaskReturnOut(
         task_id=str(task.pk), version_id=str(version.pk),
         stage=task.stage, task_revision=task.revision,
-        issue_ids=[str(row.pk) for row in rows], idempotent_replay=False,
+        issue_ids=[str(row.pk) for row in rows],
+        issues=[issue_to_history(row) for row in rows], idempotent_replay=False,
     ).model_dump(mode="json")
     idempotency.store(user, ACTION, idempotency_key, payload, response, target_id=str(task.pk))
     return response

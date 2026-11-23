@@ -66,25 +66,39 @@ def _mentions_target(value, target_id: str) -> bool:
 
 def _matches(record, payload, target_id: str) -> bool:
     normalized = _json_payload(payload)
-    if record.request_hash == request_hash(normalized, target_id):
-        return True
+    candidates = [normalized]
+    # DecisionIn 新增了可选 revision 字段（默认 None）；未传 revision 时需兼容升级前无该键的旧指纹。
+    if (
+        record.action == "decision.resolve"
+        and isinstance(normalized, Mapping)
+        and "revision" in normalized
+        and normalized["revision"] is None
+    ):
+        candidates.append({key: value for key, value in normalized.items() if key != "revision"})
 
-    # main 曾使用动作专属的目标包装；只识别实际发布过的形状，不做泛化猜测。
-    legacy_bound = None
-    if record.action in {"submission.create", "task.return"} and isinstance(normalized, Mapping):
-        legacy_bound = {"task_id": target_id, **normalized}
-    elif record.action == "decision.resolve":
-        legacy_bound = {"submission_id": target_id, "decision": normalized}
-    if legacy_bound is not None and record.request_hash == legacy_request_hash(legacy_bound):
-        return True
+    for candidate in candidates:
+        if record.request_hash == request_hash(candidate, target_id):
+            return True
 
-    if record.request_hash != legacy_request_hash(normalized):
-        return False
-    # 创建动作尚无既有目标（target_id=""）时可按原请求重放；其它动作必须能
-    # 从旧请求或已保存响应证明仍是同一个对象，否则要求换新幂等键。
-    return not target_id or _mentions_target(normalized, target_id) or _mentions_target(
-        record.response, target_id
-    )
+        # main 曾使用动作专属的目标包装；只识别实际发布过的形状，不做泛化猜测。
+        legacy_bound = None
+        if record.action in {"submission.create", "task.return"} and isinstance(candidate, Mapping):
+            legacy_bound = {"task_id": target_id, **candidate}
+        elif record.action == "decision.resolve":
+            legacy_bound = {"submission_id": target_id, "decision": candidate}
+        if legacy_bound is not None and record.request_hash == legacy_request_hash(legacy_bound):
+            return True
+
+        if record.request_hash == legacy_request_hash(candidate):
+            # 创建动作尚无既有目标（target_id=""）时可按原请求重放；其它动作必须能
+            # 从旧请求或已保存响应证明仍是同一个对象，否则要求换新幂等键。
+            if (
+                not target_id
+                or _mentions_target(candidate, target_id)
+                or _mentions_target(record.response, target_id)
+            ):
+                return True
+    return False
 
 
 def _replay(record, payload, target_id: str, *, migrate: bool) -> dict:

@@ -58,7 +58,7 @@ def login(browser, username):
     context = browser.new_context(viewport={'width': 1536, 'height': 1100})
     page = context.new_page()
     page.on('pageerror', lambda error: errors.append(str(error)))
-    page.goto(BASE + '/')
+    page.goto(BASE + '/workbench/')
     page.wait_for_load_state('networkidle')
     page.fill('#live-username', username)
     page.fill('#live-password', os.environ['WORKBENCH_DEMO_PASSWORD'])
@@ -68,7 +68,7 @@ def login(browser, username):
 
 
 def visit(page, role, task_id, item_id=''):
-    page.goto(f'{BASE}/#/{role}/task/{task_id}' + (f'/{item_id}' if item_id else ''))
+    page.goto(f'{BASE}/workbench/#/{role}/task/{task_id}' + (f'/{item_id}' if item_id else ''))
     ready(page)
 
 
@@ -130,9 +130,9 @@ with sync_playwright() as pw:
         passed('真实会话登录与两批初始状态')
 
         # Changing a hash cannot turn an operator into an expert.
-        operator.goto(BASE + '/#/expert/queue')
+        operator.goto(BASE + '/workbench/#/expert/queue')
         ready(operator)
-        expect(operator).to_have_url(BASE + '/#/business/overview')
+        expect(operator).to_have_url(BASE + '/workbench/#/business/overview')
         passed('登录角色约束，路由不能冒充专家')
 
         visit(operator, 'business', APPROVE, A_ITEMS[2])
@@ -297,7 +297,7 @@ with sync_playwright() as pw:
         assert issue['source_location']['row_number'] == 5
         expert.locator(f'[data-issue-id="{issue["issue_id"]}"] [data-act="live-locate"]').click()
         ready(expert)
-        expect(expert).to_have_url(f'{BASE}/#/expert/task/{RETURN}/{R_ITEMS[0]}?version={R_V2}')
+        expect(expert).to_have_url(f'{BASE}/workbench/#/expert/task/{RETURN}/{R_ITEMS[0]}?version={R_V2}')
         expect(expert.locator('[role="tabpanel"]')).to_contain_text('9026900090')
         expect(expert.locator('#line-table tbody tr').nth(1)).to_contain_text('整批已退回')
         expect(expert.locator('#line-table')).not_to_contain_text('待审核')
@@ -308,7 +308,7 @@ with sync_playwright() as pw:
         old_issue = next(i for i in history_r['issues'] if i['version_id'] == R_V1)
         expert.locator(f'[data-issue-id="{old_issue["issue_id"]}"] [data-act="live-locate"]').click()
         ready(expert)
-        expect(expert).to_have_url(f'{BASE}/#/expert/task/{RETURN}/{OLD_ITEM}?version={R_V1}')
+        expect(expert).to_have_url(f'{BASE}/workbench/#/expert/task/{RETURN}/{OLD_ITEM}?version={R_V1}')
         expect(expert.locator('[role="tabpanel"]')).to_contain_text('9026809000')
         expect(expert.locator('.content')).to_contain_text('此版本只读')
         expect(expert.locator('[data-act="live-open-decision"]')).to_have_count(0)

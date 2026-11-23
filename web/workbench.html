@@ -7,7 +7,7 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%230E4B4F'/%3E%3Cpath d='M4 5h6M4 8h8M4 11h4' stroke='%23F5F1E8' stroke-width='1.2' stroke-linecap='round'/%3E%3C/svg%3E">
 <style>
 /* ============================================================
-   关务预审工作台 v2 · 「海关账册」视觉
+   关务审核工作台 v2 · 「海关账册」视觉
    暖纸底 / 深青主色 / 朱砂·金·玉语义 / 衬线标题 + 等宽编码
    口径：R14 上传解析后自动预审；R13 提交后自动专家核查
    ============================================================ */
@@ -135,10 +135,12 @@ table{border-collapse:collapse;width:100%}
 .rail-foot{border-top:1px solid var(--line-soft);padding:12px}
 .role-chip{display:flex;align-items:center;gap:10px;width:100%;padding:9px;border-radius:var(--r);text-align:left;transition:.13s}
 .role-chip:hover{background:var(--surface-3)}
+.role-chip.is-static{cursor:default}
+.role-chip.is-static:hover{background:none}
 .avatar{width:32px;height:32px;flex:none;border-radius:50%;display:grid;place-items:center;background:var(--teal);color:#F5F1E8;font-size:12px;font-weight:600;font-family:var(--serif)}
-.role-chip-meta{min-width:0}
-.role-chip-name{font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.role-chip-role{font-size:10.5px;color:var(--ink-4)}
+.role-chip-meta{min-width:0;flex:1;display:flex;flex-direction:column;gap:2px}
+.role-chip-name{display:block;font-size:12.5px;font-weight:600;line-height:1.3;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.role-chip-role{display:block;font-size:11px;line-height:1.3;color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .role-chip .caret{margin-left:auto;color:var(--ink-4);flex:none}
 .main{flex:1;min-width:0;display:flex;flex-direction:column;margin-left:224px}
 .topbar{height:58px;flex:none;background:rgba(252,250,245,.9);backdrop-filter:saturate(160%) blur(10px);border-bottom:1px solid var(--line);display:flex;align-items:center;gap:14px;padding:0 26px;position:sticky;top:0;z-index:30}
@@ -392,8 +394,12 @@ body.prod .upload-grid{grid-template-columns:1fr}
 .dp-sec-hd{display:flex;align-items:center;gap:8px;margin-bottom:10px}
 .dp-sec-hd h3{font-size:11px;font-weight:700;color:var(--ink-3);letter-spacing:.06em}
 .dp-sec-hd .r{margin-left:auto;font-size:11px;color:var(--ink-4)}
-.dp-ft{position:sticky;bottom:0;background:var(--surface);border-top:1px solid var(--line);padding:12px 16px;display:flex;align-items:center;gap:9px;z-index:3;border-radius:0 0 var(--r) var(--r)}
-.dp-ft .note{margin-right:auto;font-size:11px;color:var(--ink-4);display:flex;align-items:center;gap:6px}
+.dp-ft{position:sticky;bottom:0;background:var(--surface);border-top:1px solid var(--line);padding:11px 16px;display:flex;align-items:center;justify-content:space-between;gap:8px 10px;z-index:3;border-radius:0 0 var(--r) var(--r);flex-wrap:wrap}
+.dp-ft .note{margin-right:auto;font-size:11.5px;color:var(--ink-3);display:flex;align-items:center;gap:6px;min-width:0}
+.dp-ft-stack{flex-direction:column;align-items:stretch;gap:9px}
+.dp-ft-stack .note{margin-right:0}
+.dp-ft-actions{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.dp-ft:not(.dp-ft-stack) .dp-ft-actions{margin-left:auto}
 
 /* ---------- 对比块 ---------- */
 .cmp{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--line);background:var(--surface);border-radius:var(--r);overflow:hidden}
@@ -443,12 +449,13 @@ body.prod .upload-grid{grid-template-columns:1fr}
 .issue.stop{border-color:var(--cinnabar-line);background:var(--cinnabar-bg)}
 
 /* ---------- 表单 ---------- */
-.field{margin-bottom:13px}
-.field > label,.field > .lb{display:block;font-size:11px;color:var(--ink-3);margin-bottom:6px;letter-spacing:.02em;font-weight:500}
-.field .hint{margin-top:5px;font-size:10.5px;color:var(--ink-4);line-height:1.5}
-.input,.select,.textarea{width:100%;border:1px solid var(--line-strong);border-radius:var(--r);background:var(--surface);padding:7px 10px;font-size:12.5px;color:var(--ink);height:32px;transition:.14s}
-.textarea{height:auto;min-height:68px;resize:vertical;line-height:1.6}
-.input.mono{font-family:var(--mono);letter-spacing:.02em}
+.field{display:block;margin-bottom:14px}
+.field:last-child{margin-bottom:0}
+.field > label,.field > .lb{display:block;font-size:11.5px;color:var(--ink-2);margin-bottom:6px;letter-spacing:.01em;font-weight:600}
+.field .hint{margin-top:5px;font-size:11px;color:var(--ink-4);line-height:1.5}
+.input,.select,.textarea{display:block;width:100%;border:1px solid var(--line-strong);border-radius:var(--r);background:var(--surface);padding:7px 11px;font-size:13px;color:var(--ink);height:36px;transition:.14s}
+.textarea{height:auto;min-height:76px;resize:vertical;line-height:1.6}
+.input.mono{font-family:var(--mono);letter-spacing:.03em}
 .input:focus,.select:focus,.textarea:focus{outline:none;border-color:var(--teal-3);box-shadow:0 0 0 3px var(--teal-bg)}
 .select{appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='M3 4.5 6 7.5 9 4.5' fill='none' stroke='%236E7D74' stroke-width='1.2' stroke-linecap='round'/></svg>");background-repeat:no-repeat;background-position:right 10px center;padding-right:28px}
 .radio{display:flex;gap:7px;flex-wrap:wrap}
@@ -499,7 +506,7 @@ body.prod .upload-grid{grid-template-columns:1fr}
 @keyframes fade{from{opacity:0}to{opacity:1}}
 .modal{background:var(--overlay);border:1px solid var(--line);border-radius:var(--r-l);box-shadow:var(--sh-pop);width:min(540px,100%);max-height:calc(100vh - 48px);display:flex;flex-direction:column;animation:rise .2s cubic-bezier(.2,.8,.3,1)}
 @keyframes rise{from{transform:translateY(10px);opacity:.5}to{transform:none;opacity:1}}
-.modal.wide{width:min(720px,100%)}
+.modal.wide{width:min(840px,100%)}
 .modal-hd{padding:17px 20px;border-bottom:1px solid var(--line);display:flex;align-items:flex-start;gap:12px}
 .modal-hd h2{font-family:var(--serif);font-size:16px;font-weight:700;color:var(--ink)}
 .modal-hd p{margin-top:4px;font-size:11.5px;color:var(--ink-3)}
@@ -536,11 +543,6 @@ body.prod .upload-grid{grid-template-columns:1fr}
 .phase-step.done,.phase-step.active{color:var(--ink-2)}
 .phase-step::after{content:"";flex:1;height:1px;background:var(--line);margin:0 4px}
 .phase-step:last-child::after{display:none}
-.ai-thinking-banner{display:flex;align-items:center;gap:9px;padding:9px 12px;margin-bottom:14px;border:1px solid var(--teal-line);border-radius:var(--r);background:var(--teal-bg);color:var(--teal)}
-.ai-thinking-mark{width:8px;height:8px;display:block;flex:none;border-radius:50%;background:var(--teal-3);animation:ai-pulse 1.2s ease-in-out infinite}
-.ai-thinking-banner strong{font-size:12px;font-weight:600}
-@keyframes ai-pulse{0%,100%{opacity:.35;transform:scale(.8)}50%{opacity:1;transform:scale(1)}}
-@media (prefers-reduced-motion:reduce){.ai-thinking-mark{animation:none}}
 
 /* ---------- 杂项 ---------- */
 .empty{padding:36px 16px;text-align:center;font-size:12px;color:var(--ink-4)}
@@ -606,6 +608,72 @@ body.prod .upload-grid{grid-template-columns:1fr}
   .dp-ft{flex-wrap:wrap}
   .dp-ft .note{width:100%;margin-bottom:2px}
 }
+.back-bar{margin-bottom:8px;display:flex;align-items:center;gap:10px}
+.back-link{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--ink-3);padding:3px 8px 3px 4px;border-radius:var(--r);transition:.13s}
+.back-link:hover{background:var(--surface-3);color:var(--teal);text-decoration:none}
+.login-shell{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;position:relative;z-index:1}
+.login-card{width:min(440px,100%);background:var(--surface);border:1px solid var(--line);border-radius:var(--r-l);box-shadow:var(--sh-pop);overflow:hidden}
+.login-card-hd{padding:22px 24px 18px;border-bottom:1px solid var(--line-soft);background:var(--surface-2)}
+.login-card-hd h1{font-family:var(--serif);font-size:19px;font-weight:700;color:var(--ink);margin-top:10px}
+.login-card-hd p{margin-top:5px;font-size:12px;color:var(--ink-3)}
+.login-card-bd{padding:22px 24px 24px}
+.decision-card{border:1px solid var(--line);border-radius:var(--r);background:var(--surface-2);padding:12px 14px}
+.decision-card-hd{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+.code-ctx{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:14px}
+.code-ctx-item{border:1px solid var(--line-soft);border-radius:var(--r);background:var(--surface-2);padding:8px 10px}
+.code-ctx-item span{display:block;font-size:10.5px;color:var(--ink-4)}
+.code-ctx-item b{display:block;margin-top:3px;font-family:var(--mono);font-size:13px;color:var(--ink)}
+.issue-card{border:1px solid var(--cinnabar-line);border-radius:var(--r);background:var(--cinnabar-bg);padding:11px 13px}
+.issue-card + .issue-card{margin-top:8px}
+.issue-card.is-hist{border-color:var(--line);background:var(--surface-2)}
+.issue-card-hd{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px}
+.issue-card-msg{margin-top:6px;font-size:12.5px;color:var(--ink);line-height:1.6}
+.issue-card-ft{margin-top:8px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.stage-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.stage-card{border:1px solid var(--line);background:var(--surface-2);border-radius:var(--r);padding:10px 12px;min-width:0}
+.stage-card.is-full{grid-column:1/-1}
+.stage-card.is-active{border-color:var(--teal-line);background:var(--teal-bg)}
+.stage-card-k{font-size:11px;color:var(--ink-3);display:flex;align-items:center;justify-content:space-between;gap:6px}
+.stage-card-v{margin-top:5px;font-family:var(--mono);font-size:16px;font-weight:600;color:var(--ink);letter-spacing:.01em}
+.stage-card-v.empty{font-family:var(--sans);font-size:12px;font-weight:400;color:var(--ink-4)}
+.stage-card-meta{margin-top:6px;font-size:11.5px;color:var(--ink-2);line-height:1.5;border-top:1px dashed var(--line);padding-top:6px}
+.stage-card-meta .meta-row{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center;font-size:11px;color:var(--ink-3)}
+.ai-box{border:1px solid var(--line);border-radius:var(--r);padding:11px 12px;background:var(--surface-2);font-size:12px;color:var(--ink-2)}
+.ai-box-hd{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.ai-box-empty{margin-top:6px;font-size:11.5px;color:var(--ink-3);display:flex;align-items:center;gap:6px}
+.trace-group{border:1px solid var(--line-soft);border-radius:var(--r);background:var(--surface-2);padding:9px 11px;font-size:11px}
+.trace-group-title{font-size:10.5px;font-weight:600;color:var(--ink-3);letter-spacing:.04em;margin-bottom:6px}
+.trace-row{display:flex;align-items:center;gap:8px;padding:3px 0;min-width:0}
+.trace-row + .trace-row{border-top:1px dashed var(--line-soft)}
+.trace-k{color:var(--ink-4);flex:none;width:72px}
+.trace-v{font-family:var(--mono);font-size:10.5px;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0}
+.copy-btn{font-size:10.5px;color:var(--teal-2);padding:1px 6px;border:1px solid var(--teal-line);border-radius:3px;background:var(--surface);flex:none}
+.copy-btn:hover{background:var(--teal-bg)}
+.trace-details{margin-top:8px;border:1px solid var(--line-soft);border-radius:var(--r);background:var(--surface-2);padding:6px 10px;font-size:11px}
+.trace-details summary{cursor:pointer;color:var(--ink-3);font-size:11px;user-select:none}
+.trace-details[open] summary{margin-bottom:6px;color:var(--teal)}
+.scope-bar{display:flex;align-items:center;gap:6px;margin-bottom:12px;flex-wrap:wrap}
+.scope-pill{display:inline-flex;align-items:center;font-size:10px;font-weight:600;padding:1px 6px;border-radius:3px;border:1px solid var(--line);background:var(--surface-2);color:var(--ink-3);white-space:nowrap}
+.scope-pill.is-item{color:var(--teal);background:var(--teal-bg);border-color:var(--teal-line)}
+.scope-pill.is-batch{color:var(--gold);background:var(--gold-bg);border-color:var(--gold-line)}
+.log-card{border:1px solid var(--line-soft);border-radius:var(--r);background:var(--surface-2);padding:10px 12px}
+.log-card + .log-card{margin-top:8px}
+.log-card-hd{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.log-act{font-size:12.5px;font-weight:600;color:var(--ink)}
+.log-code{font-family:var(--mono);font-size:10px;color:var(--ink-4);background:var(--surface);border:1px solid var(--line-soft);border-radius:3px;padding:0 5px}
+.log-change{margin-top:6px;font-family:var(--mono);font-size:12px;color:var(--teal);background:var(--surface);border:1px solid var(--line-soft);border-radius:4px;padding:4px 8px;display:inline-block}
+.log-reason{margin-top:6px;font-size:12px;color:var(--ink-2);line-height:1.55}
+.log-reason b{color:var(--ink-3);font-weight:600}
+.img-box{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px dashed var(--line-strong);border-radius:var(--r);background:var(--surface-2);font-size:12px;color:var(--ink-3)}
+.img-box.is-fail{border-color:var(--cinnabar-line);background:var(--cinnabar-bg);color:var(--cinnabar)}
+.img-box.is-ok{border-style:solid;border-color:var(--teal-line);background:var(--teal-bg);color:var(--teal)}
+.img-box .ic{flex:none}
+.hist-ver{border:1px solid var(--line);border-radius:var(--r);background:var(--surface);overflow:hidden}
+.hist-ver-hd{display:flex;align-items:center;gap:10px;padding:11px 14px;background:var(--surface-2);border-bottom:1px solid var(--line-soft);flex-wrap:wrap}
+.hist-ver-bd{padding:12px 14px;display:flex;flex-direction:column;gap:10px}
+.hist-sub{border:1px solid var(--line-soft);border-radius:var(--r);background:var(--surface-2);padding:10px 12px}
+.hist-sub-hd{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;font-size:12px}
+.diff-hl{background:var(--gold-bg);color:var(--gold);padding:1px 5px;border-radius:3px;font-weight:600}
 @media print{.rail,.topbar,.dp-ft,.hd-actions{display:none}.main{margin-left:0}}
 </style>
 </head>
@@ -613,12 +681,13 @@ body.prod .upload-grid{grid-template-columns:1fr}
 <div id="root"></div>
 <div id="modal-root"></div>
 <div id="toast"></div>
-<script>
+<script type="module">
+import {createClient, ApiError} from "/workbench/assets/api.js";
 /* =========================================================================
-   关务预审工作台 v2 · 交互原型
+   关务审核工作台 v2 · 交互原型
    口径：R14 上传解析完成后自动预审（保留手动重审/重试）；
         R13 业务员提交后自动触发专家 AI 核查。
-   仅前端交互演示，不接后端；文件解析、归类与核查结果均为预置演示数据。
+   LIVE 默认使用真实会话与 P09/P10；DEMO 仅供本地交互，FIXTURE 只读。
    ========================================================================= */
 
 /* ---------------------------- 图标 ---------------------------- */
@@ -960,8 +1029,19 @@ function seed(){
 }
 
 /* ---------------------------- 状态 ---------------------------- */
-let S = seed();
+const LIVE=detectMode()==='live';
+const API=createClient({mode:'live'});
+const defaultUi=()=>({tab:'hs',task:null,filter:'all',query:'',sort:null,selected:[],collapsed:[],logScope:'item'});
+const WB={user:null,loading:LIVE,pending:false,error:'',stale:false,keys:new Map(),lastRouteKey:'',lastListRoute:'',pendingTab:'',lastUserId:''};
+window.WB_MODE=detectMode();
+let S = LIVE ? {role:null,ui:defaultUi(),tasks:[],evidence:{}} : seed();
 let UNDO = null;
+function preserveScroll(fn){
+  const y=window.scrollY, dp=$('#detail-panel'), dpY=dp?dp.scrollTop:0;
+  fn();
+  window.scrollTo(0,y);
+  const dp2=$('#detail-panel');if(dp2)dp2.scrollTop=dpY;
+}
 
 /* ---------------------------- 工具 ---------------------------- */
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -969,7 +1049,7 @@ const $ = sel => document.querySelector(sel);
 const now = () => { const d=new Date(),p=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`; };
 const task = id => S.tasks.find(t => t.id === id);
 const line = (t, id) => t.lines.find(l => l.id === id);
-const curVersion = t => t.versions[t.versions.length - 1].v;
+const curVersion = t => t.viewNumber || t.versions[t.versions.length - 1]?.v || '—';
 const isApproved = t => !!t.approvedAt;
 function counts(t){
   const total=t.lines.length;
@@ -979,7 +1059,12 @@ function counts(t){
   return {total,pass,returned,unsure,left:total-pass-returned};
 }
 function taskStage(t){
+  if(LIVE){
+    const stages={uploaded:['已上传','idle'],prechecking:['自动预审中','idle'],awaiting_confirmation:['待业务员确认','gold'],submitted:['待专家审核','teal'],approved:['专家已确认','jade'],returned:['已退回 · 待整改','cinnabar']};
+    const [label,tone]=stages[t.stage]||['未知阶段','idle'];return {key:t.stage,label,tone};
+  }
   if(isApproved(t)) return {key:'done',label:'专家已确认',tone:'jade'};
+  if(LIVE&&t.stage==='returned') return {key:'returned',label:'已退回 · 待整改',tone:'cinnabar'};
   if(t.submitted) return {key:'expert',label:'待专家审核',tone:'teal'};
   if(t.prechecked) return {key:'business',label:counts(t).unsure?'待业务员处理':'可提交专家',tone:counts(t).unsure?'gold':'teal'};
   return {key:'precheck',label:'自动预审中',tone:'idle'};
@@ -987,7 +1072,7 @@ function taskStage(t){
 function lineState(l, role){
   const expert = role==='expert';
   if(l.expert&&l.expert.result==='pass') return {key:'pass',label:'已通过',tone:'jade'};
-  if(l.expert&&l.expert.result==='return') return {key:'return',label:'已退回',tone:'cinnabar'};
+  if(l.expert&&l.expert.result==='return') return {key:'return',label:l.expert.batchReturn?'整批已退回':'已退回',tone:'cinnabar'};
   if(l.decision&&!l.decision.code) return {key:'sup',label:'待补料',tone:'gold'};
   if(l.decision&&l.decision.code) return {key:'ready',label:expert?'待审核':'已确认',tone:expert?'teal':'jade'};
   if(!l.verdict) return {key:'none',label:'待预审',tone:'idle'};
@@ -1004,13 +1089,31 @@ const confHtml = (c,label='预审') => {
 
 /* ---------------------------- 路由 ---------------------------- */
 function parseRoute(){
-  const raw = location.hash.replace(/^#\/?/,'') || '';
-  const [seg,a,b,c] = raw.split('/');
-  return {seg:seg||'',a:a||'',b:b||'',c:c||''};
+  const [raw,query=''] = location.hash.replace(/^#\/?/,'').split('?');
+  const [seg,a,b,c] = (raw||'').split('/');
+  return {seg:seg||'',a:a||'',b:b||'',c:c||'',version:new URLSearchParams(query).get('version')||''};
 }
+function routeScopeKey(r){return [r.seg,r.a,r.b,r.version].join('|');}
 function go(path){ location.hash = '#/' + path; }
-window.addEventListener('hashchange', () => { closeModal(); render(); window.scrollTo({top:0}); });
+window.addEventListener('hashchange', () => {
+  const r=parseRoute(), key=routeScopeKey(r), sameScope=key===WB.lastRouteKey;
+  if(!sameScope){closeModal();window.scrollTo({top:0});}
+  if(LIVE&&WB.user){
+    const curTask=r.a==='task'&&r.b?task(r.b):null;
+    const targetVid=curTask?(r.version||curTask.currentVersionId):'';
+    if(sameScope&&curTask&&curTask.viewVersionId===targetVid&&(!r.c||line(curTask,r.c))){
+      preserveScroll(()=>render());
+      return;
+    }
+    void refreshLiveRoute();
+  }else if(sameScope){
+    preserveScroll(()=>render());
+  }else{
+    render();
+  }
+});
 function roleOf(){
+  if(LIVE)return WB.user?({operator:'business',expert:'expert',supplier:'supplier'}[WB.user.role]||null):null;
   const r = parseRoute();
   if(r.seg==='supplier'||r.seg==='business'||r.seg==='expert') return r.seg;
   return S.role;
@@ -1119,7 +1222,7 @@ function viewGate(){
 function navFor(role){
   const pending = S.tasks.filter(t=>!isApproved(t)).length;
   if(role==='supplier') return [
-    {id:'tasks',label:'上传与补充',icon:'upload'}
+    {id:'tasks',label:LIVE?'任务与退回问题':'上传与补充',icon:'upload'}
   ];
   if(role==='business') return [
     {id:'overview',label:'待我确认',icon:'table'},
@@ -1127,11 +1230,13 @@ function navFor(role){
   ];
   return [
     {id:'queue',label:'待我审核',icon:'shield',count:S.tasks.filter(t=>t.submitted&&!isApproved(t)).length||null},
-    {id:'archive',label:'已确认任务',icon:'checkCircle'}
+    ...(LIVE?[{id:'returned',label:'已退回任务',icon:'arrowL',count:S.tasks.filter(t=>t.stage==='returned').length||null}]:[]),
+    {id:'archive',label:'已确认任务',icon:'checkCircle',count:LIVE?(S.tasks.filter(isApproved).length||null):null}
   ];
 }
 function shell(role, active, crumbs, body, opts={}){
-  const r=ROLE[role], nav=navFor(role);
+  const r=LIVE?{...ROLE[role],person:WB.user.display_name||WB.user.username}:ROLE[role], nav=navFor(role);
+  const showRef=!LIVE||(WB.user&&WB.user.role==='admin');
   return `<div class="app">
     <aside class="rail">
       <div class="rail-brand">${brandMark(24)}<span class="brand-name">关务预审工作台</span></div>
@@ -1140,17 +1245,21 @@ function shell(role, active, crumbs, body, opts={}){
         ${nav.map(n=>`<a class="rail-link" href="#/${role}/${n.id}" ${active===n.id?'aria-current="page"':''}>
           ${svg(n.icon,15)}<span>${n.label}</span>${n.count?`<span class="count">${n.count}</span>`:''}
         </a>`).join('')}
-        <div class="rail-label">参考</div>
+        ${showRef?`<div class="rail-label">参考</div>
         <span class="rail-link" disabled title="原型未实现">${svg('book',15)}<span>税则与依据库</span></span>
-        <span class="rail-link" disabled title="原型未实现">${svg('log',15)}<span>操作日志</span></span>
+        <span class="rail-link" disabled title="原型未实现">${svg('log',15)}<span>操作日志</span></span>`:''}
       </nav>
       <div class="rail-foot">
-        <button class="role-chip" data-act="open-role-menu" aria-haspopup="menu">
-          <span class="avatar">${r.person.slice(-2)}</span>
-          <span class="role-chip-meta"><span class="role-chip-name">${r.person}</span>
+        ${LIVE?`<div class="role-chip is-static">
+          <span class="avatar">${esc(r.person.slice(-2))}</span>
+          <span class="role-chip-meta"><span class="role-chip-name" title="${esc(r.person)}">${esc(r.person)}</span>
+          <span class="role-chip-role">${role==='supplier'?'供应商账号':role==='business'?'物流部 · 业务员':'关务 · 专家'}</span></span>
+        </div>`:`<button class="role-chip" data-act="open-role-menu" aria-haspopup="menu">
+          <span class="avatar">${esc(r.person.slice(-2))}</span>
+          <span class="role-chip-meta"><span class="role-chip-name" title="${esc(r.person)}">${esc(r.person)}</span>
           <span class="role-chip-role">${role==='supplier'?'供应商账号':role==='business'?'物流部 · 业务员':'关务 · 专家'}</span></span>
           ${svg('chevD',12,'caret')}
-        </button>
+        </button>`}
       </div>
     </aside>
     <div class="main">
@@ -1159,18 +1268,19 @@ function shell(role, active, crumbs, body, opts={}){
           ${crumbs.map((c,i)=>i===crumbs.length-1?`<span class="cur">${esc(c.label)}</span>`:`<a href="${c.href}">${esc(c.label)}</a><span class="sep">/</span>`).join('')}
         </nav>
         <div class="topbar-end">
-          <span class="demo-chip demo-note"><i></i>${modeLabel()}</span>
+          <span class="demo-chip"><i></i>${modeLabel()}</span>
           ${opts.actions||''}
-          <button class="btn sm ghost prod-btn" data-act="toggle-prod" aria-pressed="${!!(S.ui&&S.ui.prod)}" title="切换正式版预览（隐藏演示说明）">${svg(S.ui&&S.ui.prod?'eyeOff':'eye',14)} ${S.ui&&S.ui.prod?'演示版':'正式版预览'}</button>
-          <button class="icon-btn" title="通知（原型未实现）" aria-label="通知">${svg('bell',15)}<span class="dot"></span></button>
-          <button class="icon-btn" data-act="switch-role" title="切换角色" aria-label="切换角色">${svg('users',15)}</button>
+          ${LIVE?`<button class="btn sm" data-act="reload-live">刷新数据</button><button class="btn sm" data-act="logout-live">退出登录</button>`:`<button class="btn sm ghost prod-btn" data-act="toggle-prod">切换预览</button>`}
+          ${LIVE?`<a class="icon-btn" href="/workbench/live/" data-act="open-notifications" title="消息 / 进度 / 导出中心" aria-label="站内消息">${svg('bell',15)}</a>`
+            :`<button class="icon-btn" data-act="open-notifications" title="通知（原型未实现）" aria-label="站内消息">${svg('bell',15)}<span class="dot"></span></button>`}
+          ${LIVE?'':`<button class="icon-btn" data-act="switch-role" title="切换角色" aria-label="切换角色">${svg('users',15)}</button>`}
         </div>
       </header>
-      <div class="content ${opts.wide?'wide':''}">${body}
-        <div class="foot-note demo-note">
+      <div class="content ${opts.wide?'wide':''}">${LIVE?liveFeedback():''}${body}
+        ${LIVE?'':`<div class="foot-note demo-note">
           <span><b>口径</b> R14 上传解析后自动预审 · R13 提交后自动专家核查</span>
-          <span><b>说明</b> 原型仅演示界面与交互，未接后端；解析、归类与核查结果均为预置演示数据</span>
-        </div>
+          <span><b>说明</b> 样例数据不写入业务数据库。</span>
+        </div>`}
       </div>
     </div>
   </div>`;
@@ -1180,18 +1290,38 @@ function shell(role, active, crumbs, body, opts={}){
 function taskCard(t, role){
   const c=counts(t), st=taskStage(t);
   const prog=`<span class="prog"><i class="p-ok" style="width:${c.pass/c.total*100}%"></i><i class="p-stop" style="width:${c.returned/c.total*100}%"></i><i class="p-idle" style="width:${c.left/c.total*100}%"></i></span>`;
+  const upd=LIVE&&t.updatedAtRaw?timeEl(t.updatedAtRaw):esc(t.updatedAt);
   const meta = role==='supplier'
-    ? `<span>${svg('file',11)} 当前 V${curVersion(t)}</span><span>${svg('clock',11)} ${t.updatedAt}</span>`
-    : `<span>${svg('user',11)} ${t.supplier}</span><span>${svg('file',11)} V${curVersion(t)}</span><span>${svg('clock',11)} ${t.updatedAt}</span>`;
+    ? `<span>${svg('file',11)} 当前 V${curVersion(t)}</span><span>${svg('clock',11)} ${upd}</span>`
+    : `<span>${svg('user',11)} ${esc(t.supplier)}</span><span>${svg('file',11)} V${curVersion(t)}</span><span>${svg('clock',11)} ${upd}</span>`;
+  const idLabel=LIVE?`任务 #${esc(t.id.slice(0,8))}`:esc(t.id);
   return `<a class="task" href="#/${role}/task/${t.id}">
-    <span><span class="task-no">${t.id} · ${c.total} 条申报记录</span>
+    <span><span class="task-no" title="${esc(t.id)}">${idLabel} · ${c.total} 条申报记录</span>
     <span class="task-title mono">${esc(t.contract)}</span><span class="task-meta">${meta}</span></span>
     <span class="task-prog">${prog}<b>${c.pass}/${c.total}</b></span>
     <span>${pill(st.tone,st.label)}</span>
-    <span class="task-right"><span class="when">${role==='supplier'?'更新 '+t.updatedAt.slice(5,10):''}</span></span>
+    <span class="task-right"><span class="when">${role==='supplier'?'更新 '+(t.updatedAt?t.updatedAt.slice(5,10):'—'):''}</span></span>
   </a>`;
 }
 function stepBar(t){
+  if(LIVE){
+    const version=t.versions.find(v=>v.version_id===t.viewVersionId);
+    const vHist=t.history?.versions.find(v=>v.version_id===t.viewVersionId);
+    const submissions=vHist?.submissions||[];
+    const submission=submissions.at(-1);
+    const status=submission?.status;
+    const decision=submission?.decisions?.at(-1);
+    const label=status==='approved'?'已通过':status==='returned'?'整批已退回':status==='pending'?'待专家裁决':'尚未提交';
+    const preTime=t.precheckAtRaw?` · ${timeEl(t.precheckAtRaw,true)}`:'';
+    const subTime=submission?.created_at?` · ${timeEl(submission.created_at,true)}`:'';
+    const doneTime=(status==='approved'&&(decision?.created_at||t.approvedAtRaw))?` · ${timeEl(decision?.created_at||t.approvedAtRaw,true)}`:'';
+    return `<div class="steps">
+      <div class="step done"><div class="s-k">01 供应商上传</div><div class="s-v">V${curVersion(t)} · ${version?.atRaw?timeEl(version.atRaw):esc(version?.at||'—')}</div></div>
+      <div class="step ${t.prechecked?'done':'active'}"><div class="s-k">02 自动预审</div><div class="s-v">${t.prechecked?'已完成'+preTime:'尚未完成'}</div></div>
+      <div class="step ${status==='approved'?'done':status?'active':''}"><div class="s-k">03 整批专家裁决</div><div class="s-v">${label}${subTime}</div></div>
+      <div class="step ${status==='approved'?'done':''}"><div class="s-k">04 形成确认版本</div><div class="s-v">${status==='approved'?'已形成专家终值'+doneTime:'尚未形成'}</div></div>
+    </div>`;
+  }
   const s1=t.versions.length?'done':'active';
   const s2=t.prechecked?'auto':(t.versions.length?'active':'');
   const s3=t.submitted?(isApproved(t)?'done':'auto'):'';
@@ -1253,6 +1383,34 @@ function supplementItems(){
   return out;
 }
 function viewSupplierTasks(){
+  if(LIVE){
+    WB.lastListRoute='supplier/tasks';
+    const openForTask=t=>(t.history?.issues||[]).filter(i=>i.kind==='expert_return'&&i.status==='open'&&i.return_to==='supplier'&&i.version_id===t.currentVersionId);
+    const issues=S.tasks.flatMap(openForTask);
+    const need=S.tasks.filter(t=>t.stage==='returned'||openForTask(t).length>0);
+    const done=S.tasks.filter(t=>isApproved(t)&&!need.includes(t));
+    const progress=S.tasks.filter(t=>!need.includes(t)&&!done.includes(t));
+    const groups=[
+      {key:'sup-need',title:'待处理 / 已退回',tone:'cinnabar',tasks:need,defaultOpen:true},
+      {key:'sup-progress',title:'审核进行中',tone:'teal',tasks:progress,defaultOpen:!need.length},
+      {key:'sup-done',title:'专家已确认',tone:'jade',tasks:done,defaultOpen:false},
+    ].filter(g=>g.tasks.length);
+    const toggled=S.ui.collapsed||[];
+    const groupHtml=groups.map(g=>{
+      const isCollapsed=g.defaultOpen?toggled.includes(g.key):!toggled.includes('open:'+g.key);
+      return `<div class="sup-group ${isCollapsed?'collapsed':''}">
+        <div class="sup-group-hd">
+          <button class="sup-toggle" data-act="toggle-sup-group" data-group="${g.key}" data-default-open="${g.defaultOpen?'1':'0'}" aria-expanded="${!isCollapsed}">
+            ${svg('chevD',14,'chev')}
+            <span class="sup-group-title">${esc(g.title)}</span>
+            ${pill(g.tone,g.tasks.length+' 个任务',false)}
+          </button>
+        </div>
+        <div class="sup-group-bd"><div class="task-list">${g.tasks.map(t=>taskCard(t,'supplier')).join('')}</div></div>
+      </div>`;
+    }).join('');
+    return shell('supplier','tasks',[{label:'任务与退回问题'}],`<div class="page-hd"><div><div class="hd-kicker">Supplier Console</div><h1>任务与退回问题</h1><p class="sub">${S.tasks.length} 个可见任务 · 当前版本 ${issues.length} 条待供应商处理的专家退回问题。</p></div></div>${groups.length?groupHtml:'<div class="panel"><div class="empty">当前账号没有可见任务</div></div>'}`);
+  }
   // 按任务（合同）分组
   const groups=[];
   S.tasks.forEach(t=>{
@@ -1317,6 +1475,7 @@ function viewSupplierTasks(){
   return shell('supplier','tasks',[{label:'上传与补充'}],body);
 }
 function viewSupplierTask(t){
+  if(LIVE)return viewTask('supplier',t,parseRoute().c||'');
   const c=counts(t), st=taskStage(t), issues=[];
   t.lines.forEach(l=>{
     if(l.verdict==='missing') issues.push({tone:'warn',title:`${l.name}（项 ${l.no}）未填海关编码`,meta:[l.position,'需补充：海关编码、关键参数']});
@@ -1366,6 +1525,7 @@ function viewSupplierTask(t){
 
 /* ---------------------------- 业务员 ---------------------------- */
 function viewBusinessOverview(){
+  WB.lastListRoute='business/overview';
   // 按合同分组：只列需要业务员确认的批次
   const groups=[];
   S.tasks.forEach(t=>{
@@ -1377,11 +1537,11 @@ function viewBusinessOverview(){
   const body=`
     <div class="page-hd">
       <div><div class="hd-kicker">Business Console</div><h1>待我确认</h1>
-      <p class="sub">自动预审已完成。你只需<b>确认差异编码</b>（不一致 / 无法确认 / 未填），然后<b>提交专家</b>。一致项可在提交时自动沿用。</p></div>
-      <div class="hd-actions"><button class="btn" data-act="switch-role">${svg('users',14)} 切换角色</button></div>
+      ${LIVE?'':`<p class="sub">自动预审已完成。确认差异编码后提交专家。</p>`}</div>
+      ${LIVE?'':`<div class="hd-actions"><button class="btn" data-act="switch-role">${svg('users',14)} 切换角色</button></div>`}
     </div>
     <div class="sect" style="margin-top:0">
-      <div class="sect-hd"><h2>待确认批次</h2><span class="hint">${total?`${total} 处差异 · ${groups.length} 个合同`:'无待确认差异'}</span></div>
+      <div class="sect-hd"><h2>待确认批次</h2>${LIVE?'':`<span class="hint">${total?`${total} 处差异 · ${groups.length} 个合同`:'无待确认差异'}</span>`}</div>
       ${groups.length?groups.map(g=>{const collapsed=(S.ui.collapsed||[]).includes('biz-'+g.t.id);const unconf=g.t.lines.filter(l=>!l.decision).length;return `
         <div class="sup-group ${collapsed?'collapsed':''}">
           <div class="sup-group-hd">
@@ -1389,7 +1549,7 @@ function viewBusinessOverview(){
               ${svg('chevD',14,'chev')}
               <span style="min-width:0">
                 <span class="sup-group-title mono">${esc(g.t.contract)}</span>
-                <span class="sup-group-meta" style="display:block">${g.t.id} · ${unconf?`还有 ${unconf} 条待确认`:'已全部确认'}</span>
+                <span class="sup-group-meta" style="display:block">${LIVE?`V${curVersion(g.t)} · ${g.t.lines.length} 条商品`:esc(g.t.id)} · ${unconf?`还有 ${unconf} 条待确认`:'已全部确认'}</span>
               </span>
             </button>
             <span style="display:flex;gap:8px;margin-left:auto;flex:none">
@@ -1408,7 +1568,7 @@ function viewBusinessOverview(){
                 </span>
                 <span class="biz-why">${esc(l.aiGap||VERDICT[l.verdict].note)}</span>
               </button>`).join('')
-            :unconf?`<div class="biz-allmatch" style="color:var(--gold)">${svg('alert',14)} 还有 ${unconf} 条一致项待确认，可在工作台批量确认后提交。</div>`
+            :unconf?`<div class="biz-allmatch" style="color:var(--gold)">${svg('alert',14)} 还有 ${unconf} 条一致项待确认，请在任务详情中逐行确认后提交。</div>`
             :`<div class="biz-allmatch">${svg('checkCircle',14)} 全部已确认，可提交专家。</div>`}
           </div>
         </div>`;}).join('')
@@ -1417,26 +1577,28 @@ function viewBusinessOverview(){
   return shell('business','overview',[{label:'待我确认'}],body);
 }
 function viewBusinessTasks(){
+  WB.lastListRoute='business/tasks';
   const body=`
     <div class="page-hd"><div><div class="hd-kicker">Business Console</div><h1>审核任务</h1>
-    <p class="sub">一个任务对应一份供应商文件，可含多个版本。点击任务进入逐条审核。</p></div></div>
+    ${LIVE?'':`<p class="sub">一个任务对应一份供应商文件，可含多个版本。点击任务进入逐条审核。</p>`}</div></div>
     <div class="panel"><div class="tbl-wrap"><table class="tbl">
-      <thead><tr><th style="width:150px">任务</th><th>合同 / 供应商</th><th style="width:100px">当前版本</th><th style="width:170px">商品进度</th><th style="width:120px">待确认</th><th style="width:130px">阶段</th><th style="width:130px">更新</th></tr></thead>
+      <thead><tr><th style="width:120px">任务</th><th>合同 / 供应商</th><th style="width:90px">当前版本</th><th style="width:170px">商品进度</th><th style="width:110px">待确认</th><th style="width:130px">阶段</th><th style="width:140px">更新</th></tr></thead>
       <tbody>${S.tasks.map(t=>{const c=counts(t),st=taskStage(t);const flagged=t.lines.filter(l=>l.verdict&&!l.decision).length;
         return `<tr tabindex="0" data-act="open-task" data-task="${t.id}">
-        <td class="mono">${t.id}</td>
+        <td class="mono" title="${esc(t.id)}">${LIVE?'#'+esc(t.id.slice(0,8)):esc(t.id)}</td>
         <td><span class="name">${esc(t.contract)}</span><span class="alias">${esc(t.supplier)}</span></td>
         <td class="mono">V${curVersion(t)}</td>
-        <td><div class="task-prog"><span class="prog"><i class="p-ok" style="width:${c.pass/c.total*100}%"></i><i class="p-stop" style="width:${c.returned/c.total*100}%"></i><i class="p-idle" style="width:${c.left/c.total*100}%"></i></span><b>${c.pass}/${c.total}</b></div></td>
+        <td><div class="task-prog"><span class="prog"><i class="p-ok" style="width:${c.total?c.pass/c.total*100:0}%"></i><i class="p-stop" style="width:${c.total?c.returned/c.total*100:0}%"></i><i class="p-idle" style="width:${c.total?c.left/c.total*100:0}%"></i></span><b>${c.pass}/${c.total}</b></div></td>
         <td>${flagged?`<span class="pill gold"><i></i>${flagged} 条</span>`:`<span class="dim">—</span>`}</td>
-        <td>${pill(st.tone,st.label)}</td><td class="mono muted">${t.updatedAt.slice(5)}</td></tr>`;}).join('')}</tbody>
+        <td>${pill(st.tone,st.label)}</td><td class="mono muted">${LIVE&&t.updatedAtRaw?timeEl(t.updatedAtRaw,true):esc(t.updatedAt.slice(5))}</td></tr>`;}).join('')}</tbody>
     </table></div></div>
-    <div class="callout info" style="margin-top:14px">${svg('info',14,'ic')}<div>任务阶段由商品进度决定：全部商品经专家通过后，任务才显示为「专家已确认」，首期不支持任务内部分商品先通过。</div></div>`;
+    ${LIVE?'':`<div class="callout info" style="margin-top:14px">${svg('info',14,'ic')}<div>任务阶段由商品进度决定：全部商品经专家通过后，任务才显示为「专家已确认」，首期不支持任务内部分商品先通过。</div></div>`}`;
   return shell('business','tasks',[{label:'审核任务'}],body);
 }
 
 /* ---------------------------- 专家 ---------------------------- */
 function viewExpertQueue(){
+  WB.lastListRoute='expert/queue';
   const groups=[];
   S.tasks.forEach(t=>{
     if(!t.submitted||isApproved(t))return;
@@ -1448,10 +1610,10 @@ function viewExpertQueue(){
   const body=`
     <div class="page-hd">
       <div><div class="hd-kicker">Expert Console</div><h1>待我审核</h1>
-      <p class="sub">业务员提交后专家核查已<b>自动触发</b>。你核要素 / 附图 / 退税 / 监管，<b>人工通过或退回</b>；AI 不自动放行，可改码后通过。</p></div>
+      ${LIVE?'':`<p class="sub">业务员提交后专家核查已<b>自动触发</b>。你核要素 / 附图 / 退税 / 监管，<b>人工通过或退回</b>；AI 不自动放行，可改码后通过。</p>`}</div>
     </div>
     <div class="sect" style="margin-top:0">
-      <div class="sect-hd"><h2>待审核批次</h2><span class="hint">${total?`${total} 条待裁决 · ${groups.length} 个合同`:'队列已清空'}</span></div>
+      <div class="sect-hd"><h2>待审核批次</h2>${LIVE?'':`<span class="hint">${total?`${total} 条待裁决 · ${groups.length} 个合同`:'队列已清空'}</span>`}</div>
       ${groups.length?groups.map(g=>{const collapsed=(S.ui.collapsed||[]).includes('exp-'+g.t.id);return `
         <div class="sup-group ${collapsed?'collapsed':''}">
           <div class="sup-group-hd">
@@ -1459,25 +1621,26 @@ function viewExpertQueue(){
               ${svg('chevD',14,'chev')}
               <span style="min-width:0">
                 <span class="sup-group-title mono">${esc(g.t.contract)}</span>
-                <span class="sup-group-meta" style="display:block">${g.t.id} · ${g.pending.length} 条待裁决</span>
+                <span class="sup-group-meta" style="display:block">${LIVE?`V${curVersion(g.t)} · ${g.t.lines.length} 条商品`:esc(g.t.id)} · ${g.pending.length} 条待裁决</span>
               </span>
             </button>
             <span style="display:flex;gap:8px;margin-left:auto;flex:none">
-              <button class="btn" data-act="open-task" data-task="${g.t.id}">${svg('shield',13)} 去审核</button>
-              <button class="btn primary" data-act="batch-pass" data-task="${g.t.id}" ${g.allPassed?'':'disabled'} title="${g.allPassed?'':'全部通过后才可整批确认'}">${svg('check',13)} 整批确认</button>
+              ${LIVE?`<button class="btn primary" data-act="open-task" data-task="${g.t.id}">${svg('shield',13)} 去审核</button>`
+                :`<button class="btn" data-act="open-task" data-task="${g.t.id}">${svg('shield',13)} 去审核</button>
+                  <button class="btn primary" data-act="batch-pass" data-task="${g.t.id}" ${g.allPassed?'':'disabled'} title="${g.allPassed?'':'全部通过后才可整批确认'}">${svg('check',13)} 整批确认</button>`}
             </span>
           </div>
           <div class="sup-group-bd">
             ${g.pending.length?g.pending.map(l=>{const flag=(l.expert.checks||[]).find(c=>c.state!=='ok');return `
-              <button class="biz-row" data-act="open-line" data-task="${g.t.id}" data-line="${l.id}" data-tab="check">
+              <button class="biz-row" data-act="open-line" data-task="${g.t.id}" data-line="${l.id}" data-tab="${LIVE?'hs':'check'}">
                 <span class="biz-top">
                   <span class="biz-name">${esc(l.name)}<span class="mono dim">项 ${esc(l.no)}</span></span>
-                  <span class="biz-codes mono">待审 ${esc(l.decision&&l.decision.code?l.decision.code:'未定')}</span>
+                  <span class="biz-codes mono">待审 ${esc(l.submittedCode||(l.decision&&l.decision.code)||'未定')}</span>
                   ${l.expert.confidence?pill(confTone(l.expert.confidence),CONF[l.expert.confidence]+'置信'):''}
-                  ${flag?`<span class="tag warn">${esc(flag.name)}</span>`:''}
+                  ${!LIVE&&flag?`<span class="tag warn">${esc(flag.name)}</span>`:''}
                   ${svg('chevR',13,'dim')}
                 </span>
-                <span class="biz-why">${esc(flag?flag.note:'要素、附图、退税、监管均已核清，待人工结论。')}</span>
+                ${LIVE?'':`<span class="biz-why">${esc(flag?flag.note:'要素、附图、退税、监管均已核清，待人工结论。')}</span>`}
               </button>`;}).join('')
             :`<div class="biz-allmatch">${svg('checkCircle',14)} 全部已通过，可整批确认形成确认版本。</div>`}
           </div>
@@ -1486,16 +1649,41 @@ function viewExpertQueue(){
     </div>`;
   return shell('expert','queue',[{label:'待我审核'}],body);
 }
+function viewExpertReturned(){
+  WB.lastListRoute='expert/returned';
+  const returned=S.tasks.filter(t=>t.stage==='returned');
+  const body=`
+    <div class="page-hd"><div><div class="hd-kicker">Expert Console</div><h1>已退回任务</h1></div></div>
+    <div class="panel">${returned.length?`<div class="tbl-wrap"><table class="tbl">
+      <thead><tr><th style="width:110px">任务</th><th>合同 / 供应商</th><th style="width:80px">版本</th><th>当前版本退回摘要</th><th style="width:140px">退回时间</th><th style="width:150px">操作</th></tr></thead>
+      <tbody>${returned.map(t=>{
+        const curIssues=(t.history?.issues||[]).filter(i=>i.version_id===t.currentVersionId&&i.kind==='expert_return');
+        const last=curIssues.at(-1)||(t.history?.issues||[]).filter(i=>i.kind==='expert_return').at(-1);
+        const target=last?.return_to==='operator'?'业务员':last?.return_to==='supplier'?'供应商':'—';
+        return `<tr tabindex="0" data-act="open-task" data-task="${t.id}">
+          <td class="mono" title="${esc(t.id)}">#${esc(t.id.slice(0,8))}</td>
+          <td><span class="name">${esc(t.contract)}</span><span class="alias">${esc(t.supplier)}</span></td>
+          <td class="mono">V${curVersion(t)}</td>
+          <td>${last?`<span class="pill cinnabar"><i></i>退回至 ${target}</span> <span style="margin-left:6px;color:var(--ink-2)">${esc(last.message)}</span>`:'<span class="dim">见版本与问题记录</span>'}</td>
+          <td class="mono muted">${last?.created_at?timeEl(last.created_at,true):timeEl(t.updatedAtRaw,true)}</td>
+          <td onclick="event.stopPropagation()"><button class="btn sm" data-act="open-history" data-task="${t.id}">版本与问题记录</button></td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table></div>`:`<div class="task-empty">${svg('checkCircle',26)}暂无已退回任务。</div>`}</div>`;
+  return shell('expert','returned',[{label:'已退回任务'}],body);
+}
 function viewExpertArchive(){
+  WB.lastListRoute='expert/archive';
   const done=S.tasks.filter(isApproved);
   const body=`
     <div class="page-hd"><div><div class="hd-kicker">Expert Console</div><h1>已确认任务</h1>
-    <p class="sub">专家确认版本。后续报关与交接动作不在本期范围，本页只保留确认结果与修改留痕。</p></div></div>
+    ${LIVE?'':`<p class="sub">专家确认版本。后续报关与交接动作不在本期范围，本页只保留确认结果与修改留痕。</p>`}</div></div>
     <div class="panel"><div class="tbl-wrap"><table class="tbl">
-      <thead><tr><th style="width:150px">任务</th><th>合同 / 供应商</th><th style="width:90px">商品</th><th style="width:150px">确认时间</th><th style="width:130px">结论</th></tr></thead>
-      <tbody>${done.map(t=>`<tr tabindex="0" data-act="open-task" data-task="${t.id}">
-        <td class="mono">${t.id}</td><td><span class="name">${esc(t.contract)}</span><span class="alias">${esc(t.supplier)}</span></td>
-        <td class="mono">${t.lines.length} 条</td><td class="mono muted">${t.approvedAt}</td><td><span class="seal">已核</span></td></tr>`).join('')}</tbody>
+      <thead><tr><th style="width:120px">任务</th><th>合同 / 供应商</th><th style="width:90px">商品</th><th style="width:160px">确认时间</th><th style="width:110px">结论</th></tr></thead>
+      <tbody>${done.length?done.map(t=>`<tr tabindex="0" data-act="open-task" data-task="${t.id}">
+        <td class="mono" title="${esc(t.id)}">${LIVE?'#'+esc(t.id.slice(0,8)):esc(t.id)}</td><td><span class="name">${esc(t.contract)}</span><span class="alias">${esc(t.supplier)}</span></td>
+        <td class="mono">${t.lines.length} 条</td><td class="mono muted">${LIVE&&t.approvedAtRaw?timeEl(t.approvedAtRaw):esc(t.approvedAt)}</td><td><span class="seal">已核</span></td></tr>`).join('')
+        :`<tr><td colspan="5"><div class="empty">暂无已确认任务</div></td></tr>`}</tbody>
     </table></div></div>`;
   return shell('expert','archive',[{label:'已确认任务'}],body);
 }
@@ -1521,16 +1709,32 @@ function filteredLines(t){
   return ls;
 }
 function viewTask(role, t, lineId){
-  S.ui={...(S.ui||{}),task:t.id};
+  if(!t||!t.lines.length)return shell(role,'tasks',[],`<div class="empty">${t?'此版本没有可显示商品':'任务不存在或不在当前账号可见范围'}</div>`);
+  if(S.ui&&S.ui.task&&S.ui.task!==t.id){
+    S.ui={...defaultUi(),collapsed:S.ui.collapsed||[],tab:WB.pendingTab||'hs',task:t.id};
+  }else{
+    S.ui={...defaultUi(),...(S.ui||{}),task:t.id,...(WB.pendingTab?{tab:WB.pendingTab}:{})};
+  }
+  WB.pendingTab='';
   const lines=t.lines, cur=lines.find(l=>l.id===lineId)||lines[0];
-  const c=counts(t), st=taskStage(t), isExpert=role==='expert';
+  const c=counts(t), st=taskStage(t), isExpert=role==='expert', isSup=role==='supplier';
+  let navActive='tasks', backHref=`${role}/tasks`, backLabel=isSup?'任务与退回问题':'全部任务';
+  if(isExpert){
+    if(isApproved(t)){navActive='archive';backHref='expert/archive';backLabel='已确认任务';}
+    else if(LIVE&&t.stage==='returned'){navActive='returned';backHref='expert/returned';backLabel='已退回任务';}
+    else{navActive='queue';backHref='expert/queue';backLabel='待我审核';}
+  }else if(role==='business'){
+    if(WB.lastListRoute==='business/overview'){navActive='overview';backHref='business/overview';backLabel='待我确认';}
+    else{navActive='tasks';backHref='business/tasks';backLabel='全部任务';}
+  }
+  const roleTag=isExpert?'专家审核':isSup?'供应商回查':'业务员预审';
   const allPassed=isExpert&&lines.every(l=>l.expert&&l.expert.result==='pass');
   const shown=filteredLines(t);
   const sel=S.ui.selected||[];
   const verdictCount=k=>lines.filter(l=>l.verdict===k).length;
   const unconf=lines.filter(l=>!l.decision).length;
 
-  const hdActions=isExpert
+  const hdActions=LIVE?liveTaskActions(role,t):isExpert
     ?(isApproved(t)?`<span class="btn" aria-disabled="true">${svg('checkCircle',14)} 已确认</span>`
       :`<button class="btn" data-act="batch-return">${svg('arrowL',14)} 整批退回</button>
         <button class="btn primary" data-act="batch-pass" ${allPassed?'':'disabled'} title="${allPassed?'':'全部商品通过后才可整批确认'}">${svg('check',14)} 整批确认</button>`)
@@ -1542,7 +1746,13 @@ function viewTask(role, t, lineId){
       :`<span class="tag">自动预审中</span>`);
 
   // 工具条：搜索 + 筛选 + 排序
-  const filters=[['all','全部',lines.length],['need','待处理',lines.filter(l=>l.verdict==='mismatch'||l.verdict==='unsure'||l.verdict==='missing').length],['match','一致',verdictCount('match')],['pending','未处置',lines.filter(l=>!l.decision&&!(l.expert&&l.expert.result)).length]];
+  const pendingLabel=isExpert?'待裁决':'未确认';
+  const filters=[
+    ['all','全部',lines.length],
+    ['need','预审存疑',lines.filter(l=>l.verdict==='mismatch'||l.verdict==='unsure'||l.verdict==='missing').length],
+    ['match','预审一致',verdictCount('match')],
+    ['pending',pendingLabel,lines.filter(l=>isExpert?!(l.expert&&l.expert.result):!l.decision).length]
+  ];
   const toolbar=`<div class="toolbar">
     <label class="search">${svg('search',14)}<input type="text" placeholder="搜索品名 / 编码 / 项号" value="${esc(S.ui.query||'')}" data-act="search-input"></label>
     <div class="chips">${filters.map(([k,lab,n])=>`<button class="chip" data-act="set-filter" data-filter="${k}" aria-pressed="${(S.ui.filter||'all')===k}">${lab}<span class="n">${n}</span></button>`).join('')}</div>
@@ -1550,8 +1760,8 @@ function viewTask(role, t, lineId){
     <button class="btn sm ghost" data-act="toggle-sort" data-key="no" title="按项号排序">${svg('sort',13)} 项号${S.ui.sort&&S.ui.sort.key==='no'?(S.ui.sort.dir==='asc'?' ↑':' ↓'):''}</button>
   </div>`;
 
-  // 批量操作条
-  const bulkbar=sel.length?`<div class="bulkbar">
+  // 批量操作条（LIVE 暂未接入批量接口，不展示）
+  const bulkbar=!LIVE&&sel.length?`<div class="bulkbar">
     <b>已选 ${sel.length} 条</b>
     ${isExpert?`<button class="btn sm primary" data-act="bulk-pass">批量通过</button>`:`<button class="btn sm primary" data-act="bulk-confirm">批量确认编码</button>`}
     <button class="btn sm ghost" data-act="clear-sel">取消选择</button>
@@ -1566,29 +1776,30 @@ function viewTask(role, t, lineId){
     ${toolbar}${bulkbar}
     <div class="tbl-wrap"><table class="tbl" id="line-table">
       <thead><tr>
-        <th style="width:34px"><input type="checkbox" data-act="select-all" ${shown.length&&shown.every(l=>sel.includes(l.id))?'checked':''} aria-label="全选"></th>
-        <th style="width:34%">商品 / 供应商编码</th><th style="width:15%">AI 推荐</th><th style="width:30%">预审结论</th><th style="width:17%">当前状态</th>
+        ${LIVE?'':`<th style="width:34px"><input type="checkbox" data-act="select-all" ${shown.length&&shown.every(l=>sel.includes(l.id))?'checked':''} aria-label="全选"></th>`}
+        <th style="width:36%">商品 / 供应商编码</th><th style="width:15%">AI 推荐</th><th style="width:31%">预审结论</th><th style="width:18%">当前状态</th>
       </tr></thead>
-      <tbody>${shown.length?shown.map(l=>taskTableRow(t,l,cur.id===l.id,role,sel.includes(l.id))).join(''):`<tr><td colspan="5"><div class="empty">没有匹配的记录</div></td></tr>`}</tbody>
+      <tbody>${shown.length?shown.map(l=>taskTableRow(t,l,cur.id===l.id,role,sel.includes(l.id))).join(''):`<tr><td colspan="${LIVE?4:5}"><div class="empty">没有匹配的记录</div></td></tr>`}</tbody>
     </table></div>
-    <div class="panel-ft"><span class="note">点击行查看对比与依据；勾选后可批量处置。</span>
+    <div class="panel-ft"><span class="note">${LIVE?'点击商品行查看编码对比、要素与留痕。':'点击行查看对比与依据；勾选后可批量处置。'}</span>
       <span class="meta" style="margin-left:auto">${verdictCount('match')} 一致 · ${verdictCount('mismatch')} 不一致 · ${verdictCount('unsure')} 无法确认 · ${verdictCount('missing')} 未填</span></div>
   </div>`;
 
   const summary=`<div class="panel" style="margin:0 0 16px">
-    <div class="panel-hd"><h2>${isExpert?'提交快照':'当前进度'}</h2><span class="meta">${isExpert?'业务员确认并提交的版本':'逐条处理后整批提交'}</span>
+    <div class="panel-hd"><h2>${isExpert?'提交快照':isSup?'当前批次状态':'当前进度'}</h2><span class="meta">${isExpert?'业务员确认并提交的版本':isSup?'只读查看各阶段编码与退回问题':'逐条处理后整批提交'}</span>
       <div class="hd-r">${pill(st.tone,st.label)}</div></div>
     <div class="panel-bd"><div class="split-3" style="gap:12px">
-      <div><div class="k" style="font-size:11.5px;color:var(--ink-3)">待你处置</div><div class="v serif" style="font-size:22px;font-weight:700;margin-top:8px">${isExpert?lines.filter(l=>!(l.expert&&l.expert.result)).length:lines.filter(l=>l.verdict&&!l.decision).length}<small style="font-size:12px;color:var(--ink-4);font-family:var(--sans)"> 条</small></div></div>
-      <div><div class="k" style="font-size:11.5px;color:var(--ink-3)">已形成结论</div><div class="v serif" style="font-size:22px;font-weight:700;margin-top:8px">${isExpert?lines.filter(l=>l.expert&&l.expert.result).length:lines.filter(l=>l.decision).length}<small style="font-size:12px;color:var(--ink-4);font-family:var(--sans)"> 条</small></div></div>
-      <div><div class="k" style="font-size:11.5px;color:var(--ink-3)">任务</div><div style="font-size:12px;margin-top:10px;line-height:1.6" class="dim">${isExpert?`提交于 ${t.submittedAt||'—'}`:`自动预审于 ${t.precheckAt||'—'}`}</div></div>
+      <div><div class="k" style="font-size:11.5px;color:var(--ink-3)">${isSup?'当前版本待处理':'待你处置'}</div><div class="v serif" style="font-size:22px;font-weight:700;margin-top:8px">${isSup?(t.history?.issues||[]).filter(i=>i.version_id===t.viewVersionId&&i.status==='open'&&i.return_to==='supplier').length:isExpert?lines.filter(l=>!(l.expert&&l.expert.result)).length:lines.filter(l=>l.verdict&&!l.decision).length}<small style="font-size:12px;color:var(--ink-4);font-family:var(--sans)"> 条</small></div></div>
+      <div><div class="k" style="font-size:11.5px;color:var(--ink-3)">已形成结论</div><div class="v serif" style="font-size:22px;font-weight:700;margin-top:8px">${isExpert||isSup?lines.filter(l=>l.expert&&l.expert.result).length:lines.filter(l=>l.decision).length}<small style="font-size:12px;color:var(--ink-4);font-family:var(--sans)"> 条</small></div></div>
+      <div><div class="k" style="font-size:11.5px;color:var(--ink-3)">时间节点</div><div style="font-size:12px;margin-top:10px;line-height:1.6" class="dim">${isExpert?(t.submittedAtRaw?`提交于 ${timeEl(t.submittedAtRaw)}`:`提交于 ${esc(t.submittedAt||'—')}`):(t.precheckAtRaw?`自动预审于 ${timeEl(t.precheckAtRaw)}`:`自动预审于 ${esc(t.precheckAt||'—')}`)}</div></div>
     </div></div>
   </div>`;
 
   const body=`
     <div class="task-hd">
+      <div class="back-bar"><a class="back-link" href="#/${backHref}">${svg('arrowL',13)} 返回${esc(backLabel)}</a></div>
       <div class="task-hd-top">
-        <div><div class="task-hd-no">${t.id} · V${curVersion(t)} · ${isExpert?'专家审核':'业务员预审'}</div><h1>${esc(t.contract)}</h1></div>
+        <div><div class="task-hd-no" title="${esc(t.id)}">${LIVE?'#'+esc(t.id.slice(0,8)):esc(t.id)} · V${curVersion(t)} · ${roleTag}</div><h1>${esc(t.contract)}</h1></div>
         <div class="hd-actions">${hdActions}</div>
       </div>
       <div class="facts">
@@ -1596,22 +1807,23 @@ function viewTask(role, t, lineId){
         <span class="fact"><span class="k">申报记录</span><span class="v">${c.total} 条</span></span>
         <span class="fact"><span class="k">已通过</span><span class="v">${c.pass} 条</span></span>
         <span class="fact"><span class="k">已退回</span><span class="v">${c.returned} 条</span></span>
-        <span class="fact"><span class="k">更新</span><span class="v">${t.updatedAt}</span></span>
+        <span class="fact"><span class="k">更新</span><span class="v">${LIVE&&t.updatedAtRaw?timeEl(t.updatedAtRaw):esc(t.updatedAt)}</span></span>
       </div>
       ${stepBar(t)}
+      ${LIVE?liveIssuePanel(t):''}
     </div>
     <div class="detail">
-      <div class="detail-l">${summary}${listPanel}${notesBlock(t,lines)}</div>
+      <div class="detail-l">${summary}${notesBlock(t,lines)}${listPanel}</div>
       <aside class="detail-r" id="detail-panel"><div class="dp">${detailPanel(role,t,cur)}</div></aside>
     </div>`;
-  return shell(role,isExpert?'queue':'tasks',[{label:isExpert?'待审队列':'审核任务',href:`#/${role}/${isExpert?'queue':'tasks'}`},{label:t.contract}],body,{wide:true});
+  return shell(role,navActive,[{label:backLabel,href:`#/${backHref}`},{label:t.contract}],body,{wide:true});
 }
 function taskTableRow(t,l,active,role,checked){
   const st=lineState(l,role), v=l.verdict?VERDICT[l.verdict]:null;
   const ai=l.aiCode?(l.aiCode===l.supplierCode?`<span class="code" title="与原码一致">${l.aiCode}</span>`:`<span class="code">${l.aiCode}</span>`):`<span class="code empty">—</span>`;
   const verdict=v?`<span class="verdict">${pill(v.tone,v.label)}<span class="why">${esc(l.aiGap||v.note)}</span></span>`:`<span class="verdict"><span class="why">自动预审中</span></span>`;
   return `<tr tabindex="0" data-act="open-line" data-task="${t.id}" data-line="${l.id}" class="${active?'is-active':''}">
-    <td onclick="event.stopPropagation()"><input type="checkbox" data-act="select-line" data-line="${l.id}" ${checked?'checked':''} aria-label="选择 ${esc(l.name)}"></td>
+    ${LIVE?'':`<td onclick="event.stopPropagation()"><input type="checkbox" data-act="select-line" data-line="${l.id}" ${checked?'checked':''} aria-label="选择 ${esc(l.name)}"></td>`}
     <td><span class="name"><span class="mono muted" style="font-size:10.5px;margin-right:6px">${esc(l.no)}</span>${esc(l.name)}</span><span class="alias mono">${l.supplierCode?esc(l.supplierCode):'未填编码'}${l.alias!==l.name?' · '+esc(l.alias):''}</span></td>
     <td>${ai}</td><td>${verdict}</td><td>${pill(st.tone,st.label)}</td>
   </tr>`;
@@ -1619,14 +1831,24 @@ function taskTableRow(t,l,active,role,checked){
 function notesBlock(t,lines){
   const specials=lines.filter(l=>l.special);
   const unsure=lines.filter(l=>l.verdict==='unsure'||l.verdict==='mismatch'||l.verdict==='missing');
-  if(!unsure.length&&!specials.length) return '';
+  const histReturns=LIVE?(t.history?.issues||[]).filter(i=>i.kind==='expert_return'&&i.version_id!==t.viewVersionId):[];
+  if(!unsure.length&&!specials.length&&!histReturns.length) return '';
   const codePair=l=>l.supplierCode&&l.aiCode&&l.supplierCode!==l.aiCode?`${l.supplierCode} → ${l.aiCode}`:(l.supplierCode||l.aiCode||'编码未填');
-  return `<div class="panel" style="margin-top:16px">
-    <div class="panel-hd"><h2>本批要点</h2><span class="meta">共性风险与原文备注</span></div>
+  const itemLookup=LIVE?historyItemMap(t):{};
+  return `<div class="panel" style="margin:0 0 16px">
+    <div class="panel-hd"><h2>本批要点</h2><span class="meta">共性风险与历史退回参考</span></div>
     <div class="panel-bd">
-      ${unsure.length?`<div class="dp-sec" style="margin:0 0 12px"><div class="dp-sec-hd"><h3>编码存疑</h3><span class="r">${unsure.length} 条</span></div>
-        ${unsure.map(l=>`<div class="issue warn"><span class="ic">${svg('alert',13)}</span><div class="body"><div class="t">${esc(l.name)} · <span class="mono">${esc(codePair(l))}</span></div><div class="m">${esc(l.aiGap||'')}</div></div></div>`).join('')}</div>`:''}
-      ${specials.length?`<div class="dp-sec" style="margin:0"><div class="dp-sec-hd"><h3>含原文备注的条目</h3><span class="r">不改写、不删除</span></div>
+      ${unsure.length?`<div class="dp-sec" style="margin:0${specials.length||histReturns.length?' 0 14px':''}"><div class="dp-sec-hd"><h3>编码存疑</h3><span class="r">${unsure.length} 条</span></div>
+        <div class="stack-8">${unsure.map(l=>`<div class="issue warn"><span class="ic">${svg('alert',13)}</span><div class="body"><div class="t">${esc(l.name)} · <span class="mono">${esc(codePair(l))}</span></div>${l.aiGap?`<div class="m">${esc(l.aiGap)}</div>`:''}</div></div>`).join('')}</div></div>`:''}
+      ${histReturns.length?`<div class="dp-sec" style="margin:0${specials.length?' 0 14px':''}"><div class="dp-sec-hd"><h3>历史版本退回参考</h3><span class="r">非当前版本待处理 · ${histReturns.length} 条</span></div>
+        <div class="stack-8">${histReturns.map(i=>{
+          const v=t.versions.find(x=>x.version_id===i.version_id);
+          const it=i.item_id?itemLookup[i.item_id]:null;
+          const target=i.return_to==='operator'?'业务员':i.return_to==='supplier'?'供应商':'—';
+          const who=it?`第 ${it.row} 行 · ${it.name}`:(i.source_location?`第 ${i.source_location.row_number} 行`:'整批');
+          return `<div class="issue-card is-hist"><div class="issue-card-hd"><b>${v?'V'+v.v:'历史版本'}</b><span>${esc(who)}</span><span class="tag">退回至 ${target}</span>${i.created_at?`<span class="dim">${timeEl(i.created_at,true)}</span>`:''}${v?`<button class="btn sm ghost" style="margin-left:auto" data-act="live-locate" data-task="${t.id}" data-version="${v.version_id}" data-line="${esc(i.item_id||'')}">回查 V${v.v}</button>`:''}</div><div class="issue-card-msg">${esc(i.message)}</div></div>`;
+        }).join('')}</div></div>`:''}
+      ${specials.length?`<div class="dp-sec" style="margin:0"><div class="dp-sec-hd"><h3>含原文备注的条目</h3><span class="r">原文保留</span></div>
         <div class="note-block">${specials.map(l=>esc(l.name)).join(' · ')}<span class="dim">　点击对应行查看原文</span></div></div>`:''}
     </div>
   </div>`;
@@ -1658,6 +1880,7 @@ function tabContent(tab,role,t,l){
   return tabLog(role,t,l);
 }
 function tabHs(role,t,l){
+  if(LIVE)return liveHsPanel(role,t,l);
   const isExpert=role==='expert', v=l.verdict?VERDICT[l.verdict]:null;
   if(!l.verdict) return `<div class="empty">自动预审进行中，稍后生成 AI 建议与比较结论。</div>`;
   return `
@@ -1690,7 +1913,7 @@ function tabHs(role,t,l){
 }
 function tabElem(role,t,l){
   if(!l.verdict) return `<div class="empty">自动预审后生成要素比对。</div>`;
-  return `<div class="dp-sec" style="margin-top:0"><div class="dp-sec-hd"><h3>申报要素逐项比对</h3><span class="r">原值不覆盖</span></div>
+  return `<div class="dp-sec" style="margin-top:0"><div class="dp-sec-hd"><h3>申报要素逐项比对</h3><span class="r">保留供应商原始申报值供对照</span></div>
     <table class="elem"><thead><tr><th style="width:70px">要素</th><th>供应商原值</th><th>AI 建议</th><th style="width:64px">附图</th><th style="width:58px">比对</th></tr></thead>
     <tbody>${l.elements.map(e=>`<tr><td class="el-name">${esc(e.name)}</td><td class="el-val">${esc(e.orig)}</td><td class="el-ai">${esc(e.ai||'—')}</td><td class="dim" style="font-size:11px">${esc(e.img)}</td><td>${elemState(e.state)}</td></tr>`).join('')}</tbody></table></div>
     <div class="callout" style="margin-top:12px">${svg('info',14,'ic')}<div>图片只证实可见事实（形态、铭牌参数），不直接推断成分、工艺或退税率；未见不等于文字错误。</div></div>`;
@@ -1705,6 +1928,7 @@ function tabEv(role,t,l){
     <div class="callout warn" style="margin-top:12px">${svg('alert',14,'ic')}<div>标记「待核」的来源未取得当期官方文本时，不得据此评定高置信度。</div></div>`;
 }
 function tabCheck(role,t,l){
+  if(LIVE)return liveCheckPanel(l);
   const ex=l.expert||{};
   if(!t.submitted&&!ex.result) return `<div class="empty">业务员提交后自动触发专家核查。</div>`;
   const conf=ex.confidence;
@@ -1735,6 +1959,44 @@ function defaultChecks(l){
   ];
 }
 function tabLog(role,t,l){
+  if(LIVE){
+    const scope=(S.ui&&S.ui.logScope)||'item';
+    const allEvents=(t.history?.audit_events||[]).filter(a=>!a.version_id||a.version_id===l.versionId);
+    const events=scope==='version'?allEvents:allEvents.filter(a=>!a.item_id||a.item_id===l.id);
+    const itemMap=historyItemMap(t);
+    const scopeBar=`<div class="scope-bar">
+      <button class="chip" data-act="set-log-scope" data-scope="item" aria-pressed="${scope==='item'}">当前商品 + 整批<span class="n">${allEvents.filter(a=>!a.item_id||a.item_id===l.id).length}</span></button>
+      <button class="chip" data-act="set-log-scope" data-scope="version" aria-pressed="${scope==='version'}">本版本全部<span class="n">${allEvents.length}</span></button>
+      <button class="btn sm ghost" style="margin-left:auto" data-act="open-history" data-task="${t.id}">版本与问题记录</button>
+    </div>`;
+    if(!events.length)return `${scopeBar}<div class="empty">服务端暂无操作记录。</div>`;
+    return `${scopeBar}<div class="stack-8">${events.map(a=>{
+      const isBatch=!a.item_id;
+      const it=a.item_id?itemMap[a.item_id]:null;
+      const actLabel=ACTION_LABEL[a.action]||a.action;
+      const isUuid=v=>/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(v||''));
+      const showVal=(a.previous_value||a.new_value)&&!(a.action==='submission.created'&&isUuid(a.new_value));
+      const change=showVal?`<div class="log-change">${esc(a.previous_value||'—')} → ${esc(a.new_value||'—')}</div>`:(a.action==='submission.created'?`<div class="dim" style="margin-top:4px;font-size:11.5px">已生成不可变整批提交快照</div>`:'');
+      return `<div class="log-card">
+        <div class="log-card-hd">
+          <span class="scope-pill ${isBatch?'is-batch':'is-item'}">${isBatch?'整批':'当前商品'}</span>
+          <span class="log-act">${esc(actLabel)}</span>
+          <span class="log-code">${esc(a.action)}</span>
+          <span class="tl-by">${esc(a.actor||'系统')}</span>
+          <span class="tl-time">${timeEl(a.created_at)}</span>
+        </div>
+        ${it?`<div class="dim" style="margin-top:4px;font-size:11px">商品：第 ${esc(it.row)} 行 · ${esc(it.name)}</div>`:''}
+        ${change}
+        ${a.reason?`<div class="log-reason"><b>理由：</b>${esc(a.reason)}</div>`:''}
+        <details class="trace-details"><summary>技术标识</summary>
+          ${traceRow('审计 ID',a.audit_id)}
+          ${a.action==='submission.created'&&isUuid(a.new_value)?traceRow('提交 ID',a.new_value):''}
+          ${a.version_id?traceRow('版本 ID',a.version_id):''}
+          ${a.item_id?traceRow('商品 ID',a.item_id):''}
+        </details>
+      </div>`;
+    }).join('')}</div>`;
+  }
   const global=t.log.filter(x=>x.act!=='自动预审完成');
   const lineLog=[
     ...(l.verdict?[{at:t.precheckAt||t.updatedAt,by:'自动预审',act:'出具预审结论',desc:`${VERDICT[l.verdict].label} · ${CONF[l.verdictConf]||'—'}置信度；来源 ${l.evidence.length} 条`,auto:true}]:[]),
@@ -1749,6 +2011,7 @@ function tabLog(role,t,l){
 
 /* ---------------------------- 详情底部动作 ---------------------------- */
 function detailFooter(role,t,l){
+  if(LIVE)return liveDetailFooter(role,t,l);
   if(isApproved(t)) return `<div class="dp-ft"><span class="note">${svg('checkCircle',13)} 该任务已形成专家确认版本</span></div>`;
   return role==='expert'?expertFooter(t,l):businessFooter(t,l);
 }
@@ -1844,7 +2107,6 @@ function modalAutoPrecheck(t,fileName){
         <div class="phase-step" data-phase="1"><span class="dot">2</span>提取商品与附图</div>
         <div class="phase-step" data-phase="2"><span class="dot">3</span>自动预审</div>
       </div>
-      <div class="ai-thinking-banner" role="status" aria-live="polite"><span class="ai-thinking-mark" aria-hidden="true"></span><strong>AI 思考中...</strong></div>
       <div class="callout info" style="margin-bottom:14px">${svg('zap',14,'ic')}<div>解析成功后<b>自动触发</b>：对每条商品先按商品事实独立推荐 HS，再与供应商原码比较，写入「AI推荐HScode」「预审结论」两列，原码不动。</div></div>
       <div class="bar" style="margin-bottom:14px"><i id="run-bar" style="width:0%"></i></div>
       <div id="run-list">${t.lines.map(l=>`<div class="run-row" data-run="${l.id}">
@@ -1926,9 +2188,11 @@ function modalExpert(t,l,mode){
 }
 
 /* ---------------------------- 动作 ---------------------------- */
-document.addEventListener('click',e=>{
-  const el=e.target.closest('[data-act]');if(!el)return;
+document.addEventListener('click',async e=>{
+  const el=e.target.closest('[data-act]');if(!el||el.disabled)return;
   const act=el.dataset.act;
+  if(LIVE&&await handleLiveAction(act,el,e))return;
+  if(!LIVE&&window.WB_MODE==='fixture'&&['confirm-code','undo-decision','need-supplement','bulk-confirm','open-submit','confirm-submit','open-expert','confirm-expert','bulk-pass','batch-pass','batch-return','open-upload','confirm-upload','reprecheck','finish-precheck'].includes(act)){toast('FIXTURE 只读：请进入 LIVE 登录后操作');return;}
 
   if(act==='pick-role'){const r=el.dataset.role;S.role=r;S.ui={tab:'hs',task:null,filter:'all',query:'',sort:null,selected:[]};closeModal();
     go(r==='business'?'business/overview':r==='expert'?'expert/queue':`${r}/tasks`);return;}
@@ -1937,24 +2201,52 @@ document.addEventListener('click',e=>{
   if(act==='modal-mask'){if(e.target===el)closeModal();return;}
   if(act==='open-upload'){modalUpload(el.dataset.task||'');return;}
   if(act==='open-task'){go(`${roleOf()}/task/${el.dataset.task}`);return;}
-  if(act==='open-line'){S.ui={...(S.ui||{}),tab:el.dataset.tab||(S.ui&&S.ui.tab)||'hs'};go(`${roleOf()}/task/${el.dataset.task}/${el.dataset.line}`);return;}
-  if(act==='close-detail'){go(`${roleOf()}/task/${parseRoute().b}`);return;}
-  if(act==='set-tab'){S.ui={...(S.ui||{}),tab:el.dataset.tab};render();return;}
-  if(act==='set-filter'){S.ui={...(S.ui||{}),filter:el.dataset.filter,selected:[]};render();return;}
+  if(act==='open-line'){
+    const curR=parseRoute();
+    const keepVer=(curR.b===el.dataset.task&&curR.version)?`?version=${encodeURIComponent(curR.version)}`:'';
+    WB.pendingTab=el.dataset.tab||'';
+    if(el.dataset.tab)S.ui={...(S.ui||{}),tab:el.dataset.tab};
+    go(`${roleOf()}/task/${el.dataset.task}/${el.dataset.line}${keepVer}`);return;
+  }
+  if(act==='close-detail'){
+    const curR=parseRoute();
+    const keepVer=curR.version?`?version=${encodeURIComponent(curR.version)}`:'';
+    go(`${roleOf()}/task/${curR.b}${keepVer}`);return;
+  }
+  if(act==='set-tab'||act==='jump-tab'){S.ui={...(S.ui||{}),tab:el.dataset.tab};preserveScroll(()=>render());return;}
+  if(act==='set-log-scope'){S.ui={...(S.ui||{}),logScope:el.dataset.scope};preserveScroll(()=>render());return;}
+  if(act==='set-filter'){S.ui={...(S.ui||{}),filter:el.dataset.filter,selected:[]};preserveScroll(()=>render());return;}
   if(act==='toggle-sort'){const key=el.dataset.key;const cur=S.ui.sort;
-    S.ui={...(S.ui||{}),sort:cur&&cur.key===key?(cur.dir==='asc'?{key,dir:'desc'}:null):{key,dir:'asc'}};render();return;}
+    S.ui={...(S.ui||{}),sort:cur&&cur.key===key?(cur.dir==='asc'?{key,dir:'desc'}:null):{key,dir:'asc'}};preserveScroll(()=>render());return;}
+  if(act==='copy-id'){
+    const val=el.dataset.copy||'';
+    if(val&&navigator.clipboard?.writeText){navigator.clipboard.writeText(val).then(()=>toast('已复制标识')).catch(()=>toast('复制失败，请手动选中复制'));}
+    else if(val){toast('标识：'+val);}
+    return;
+  }
+  if(act==='open-notifications'){
+    if(!LIVE)toast('通知中心在原型模式未接入');
+    return;
+  }
   if(act==='switch-version'){toast(`原型演示：切到 V${el.dataset.v}（旧版结论仅作历史查看）`);return;}
 
   // 搜索（input 事件单独处理，这里兜底）
   if(act==='select-line'){const id=el.dataset.line;const sel=S.ui.selected||[];
-    S.ui.selected=el.checked?[...sel,id]:sel.filter(x=>x!==id);render();return;}
+    S.ui.selected=el.checked?[...sel,id]:sel.filter(x=>x!==id);preserveScroll(()=>render());return;}
   if(act==='select-all'){const t=task(S.ui.task);const shown=filteredLines(t);
-    S.ui.selected=el.checked?shown.map(l=>l.id):[];render();return;}
-  if(act==='clear-sel'){S.ui.selected=[];render();return;}
+    S.ui.selected=el.checked?shown.map(l=>l.id):[];preserveScroll(()=>render());return;}
+  if(act==='clear-sel'){S.ui.selected=[];preserveScroll(()=>render());return;}
   if(act==='toggle-group'){
     const id=el.dataset.task;const c=S.ui.collapsed||[];
     S.ui.collapsed=c.includes(id)?c.filter(x=>x!==id):[...c,id];
-    render();return;
+    preserveScroll(()=>render());return;
+  }
+  if(act==='toggle-sup-group'){
+    const key=el.dataset.group, defOpen=el.dataset.defaultOpen==='1';
+    const token=defOpen?key:'open:'+key;
+    const c=S.ui.collapsed||[];
+    S.ui.collapsed=c.includes(token)?c.filter(x=>x!==token):[...c,token];
+    preserveScroll(()=>render());return;
   }
   if(act==='toggle-prod'){
     S.ui.prod=!S.ui.prod;
@@ -2085,12 +2377,12 @@ document.addEventListener('input',e=>{
     const t=task(S.ui.task);if(!t)return;
     const tbody=$('#line-table tbody');if(!tbody)return;
     const shown=filteredLines(t);const cur=parseRoute().c;const sel=S.ui.selected||[];
-    tbody.innerHTML=shown.length?shown.map(l=>taskTableRow(t,l,cur===l.id,roleOf(),sel.includes(l.id))).join(''):`<tr><td colspan="5"><div class="empty">没有匹配的记录</div></td></tr>`;
+    tbody.innerHTML=shown.length?shown.map(l=>taskTableRow(t,l,cur===l.id,roleOf(),sel.includes(l.id))).join(''):`<tr><td colspan="${LIVE?4:5}"><div class="empty">没有匹配的记录</div></td></tr>`;
   }
 });
 /* 键盘 */
 document.addEventListener('keydown',e=>{
-  if(e.key==='Escape'){closeModal();return;}
+  if(e.key==='Escape'){if(!WB.pending)closeModal();return;}
   if((e.key==='Enter'||e.key===' ')&&e.target.matches('tr[data-act]')){e.preventDefault();e.target.click();}
 });
 
@@ -2123,10 +2415,9 @@ function assignDemoResults(t){
 }
 
 /* ---------------------------- 导出 & toast ---------------------------- */
-/* 本页是原型数据模型：任务与商品行都由 mapDataset() 生成，没有真实的 version_id /
-   run_id / submission_id，因此无法组成契约要求的“结果集属于请求版本”的导出请求。
-   这里只说明现状，绝不生成 CSV/XLSX 之类的假文件、也不提示导出成功。 */
-const EXPORT_MOVED='导出入口已迁移到上传/任务页（/uploads/、/tasks/）：本页是原型数据，没有可引用的真实执行';
+/* 导出由消息/进度/导出中心与上传页（/workbench/live/、/uploads/、/tasks/）承接；
+   审核页绝不在前端生成 CSV/XLSX 假文件或提示导出成功。 */
+const EXPORT_MOVED='导出入口已迁移到上传/任务页（/uploads/、/tasks/）及消息导出中心（/workbench/live/）';
 function exportControl(){
   if(window.WB_MODE==='live')
     return `<button class="btn" disabled aria-disabled="true" title="${EXPORT_MOVED}">${svg('download',14)} 导出补料清单</button>
@@ -2149,9 +2440,17 @@ function hideToast(){const el=$('#toast');el.classList.remove('show');}
 
 /* ---------------------------- 渲染 ---------------------------- */
 function render(){
+  if(LIVE){
+    if(WB.loading){$('#root').innerHTML='<div class="empty" role="status">正在读取真实会话与数据…</div>';return;}
+    if(!WB.user){$('#root').innerHTML=liveLogin();return;}
+    const route=parseRoute(), role=roleOf();
+    if(!role){$('#root').innerHTML='<div class="empty">该账号没有工作台角色</div>';return;}
+    if(route.seg!==role){go(defaultRoute(role));return;}
+  }
   const role=roleOf();const r=parseRoute();const root=document.getElementById('root');
   if(!role){root.innerHTML=viewGate();return;}
   S.role=role;
+  WB.lastRouteKey=routeScopeKey(r);
   if(r.seg==='supplier'){root.innerHTML=(r.a==='task'&&r.b)?viewSupplierTask(task(r.b)):viewSupplierTasks();return;}
   if(r.seg==='business'){
     if(r.a==='overview')root.innerHTML=viewBusinessOverview();
@@ -2159,12 +2458,53 @@ function render(){
     else root.innerHTML=viewBusinessTasks();return;}
   if(r.seg==='expert'){
     if(r.a==='archive')root.innerHTML=viewExpertArchive();
+    else if(r.a==='returned')root.innerHTML=viewExpertReturned();
     else if(r.a==='task'&&r.b)root.innerHTML=viewTask('expert',task(r.b),r.c||'');
     else root.innerHTML=viewExpertQueue();}
 }
 /* ---------------------------- 数据桥接（Django Ninja / 契约样例 / 本地演示） ---------------------------- */
 const CMP={consistent:'match',inconsistent:'mismatch',needs_confirmation:'unsure',supplier_missing:'missing',supplier_invalid:'invalid',association_error:'relation'};
-const fmtDT=s=>{if(!s)return '';return String(s).replace('T',' ').slice(0,16);};
+const ACTION_LABEL={
+  'confirmation.updated':'业务员确认编码',
+  'submission.created':'整批提交专家',
+  'decision.approved':'专家整批通过',
+  'decision.recoded':'专家改码通过',
+  'decision.returned':'专家整批退回',
+  'task.returned':'任务退回',
+  'precheck.completed':'自动预审完成',
+  'expert_check.completed':'专家核查完成',
+};
+const SH_FMT=new Intl.DateTimeFormat('zh-CN',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false});
+const fmtDT=s=>{
+  if(!s)return '';
+  const str=String(s);
+  if(!/[T]|Z|[+-]\d{2}:\d{2}/.test(str))return str.slice(0,16);
+  const d=new Date(str);
+  if(Number.isNaN(d.getTime()))return str.replace('T',' ').slice(0,16);
+  const p=Object.fromEntries(SH_FMT.formatToParts(d).map(x=>[x.type,x.value]));
+  return `${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute}`;
+};
+const timeEl=(iso,short=false)=>{
+  if(!iso)return '—';
+  const txt=fmtDT(iso);
+  return `<time class="mono" datetime="${esc(iso)}" title="北京时间 ${esc(txt)} · 原始时间 ${esc(iso)}">${esc(short?txt.slice(5):txt)}</time>`;
+};
+function traceRow(label,id){
+  if(!id)return `<div class="trace-row"><span class="trace-k">${esc(label)}</span><span class="trace-v dim">—</span></div>`;
+  return `<div class="trace-row"><span class="trace-k">${esc(label)}</span><span class="trace-v" title="${esc(id)}">${esc(id)}</span><button type="button" class="copy-btn" data-act="copy-id" data-copy="${esc(id)}">复制</button></div>`;
+}
+function historyItemMap(t){
+  const map={};
+  (t.history?.versions||[]).forEach(v=>{
+    (v.items||[]).forEach(it=>{
+      map[it.item_id]={id:it.item_id,name:it.name,row:it.source_location?.row_number||'—',sheet:it.source_location?.sheet_name||'',supplierHs:it.supplier_hs_raw||'',versionNumber:v.number,versionId:v.version_id};
+    });
+  });
+  (t.lines||[]).forEach(l=>{
+    if(!map[l.id])map[l.id]={id:l.id,name:l.name,row:l.no||'—',sheet:l.sourceLocation?.sheet_name||'',supplierHs:l.supplierCode||'',versionNumber:curVersion(t),versionId:l.versionId};
+  });
+  return map;
+}
 const confLevel=x=>x==null?null:(x>=0.8?'high':x>=0.5?'mid':'low');
 function mapChecks(card){
   const es=card.evidence_status, im=card.image_status;
@@ -2185,86 +2525,555 @@ function mapLine(it,card,t){
   const attrs=(card.facts&&card.facts.attributes)||{};
   const elements=Object.entries(attrs).map(([k,v])=>({name:k,orig:String(v),ai:String(v),img:'—',state:'ok'}));
   const issues=(card.issues||[]).map(x=>x.message||x.note||'').filter(Boolean);
-  const submitted=it.submitted_hs||it.business_confirmed_hs;
+  const submitted=it.submitted_hs;
   const expertFinal=it.expert_final_hs;
+  const returned=(card.review_issues||[]).filter(i=>i.kind==='expert_return'&&i.status==='open');
   const loc=it.source_location||{};
   return {
-    id:it.item_id,no:String(loc.row_number||''),name:it.name,alias:it.name,
+    id:it.item_id,versionId:it.version_id,revision:it.revision,card,confirmationId:card.business_confirmed_hs?.source_id,submittedCode:submitted,submittedId:card.submitted_hs?.source_id,sourceLocation:loc,no:String(loc.row_number||''),name:it.name,alias:it.name,
     spec:attrs['规格型号']||'—',model:attrs['规格型号']||'—',material:attrs['材质']||'—',usage:attrs['用途']||'—',qty:'—',
     supplierCode:it.supplier_hs_raw||'',position:(loc.sheet_name||'申报要素')+' · 第 '+(loc.row_number||'')+' 行',
     boxNo:'—',photo:(card.images&&card.images[0]&&card.images[0].status==='available')?(card.images[0].dispimg_id||'IMG'):'—',
     aiCode:it.precheck_suggested_hs||null,aiConf:confLevel(card.confidence),verdict,verdictConf:confLevel(card.confidence),
-    aiReason:verdict==='match'?'独立归类后与供应商原码一致，依据充分。':(issues[0]||'按商品事实独立归类后与供应商原码比较。'),
-    aiGap:issues.join('；')||(verdict==='match'?'':'需补充关键归类信息。'),
+    aiReason:LIVE?(issues[0]||'服务端未提供额外归类说明。'):(verdict==='match'?'独立归类后与供应商原码一致，依据充分。':(issues[0]||'按商品事实独立归类后与供应商原码比较。')),
+    aiGap:issues.join('；')||(LIVE||verdict==='match'?'':'需补充关键归类信息。'),
     evidence:evIds,_ev:ev,
     elements:elements.length?elements:[{name:'品名',orig:it.name,ai:it.name,img:'—',state:'ok'}],
     special:'',
-    decision:submitted?{code:submitted,at:fmtDT(t.updated_at),by:'业务员',note:'提交值'}:null,
-    expert:expertFinal?{done:true,result:'pass',confidence:confLevel(card.confidence),note:'专家确认',code:expertFinal,at:fmtDT(t.updated_at),checks:mapChecks(card)}:{done:false,result:null,checks:mapChecks(card),confidence:confLevel(card.confidence),note:'',issues:[]}
+    decision:it.business_confirmed_hs?{code:it.business_confirmed_hs,at:fmtDT(card.business_confirmed_hs?.created_at||t.updated_at),by:'业务员',note:card.business_confirmed_hs?.note||'服务端确认记录'}:null,
+    expert:returned.length?{done:true,result:'return',note:returned.map(i=>i.message).join('；'),returnTo:returned[0].return_to==='operator'?'business':'supplier',issues:returned}:expertFinal?{done:true,result:'pass',confidence:confLevel(card.confidence),note:'专家确认',code:expertFinal,at:fmtDT(t.updated_at),checks:mapChecks(card)}:{done:false,result:null,checks:mapChecks(card),confidence:confLevel(card.confidence),note:'',issues:[]}
   };
 }
 function mapDataset(data){
   const evidence={};
   const tasks=(data.tasks||[]).map(t=>{
-    const vid=t.current_version_id;
+    const vid=t.view_version_id||t.current_version_id;
     const items=(data.items||{})[vid]||[];
-    const lines=items.map(it=>{const l=mapLine(it,(data.cards||{})[it.item_id],t);Object.assign(evidence,l._ev);delete l._ev;return l;});
+    const versionHistory=(data.histories||{})[t.task_id]?.versions.find(v=>v.version_id===vid);
+    const submission=versionHistory?.submissions.at(-1);
+    const lines=items.map(it=>{
+      const l=mapLine(it,(data.cards||{})[it.item_id],t);
+      if(LIVE&&submission?.items.some(i=>i.item_id===l.id)){
+        const issues=(l.expert.issues||[]).filter(i=>i.submission_id===submission.submission_id);
+        if(submission.status==='returned')Object.assign(l.expert,{done:true,result:'return',batchReturn:!issues.length,issues,note:issues.map(i=>i.message).join('；')||'整批提交已退回，此商品未单列问题。'});
+        else if(submission.status==='pending')Object.assign(l.expert,{done:false,result:null,issues:[],note:''});
+        else if(submission.status==='approved')Object.assign(l.expert,{done:true,result:'pass',issues:[],note:'专家整批通过',code:it.expert_final_hs});
+      }
+      const confirmation=versionHistory?.confirmations.find(c=>c.confirmation_id===l.confirmationId);
+      if(l.decision&&confirmation)Object.assign(l.decision,{at:fmtDT(confirmation.created_at),atRaw:confirmation.created_at,by:confirmation.created_by,note:confirmation.reason});
+      Object.assign(evidence,l._ev);delete l._ev;return l;
+    });
     const sup=typeof t.supplier==='string'?t.supplier:((t.supplier&&t.supplier.name)||'');
+    const preRuns=(versionHistory?.runs||[]).filter(r=>r.kind==='precheck');
+    const preRun=preRuns.find(r=>r.is_current)||preRuns.at(-1);
+    const preAtRaw=LIVE?(preRun?.finished_at||preRun?.created_at||''):t.updated_at;
+    const subAtRaw=LIVE?(submission?.created_at||''):t.updated_at;
+    const approveDec=submission?.decisions?.slice().reverse().find(d=>d.action==='approve');
+    const appAtRaw=t.stage==='approved'?(approveDec?.created_at||t.updated_at):'';
     return {
-      id:t.task_id,contract:t.title,supplier:sup,project:'',owner:'',createdAt:fmtDT(t.created_at),updatedAt:fmtDT(t.updated_at),
-      versions:(t.versions||[]).map(v=>({v:v.number,file:v.original_filename,size:'—',at:fmtDT(v.uploaded_at),by:'供应商',version_id:v.version_id})),
-      prechecked:!['uploaded','prechecking'].includes(t.stage),precheckAt:fmtDT(t.updated_at),
-      submitted:['submitted','approved'].includes(t.stage)||!!t.current_submission_id,submittedAt:fmtDT(t.updated_at),
-      approvedAt:t.stage==='approved'?fmtDT(t.updated_at):null,
+      id:t.task_id,contract:t.title,supplier:sup,project:'',owner:'',createdAt:fmtDT(t.created_at),createdAtRaw:t.created_at||'',updatedAt:fmtDT(t.updated_at),updatedAtRaw:t.updated_at||'',
+      revision:t.revision,stage:t.stage,currentVersionId:t.current_version_id,viewVersionId:vid,viewNumber:(t.versions||[]).find(v=>v.version_id===vid)?.number,readOnly:vid!==t.current_version_id,submissionId:t.current_submission_id,submissionStatus:t.current_submission_status,history:(data.histories||{})[t.task_id],raw:t,
+      versions:(t.versions||[]).map(v=>({v:v.number,file:v.original_filename,size:'—',at:fmtDT(v.uploaded_at),atRaw:v.uploaded_at||'',by:'供应商',version_id:v.version_id})),
+      prechecked:!['uploaded','prechecking'].includes(t.stage),precheckAt:fmtDT(preAtRaw),precheckAtRaw:preAtRaw,
+      submitted:t.current_submission_status==='pending'||t.stage==='submitted',submittedAt:fmtDT(subAtRaw),submittedAtRaw:subAtRaw,
+      approvedAt:appAtRaw?fmtDT(appAtRaw):null,approvedAtRaw:appAtRaw,
       lines,
-      log:[{at:fmtDT(t.created_at),by:'供应商',role:'供应商',act:'上传',desc:(t.versions||[]).map(v=>'V'+v.number).join(' / ')},
+      log:LIVE?((data.histories||{})[t.task_id]?.audit_events||[]).map(a=>({at:fmtDT(a.created_at),by:a.actor,act:a.action,desc:`${a.version_id||''} ${a.item_id||''} ${a.previous_value||''} → ${a.new_value||''} ${a.reason||''}`})):[{at:fmtDT(t.created_at),by:'供应商',role:'供应商',act:'上传',desc:(t.versions||[]).map(v=>'V'+v.number).join(' / ')},
            {at:fmtDT(t.updated_at),by:'系统',role:'系统',act:'自动预审',desc:'解析成功后自动触发。',auto:true}]
     };
   });
-  return {role:null,ui:{tab:'hs',task:null,filter:'all',query:'',sort:null,selected:[],collapsed:[]},tasks,evidence};
+  return {role:null,ui:defaultUi(),tasks,evidence};
 }
 async function loadFixture(){
   const r=await fetch('/demo/fixtures/DEMO-SET.json');if(!r.ok)throw new Error('fixture '+r.status);
   return r.json();
 }
+async function allPages(read){
+  const rows=[],seen=new Set();let cursor;
+  do{const page=await read(cursor);if(!Array.isArray(page.items))throw new Error('列表响应缺少 items');rows.push(...page.items);cursor=page.next_cursor;
+    if(cursor&&seen.has(cursor))throw new Error('分页游标重复，请刷新后重试');if(cursor)seen.add(cursor);
+  }while(cursor);
+  return rows;
+}
 async function loadLive(){
-  const base='/api/v1';const opt={credentials:'same-origin'};
-  const tj=await fetch(base+'/tasks?limit=100',opt);if(!tj.ok)throw new Error('live '+tj.status);
-  const tasks=(await tj.json()).items||[];const items={},cards={};
-  for(const t of tasks){const vid=t.current_version_id;if(!vid)continue;
-    const ij=await fetch(base+'/versions/'+encodeURIComponent(vid)+'/items?limit=200',opt);
-    if(ij.ok){items[vid]=(await ij.json()).items||[];
-      for(const it of items[vid]){const cj=await fetch(base+'/versions/'+encodeURIComponent(vid)+'/items/'+encodeURIComponent(it.item_id),opt);if(cj.ok)cards[it.item_id]=await cj.json();}}}
-  return {tasks,items,cards};
+  const route=parseRoute(),entries=await allPages(cursor=>API.listTasks({limit:100,cursor}));
+  const tasks=[],items={},cards={},histories={};
+  for(const entry of entries){
+    const [t,h]=await Promise.all([API.getTask(entry.task_id),API.taskHistory(entry.task_id)]);
+    const vid=route.b===t.task_id&&route.version?route.version:t.current_version_id;
+    if(vid&&!(t.versions||[]).some(v=>v.version_id===vid))throw new Error('请求的版本不属于当前任务');
+    t.view_version_id=vid;tasks.push(t);histories[t.task_id]=h;
+    if(!vid)continue;
+    items[vid]=await allPages(cursor=>API.listItems(vid,{limit:100,cursor}));
+    if(route.b===t.task_id&&route.c&&!items[vid].some(i=>i.item_id===route.c))throw new Error('问题商品不属于所选版本');
+    // 限制单批卡片并发，任何一张卡读取失败都显示错误，禁止用不完整数据提交。
+    for(let i=0;i<items[vid].length;i+=8){
+      await Promise.all(items[vid].slice(i,i+8).map(async it=>{cards[it.item_id]=await API.getItem(vid,it.item_id);}));
+    }
+  }
+  return {tasks,items,cards,histories};
 }
 function detectMode(){
   const q=new URLSearchParams(location.search).get('mode');
   if(q==='live'||q==='fixture'||q==='demo')return q;
-  // 独立演示入口默认样例数据；真实读/审批接通后再切 LIVE 并设为首页。
-  return location.protocol==='file:'?'demo':'fixture';
+  return location.protocol==='file:'?'demo':'live';
 }
 function modeLabel(){
   const m=window.WB_MODE||'demo';
-  return m==='live'?'真实接口 · LIVE':m==='fixture'?'契约样例 · FIXTURE':'本地演示 · DEMO';
+  return m==='live'?'真实接口 · LIVE':m==='fixture'?'契约样例 · FIXTURE（只读）':'本地演示 · DEMO（不写库）';
 }
+
+/* ---------------------------- 正式工作台：会话、服务端写入与问题回查 ---------------------------- */
+function defaultRoute(role){return role==='business'?'business/overview':`${role}/${role==='expert'?'queue':'tasks'}`;}
+function isValidRoleRoute(role,r){
+  if(!role||!r||r.seg!==role)return false;
+  if(r.a==='task')return Boolean(r.b);
+  if(role==='supplier')return r.a==='tasks';
+  if(role==='business')return r.a==='overview'||r.a==='tasks';
+  if(role==='expert')return r.a==='queue'||r.a==='returned'||r.a==='archive';
+  return false;
+}
+function liveFeedback(){
+  return `<div id="live-status" role="status" aria-live="polite">${WB.pending?'正在保存，请稍候…':''}</div>${WB.error?`<div class="callout warn" role="alert" style="margin-bottom:16px">${esc(WB.error)}</div>`:''}`;
+}
+function liveLogin(){
+  return `<main class="login-shell"><div class="login-card"><div class="login-card-hd">
+    <div class="brand">${brandMark(26)}<span class="brand-name">关务预审工作台</span></div>
+    <h1>登录工作台</h1><p>使用业务账号登录，角色与可见任务由服务端确定。</p>
+  </div><div class="login-card-bd">
+    ${liveFeedback()}
+    <form id="live-login-form">
+      <div class="field"><label class="lb" for="live-username">账号</label><input class="input" id="live-username" name="username" autocomplete="username" placeholder="请输入账号" required></div>
+      <div class="field"><label class="lb" for="live-password">密码</label><input class="input" id="live-password" name="password" type="password" autocomplete="current-password" placeholder="请输入密码" required></div>
+      <button class="btn primary lg" style="width:100%;margin-top:4px" type="submit" ${WB.pending?'disabled':''}>登录</button>
+    </form><div style="margin-top:16px;text-align:center"><span class="demo-chip"><i></i>${modeLabel()}</span></div>
+  </div></div></main>`;
+}
+function errorText(error){
+  const status=error.status?`（HTTP ${error.status} · ${error.code||'error'}）`:'';
+  const hint=error.status===401?'登录已失效，请退出后重新登录。':error.status===409?'数据已变化，请刷新核对后再操作。':error.status===403?'请检查账号权限或重新登录后重试。':'';
+  return `${error.message||'网络请求失败，请检查连接后重试'}${status} ${hint}${error.requestId?' 请求编号：'+error.requestId:''}`;
+}
+async function startLive(){
+  WB.loading=true;render();
+  try{
+    WB.user=await API.me();
+    const uid=WB.user?(WB.user.username||WB.user.user_id||''):'';
+    if(uid&&uid!==WB.lastUserId){S.ui=defaultUi();WB.lastUserId=uid;}
+    if(WB.user)await reloadLive();
+  }
+  catch(error){if(error.status===401){WB.user=null;WB.error='';}else{WB.error='真实数据读取失败：'+errorText(error);WB.stale=true;}}
+  finally{WB.loading=false;render();}
+}
+let liveLoadSequence=0,liveRouteSequence=0;
+async function reloadLive(){
+  const sequence=++liveLoadSequence,data=await loadLive(),ui=S.ui||defaultUi();
+  if(sequence!==liveLoadSequence)return;
+  S=mapDataset(data);S.ui=ui;S.role=roleOf();WB.error='';WB.stale=false;
+}
+async function refreshLiveRoute(){
+  const sequence=++liveRouteSequence;WB.loading=true;render();
+  try{await reloadLive();}
+  catch(error){if(sequence===liveRouteSequence){WB.error='真实数据读取失败：'+errorText(error);WB.stale=true;}}
+  finally{if(sequence===liveRouteSequence){WB.loading=false;render();}}
+}
+function liveTaskActions(role,t){
+  const history=`<button class="btn" data-act="live-history" data-task="${t.id}">版本与问题记录</button>`;
+  if(t.readOnly)return history+'<span class="pill gold">旧版本只读</span>';
+  if(role==='supplier')return history;
+  if(role==='expert')return history+(t.submitted?`<button class="btn danger" data-act="live-open-decision" data-task="${t.id}" data-mode="return">整批退回</button><button class="btn primary" data-act="live-open-decision" data-task="${t.id}" data-mode="approve">整批通过</button>`:`<span class="pill idle">${isApproved(t)?'已通过':'没有待审提交'}</span>`);
+  return history+`<button class="btn primary" data-act="open-submit" data-task="${t.id}" ${t.submitted||isApproved(t)||!t.lines.length||t.lines.some(l=>!l.confirmationId)?'disabled':''}>${t.submitted?'已提交专家':'整批提交专家'}</button>`;
+}
+function issueHtml(t,issue){
+  const v=t.versions.find(x=>x.version_id===issue.version_id),loc=issue.source_location;
+  const itemMap=historyItemMap(t), it=issue.item_id?itemMap[issue.item_id]:null;
+  const position=it?`第 ${it.row} 行 · ${it.name}`:loc?`${loc.sheet_name} · 第 ${loc.row_number} 行`:(issue.item_id?'指定商品':'整批问题');
+  const target=issue.return_to==='operator'?'业务员':issue.return_to==='supplier'?'供应商':'—';
+  const statusLabel=issue.status==='open'?'待处理':issue.status==='resolved'?'已处理':issue.status;
+  const isHist=issue.version_id&&issue.version_id!==t.currentVersionId;
+  return `<div class="issue-card ${isHist?'is-hist':''}" data-issue-id="${esc(issue.issue_id)}">
+    <div class="issue-card-hd">
+      <span class="pill ${isHist?'plain':'cinnabar'}">${v?'V'+v.v:'历史版本'}</span>
+      <b>${esc(position)}</b>
+      <span class="tag">退回至 ${target}</span>
+      <span class="tag ${issue.status==='open'?'warn':''}">${esc(statusLabel)}</span>
+      ${issue.created_by?`<span class="dim">${esc(issue.created_by)}</span>`:''}
+      ${issue.created_at?`<span class="dim" style="margin-left:auto">${timeEl(issue.created_at)}</span>`:''}
+    </div>
+    <div class="issue-card-msg">${esc(issue.message)}</div>
+    <div class="issue-card-ft">
+      ${v?`<button class="btn sm" data-act="live-locate" data-task="${t.id}" data-version="${v.version_id}" data-line="${esc(issue.item_id||'')}">定位版本${issue.item_id?'和商品':''}</button>`:'<span></span>'}
+    </div>
+    <details class="trace-details"><summary>技术标识</summary>
+      ${traceRow('问题 ID',issue.issue_id)}
+      ${traceRow('版本 ID',issue.version_id||'—')}
+      ${traceRow('商品 ID',issue.item_id||'整批')}
+      ${traceRow('提交 ID',issue.submission_id||'')}
+      ${traceRow('裁决 ID',issue.decision_id||'')}
+    </details>
+  </div>`;
+}
+function liveIssuePanel(t){
+  const issues=(t.history?.issues||[]).filter(i=>i.version_id===t.viewVersionId);
+  const curV=t.versions.find(v=>v.version_id===t.currentVersionId);
+  return `${t.readOnly?`<div class="callout warn" role="status" style="margin-top:14px;align-items:center">${svg('alert',14,'ic')}<div style="flex:1">正在回查 <b>V${curVersion(t)}</b>，此版本只读。当前最新版本为 <b>V${curV?.v||'—'}</b>。</div>${curV?`<button class="btn sm" data-act="live-locate" data-task="${t.id}" data-version="${curV.version_id}">回到最新版本 V${curV.v}</button>`:''}</div>`:''}
+    ${issues.length?`<div class="panel" style="margin:14px 0 0"><div class="panel-hd"><h2>本版本退回问题</h2><span class="meta">${issues.length} 条</span></div><div class="panel-bd">${issues.map(i=>issueHtml(t,i)).join('')}</div></div>`:''}`;
+}
+function liveHsPanel(role,t,l){
+  const check=l.card.latest_expert_check;
+  const imgStatus=l.card.image_status||'absent';
+  const imgs=l.card.images||[];
+  const imgHtml=imgStatus==='available'
+    ? `<div class="img-box is-ok">${svg('image',15,'ic')}<div><b>有附图</b>（${imgs.length} 张）${imgs.map(im=>im.source_cell?` · ${esc(im.source_sheet||'')}${esc(im.source_cell)}`:'').join('')}</div></div>`
+    : imgStatus==='read_failed'
+    ? `<div class="img-box is-fail">${svg('alert',15,'ic')}<div><b>图片读取失败</b>${imgs[0]?.error_message?' · '+esc(imgs[0].error_message):' · 请核对原表附图'}</div></div>`
+    : `<div class="img-box">${svg('image',15,'ic')}<div><b>无附图</b> · 该商品行未附带图片</div></div>`;
+  const expertFinal=l.card.expert_final_hs?.value;
+  const hasExpertSuggest=!!l.card.expert_suggested_hs?.value;
+  const findings=check?.findings||[];
+  const aiCheckHtml=check
+    ? `<div class="ai-box">
+        <div class="ai-box-hd">
+          <span>核查对象 <b class="mono">${esc(check.target_hs)}</b>${hasExpertSuggest?` · 建议 <b class="mono">${esc(l.card.expert_suggested_hs.value)}</b>`:''}</span>
+          ${role==='expert'?`<button class="btn sm ghost" data-act="jump-tab" data-tab="check">查看核查结果</button>`:''}
+        </div>
+        ${check.submission_id!==l.submittedId?`<div class="callout warn" style="margin-top:8px">${svg('alert',13,'ic')}<div>这是历史提交的核查记录，不代表本次提交结论。</div></div>`:''}
+        ${findings.length
+          ? `<div class="ai-box-empty" style="color:var(--ink-2)">${role==='expert'?`发现 ${findings.length} 项核查意见，请切换到「核查结果」查看明细。`:`已记录 ${findings.length} 项专家核查意见，供专家复核参考。`}</div>`
+          : `<div class="ai-box-empty">${svg('checkCircle',13)}<span>已完成自动核查，暂无异常发现或改码建议。</span></div>`}
+      </div>`
+    : `<div class="ai-box"><div class="ai-box-empty">${svg('clock',13)}<span>尚未触发专家 AI 核查，提交后自动执行。</span></div></div>`;
+
+  // 商品级退回问题（仅列当前商品关联项，不混入其他商品问题）
+  const verIssues=(t.history?.issues||[]).filter(i=>i.version_id===l.versionId&&i.kind==='expert_return');
+  const myIssues=verIssues.filter(i=>i.item_id===l.id);
+  const itemReturnHtml=verIssues.length
+    ? `<div class="dp-sec"><div class="dp-sec-hd"><h3>退回问题</h3><button class="btn sm ghost" style="margin-left:auto" data-act="open-history" data-task="${t.id}">本批全部问题（${verIssues.length}）</button></div>
+        ${myIssues.length
+          ? `<div class="stack-8">${myIssues.map(i=>`<div class="issue stop"><span class="ic">${svg('alert',13)}</span><div class="body"><div class="t">${esc(i.message)}</div><div class="m"><span>退回至 ${i.return_to==='operator'?'业务员':'供应商'}</span>${i.created_at?`<span>${timeEl(i.created_at)}</span>`:''}</div></div></div>`).join('')}</div>`
+          : `<div class="callout">${svg('info',13,'ic')}<div>本商品未单列退回问题（随整批退回），可点击右上角查看本批全部问题。</div></div>`}
+      </div>`
+    : '';
+
+  const confMeta=l.decision
+    ? `<div class="stage-card-meta">
+        <div class="meta-row"><span>${esc(l.decision.by||'业务员')}</span>${l.decision.atRaw?timeEl(l.decision.atRaw):esc(l.decision.at||'')}
+          <button class="btn sm ghost" style="margin-left:auto;height:22px;padding:0 6px;font-size:11px" data-act="jump-tab" data-tab="log">查看记录 →</button>
+        </div>
+        ${l.decision.note?`<div style="margin-top:4px">理由：${esc(l.decision.note)}</div>`:''}
+      </div>`
+    : '';
+
+  return `<div class="dp-sec" style="margin-top:0">
+      <div class="dp-sec-hd"><h3>各阶段编码</h3><span class="r">V${curVersion(t)} · ${esc(l.position)}</span></div>
+      <div class="stage-grid">
+        <div class="stage-card"><div class="stage-card-k"><span>供应商原码</span></div><div class="stage-card-v ${l.supplierCode?'':'empty'}">${esc(l.supplierCode||'未填写')}</div></div>
+        <div class="stage-card"><div class="stage-card-k"><span>AI 预审建议</span></div><div class="stage-card-v ${l.aiCode?'':'empty'}">${esc(l.aiCode||'尚未产生')}</div></div>
+        <div class="stage-card is-full ${l.decision&&!l.submittedCode?'is-active':''}">
+          <div class="stage-card-k"><span>业务员当前确认</span>${l.decision?pill('jade','已确认',false):pill('gold','待确认',false)}</div>
+          <div class="stage-card-v ${l.decision?.code?'':'empty'}">${esc(l.decision?.code||'尚未确认')}</div>
+          ${confMeta}
+        </div>
+        <div class="stage-card ${l.submittedCode&&!expertFinal?'is-active':''}"><div class="stage-card-k"><span>实际提交快照</span></div><div class="stage-card-v ${l.submittedCode?'':'empty'}">${esc(l.submittedCode||'尚未提交')}</div></div>
+        <div class="stage-card ${expertFinal?'is-active':''}"><div class="stage-card-k"><span>专家最终编码</span></div><div class="stage-card-v ${expertFinal?'':'empty'}">${esc(expertFinal||'尚未形成')}</div></div>
+      </div>
+    </div>
+    <div class="dp-sec"><div class="dp-sec-hd"><h3>附图状态</h3></div>${imgHtml}</div>
+    <div class="dp-sec"><div class="dp-sec-hd"><h3>专家 AI 核查</h3></div>${aiCheckHtml}</div>
+    ${itemReturnHtml}
+    ${l.aiReason?`<div class="dp-sec"><div class="dp-sec-hd"><h3>预审说明</h3></div><div class="note-block">${esc(l.aiReason)}</div></div>`:''}
+    <div class="dp-sec"><div class="dp-sec-hd"><h3>追溯标识</h3><span class="r">单行与整批分开标注</span></div>
+      <div class="stack-8">
+        <div class="trace-group"><div class="trace-group-title">本行标识（当前商品独有）</div>
+          ${traceRow('商品 ID',l.id)}
+          ${traceRow('确认记录 ID',l.confirmationId||'')}
+        </div>
+        <div class="trace-group"><div class="trace-group-title">整批标识（同批提交共用）</div>
+          ${traceRow('提交快照 ID',l.submittedId||check?.submission_id||'')}
+          ${traceRow('核查执行 ID',check?.run_id||'')}
+        </div>
+      </div>
+    </div>`;
+}
+function liveCheckPanel(l){
+  const check=l.card.latest_expert_check;
+  const findings=check?.findings||[];
+  return `<div class="dp-sec" style="margin-top:0"><div class="dp-sec-hd"><h3>服务端核查意见</h3>${check?`<span class="r mono">对象 ${esc(check.target_hs)}</span>`:''}</div>
+    ${check
+      ? (findings.length
+          ? `<div class="stack-8">${findings.map(f=>`<div class="issue"><div class="body"><div class="t"><b>${esc(f.aspect)}</b> · ${esc(f.verdict)}</div><div class="m">${esc(f.reason)}</div></div></div>`).join('')}</div>`
+          : `<div class="ai-box"><div class="ai-box-empty">${svg('checkCircle',14)}<span>本次核查已完成，未返回异常项或改码建议，请由专家结合要素与单证人工裁决。</span></div></div>`)
+      : `<div class="empty">服务端尚未返回专家核查意见。</div>`}
+    ${check?`<details class="trace-details" style="margin-top:12px"><summary>核查执行标识</summary>${traceRow('提交 ID',check.submission_id)}${traceRow('执行 ID',check.run_id)}</details>`:''}
+  </div>`;
+}
+function liveDetailFooter(role,t,l){
+  if(t.readOnly||role==='supplier'||isApproved(t))return `<div class="dp-ft"><span class="note">${t.readOnly?'旧版本只读回查':isApproved(t)?'任务已通过，编码已归档':'供应商只读查看'}</span></div>`;
+  if(role==='expert')return `<div class="dp-ft"><span class="note">${t.submitted?'人工结论保存为整批裁决':'没有待审提交'}</span><div class="dp-ft-actions">${t.submitted?`<button class="btn sm danger" data-act="live-open-decision" data-task="${t.id}" data-line="${l.id}" data-mode="return">退回此商品问题</button><button class="btn sm primary" data-act="live-open-decision" data-task="${t.id}" data-mode="approve">审核整批</button>`:''}</div></div>`;
+  if(t.submitted)return `<div class="dp-ft"><span class="note">已提交专家 · 快照编码 <b class="mono">${esc(l.submittedCode||'—')}</b></span></div>`;
+  return `<div class="dp-ft dp-ft-stack"><span class="note">${l.decision?`${svg('check',12)} 已确认 <b class="mono">${esc(l.decision.code)}</b>`:'选择编码并确认'}</span>
+    <div class="dp-ft-actions">
+      ${l.supplierCode?`<button class="btn sm" data-act="confirm-code" data-task="${t.id}" data-line="${l.id}" data-code="${esc(l.supplierCode)}">采用原码 ${esc(l.supplierCode)}</button>`:''}
+      ${l.aiCode?`<button class="btn sm primary" data-act="confirm-code" data-task="${t.id}" data-line="${l.id}" data-code="${esc(l.aiCode)}">采用建议 ${esc(l.aiCode)}</button>`:''}
+      <button class="btn sm" data-act="live-edit-code" data-task="${t.id}" data-line="${l.id}">手填 / 修改编码</button>
+    </div></div>`;
+}
+function requireEditable(t,role){
+  if(WB.stale)throw new Error('当前数据尚未完成核对，请刷新数据后再操作');
+  if(!t||t.readOnly)throw new Error('旧版本或不可见任务不能修改');
+  if(roleOf()!==role)throw new Error('当前登录账号无权执行此操作');
+  if(isApproved(t))throw new Error('任务已通过，不能继续修改');
+}
+function requireResult(out,expected){
+  if(!out||!Object.entries(expected).every(([k,v])=>out[k]===v))throw new Error('服务端返回的对象与本次请求不符，操作结果待核对，请刷新');
+}
+function operationKey(kind,id,payload){
+  const signature=JSON.stringify([kind,id,payload]);
+  if(!WB.keys.has(signature))WB.keys.set(signature,crypto.randomUUID());
+  return WB.keys.get(signature);
+}
+async function saveLive(write,check,message){
+  if(WB.pending)return;WB.pending=true;WB.error='';hideToast();
+  const controls=[...document.querySelectorAll('button,input,textarea,select')].map(el=>[el,el.disabled]);
+  controls.forEach(([el])=>el.disabled=true);
+  const status=$('#live-status');if(status)status.textContent='正在保存，请稍候…';
+  let saved=false;
+  try{
+    const out=await write();check(out);saved=true;
+    await reloadLive();closeModal();preserveScroll(()=>render());toast(message);
+  }catch(error){
+    WB.stale=true;
+    WB.error=(saved?'服务端已保存，但页面刷新失败，请刷新核对：':'本次操作结果未确认：')+errorText(error);
+    preserveScroll(()=>render());
+    // 不重新构造弹窗，保留用户输入；失败提示在弹窗内也可见。
+    if(MODAL){let alert=$('#live-modal-error');if(!alert){alert=document.createElement('div');alert.id='live-modal-error';alert.className='callout warn';alert.setAttribute('role','alert');$('.modal-bd').prepend(alert);}alert.textContent=WB.error;}
+  }finally{WB.pending=false;controls.forEach(([el,disabled])=>{if(el.isConnected)el.disabled=disabled;});const status=$('#live-status');if(status)status.textContent='';}
+}
+function confirmLive(t,l,code,reason){
+  requireEditable(t,'business');if(t.submitted)throw new Error('已有待审提交，请等待专家裁决');
+  if(!/^\d{10}$/.test(code))throw new Error('确认编码必须为 10 位数字');
+  const payload={confirmed_hs:code,reason,expected_revision:l.revision};
+  return saveLive(()=>API.confirmItem(l.versionId,l.id,payload),out=>{requireResult(out,{task_id:t.id,version_id:l.versionId,item_id:l.id,confirmed_hs:code});if(!out.confirmation_id||!out.revision)throw new Error('确认回执缺少记录标识');},'编码已由服务端保存');
+}
+function openLiveCode(t,l){
+  requireEditable(t,'business');
+  openModal({
+    title:'确认商品编码',
+    sub:`V${curVersion(t)} · ${l.name} · ${l.position}`,
+    body:`<div class="code-ctx">
+        <div class="code-ctx-item"><span>供应商原码</span><b>${esc(l.supplierCode||'未填')}</b></div>
+        <div class="code-ctx-item"><span>AI 预审建议</span><b>${esc(l.aiCode||'—')}</b></div>
+        <div class="code-ctx-item"><span>当前已确认</span><b>${esc(l.decision?.code||'未确认')}</b></div>
+      </div>
+      <div class="field"><label class="lb" for="live-code">10 位 HS 编码</label><input class="input mono" id="live-code" inputmode="numeric" maxlength="10" placeholder="请输入 10 位数字 HS 编码" value="${esc(l.decision?.code||l.aiCode||l.supplierCode||'')}"></div>
+      <div class="field"><label class="lb" for="live-code-reason">确认 / 改码理由（必填）</label><textarea class="textarea" id="live-code-reason" rows="3" placeholder="请说明确认或调整编码的依据"></textarea></div>`,
+    footer:`<button class="btn" data-act="close-modal">取消</button><button class="btn primary" data-act="live-confirm-code" data-task="${t.id}" data-line="${l.id}">保存确认</button>`
+  });
+}
+function openLiveSubmission(t){
+  requireEditable(t,'business');
+  if(t.submitted)throw new Error('该批次已有待审提交');
+  if(!t.lines.length||t.lines.some(l=>!l.confirmationId||!l.decision?.code))throw new Error('请先逐行完成所有商品的编码确认');
+  openModal({
+    title:'整批提交专家',
+    sub:`V${curVersion(t)} · ${t.lines.length} 条商品`,
+    wide:true,
+    body:`<p style="margin-bottom:12px;color:var(--ink-2)">以下编码将保存为本次不可变提交快照，专家将按实际提交值审核。</p>
+      <div class="tbl-wrap"><table class="tbl tbl-compact"><thead><tr><th>商品</th><th style="width:120px">供应商原码</th><th style="width:120px">确认提交码</th></tr></thead>
+      <tbody>${t.lines.map(l=>`<tr><td><b>${esc(l.name)}</b><span class="alias">${esc(l.position)}</span></td><td class="mono dim">${esc(l.supplierCode||'—')}</td><td class="mono"><b>${esc(l.decision.code)}</b></td></tr>`).join('')}</tbody></table></div>`,
+    footer:`<button class="btn" data-act="close-modal">取消</button><button class="btn primary" data-act="confirm-submit" data-task="${t.id}">确认整批提交</button>`
+  });
+}
+function openLiveDecision(t,mode,itemId){
+  requireEditable(t,'expert');if(!t.submitted||!t.submissionId)throw new Error('该任务没有待审提交');
+  if(t.lines.some(l=>!l.submittedCode||l.submittedId!==t.submissionId))throw new Error('商品快照与待审提交不一致，请刷新核对');
+  const approve=mode==='approve';
+  openModal({
+    title:approve?'专家整批通过':'专家退回',
+    sub:`V${curVersion(t)} · ${t.lines.length} 条商品`,
+    wide:true,
+    body:`<p style="margin-bottom:14px;color:var(--ink-2)">${approve?'请核对每条最终编码；若调整了业务员提交编码，需填写对应行改码理由。':'指定问题商品、退回对象与具体问题；保存后整批退回。'}</p>
+    ${approve
+      ? `<div class="stack-12" style="margin-bottom:14px">${t.lines.map(l=>`<div class="decision-card" data-decision-item="${l.id}">
+          <div class="decision-card-hd"><b>${esc(l.name)} <span class="dim" style="font-weight:400">· ${esc(l.position)}</span></b><span class="tag">实际提交 <b class="mono">${esc(l.submittedCode)}</b></span></div>
+          <div class="split-2">
+            <div class="field" style="margin-bottom:0"><label class="lb">专家最终编码</label><input class="input mono" data-final="${l.id}" value="${esc(l.submittedCode)}" maxlength="10" inputmode="numeric"></div>
+            <div class="field" style="margin-bottom:0"><label class="lb">本行改码理由（改码时必填）</label><input class="input" data-change-reason="${l.id}" placeholder="未改码可留空"></div>
+          </div>
+        </div>`).join('')}</div>`
+      : `<div class="split-2" style="margin-bottom:14px">
+          <div class="field" style="margin-bottom:0"><label class="lb" for="live-issue-item">问题对应商品</label><select class="select" id="live-issue-item">${t.lines.map(l=>`<option value="${l.id}" ${l.id===itemId?'selected':''}>${esc(l.name)} · ${esc(l.position)}</option>`).join('')}</select></div>
+          <div class="field" style="margin-bottom:0"><label class="lb" for="live-return-to">退回至</label><select class="select" id="live-return-to"><option value="operator">业务员</option><option value="supplier">供应商</option></select></div>
+        </div>
+        <div class="field"><label class="lb" for="live-issue-message">具体问题（必填）</label><textarea class="textarea" id="live-issue-message" rows="3" placeholder="请明确需要核对或补充的内容"></textarea></div>`}
+    <div class="field"><label class="lb" for="live-decision-reason">${approve?'整批审核意见（可选）':'退回理由（必填）'}</label><textarea class="textarea" id="live-decision-reason" rows="2" placeholder="${approve?'可填写整体复核说明':'请说明整批退回的原因'}"></textarea></div>`,
+    footer:`<button class="btn" data-act="close-modal">取消</button><button class="btn ${approve?'primary':'danger'}" data-act="live-save-decision" data-mode="${mode}" data-task="${t.id}">${approve?'保存整批通过':'保存退回问题'}</button>`
+  });
+}
+function liveHistory(t){
+  const h=t.history;
+  const itemMap=historyItemMap(t);
+  const versions=[...(h?.versions||[])].sort((a,b)=>b.number-a.number);
+  const subStatusLabel=s=>s==='approved'?pill('jade','已通过',false):s==='returned'?pill('cinnabar','已退回',false):s==='pending'?pill('teal','待裁决',false):pill('plain',s||'—',false);
+
+  // 多版本并排对比（优先展示最新与上一版本）
+  let compareHtml='';
+  if(versions.length>1){
+    const curV=versions[0], prevV=versions[1];
+    const candMap={};
+    (h?.cross_version_candidates||[]).forEach(c=>{candMap[c.item_id]=c;});
+    const curConfByItem={};
+    (curV.confirmations||[]).forEach(c=>{curConfByItem[c.item_id]=c;});
+    const curDecByItem={};
+    (curV.submissions||[]).forEach(s=>(s.decisions||[]).forEach(d=>(d.items||[]).forEach(di=>{curDecByItem[di.item_id]=di;})));
+    const rows=(curV.items||[]).map(it=>{
+      const cand=candMap[it.item_id];
+      const oldIt=cand?itemMap[cand.candidate_item_id]:null;
+      const oldCode=oldIt?.supplierHs||'';
+      const newCode=it.supplier_hs_raw||'';
+      const changed=oldIt&&oldCode!==newCode;
+      const curFinal=curDecByItem[it.item_id]?.final_hs||curConfByItem[it.item_id]?.confirmed_hs||'';
+      const oldIssues=(h?.issues||[]).filter(i=>i.version_id===prevV.version_id&&oldIt&&i.item_id===oldIt.id);
+      return `<tr>
+        <td><b>第 ${esc(it.source_location?.row_number||'—')} 行 · ${esc(it.name)}</b></td>
+        <td class="mono">${oldIt?`第 ${esc(oldIt.row)} 行 · ${esc(oldCode||'未填')}`:'<span class="dim">新增行</span>'}</td>
+        <td class="mono">${changed?`<span class="diff-hl">${esc(oldCode||'未填')} → ${esc(newCode||'未填')}</span>`:esc(newCode||'未填')}</td>
+        <td class="mono">${esc(curFinal||'待确认')}</td>
+        <td>${oldIssues.length?`<span class="tag warn">V${prevV.number} 退回 ${oldIssues.length} 条</span>`:'<span class="dim">—</span>'}</td>
+      </tr>`;
+    }).join('');
+    compareHtml=`<div style="margin-bottom:18px"><div class="dp-sec-hd"><h3>版本对比（V${curV.number} vs V${prevV.number}）</h3><span class="r">${(curV.items||[]).length} 条商品</span></div>
+      <div class="tbl-wrap"><table class="tbl tbl-compact"><thead><tr><th>当前 V${curV.number} 商品</th><th>上一版 V${prevV.number} 原码</th><th>原码变化</th><th>V${curV.number} 确认 / 终值</th><th>关联退回</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+  }
+
+  const versionsHtml=versions.map(v=>{
+    const subs=v.submissions||[], confs=v.confirmations||[];
+    const subsHtml=subs.length?subs.map(sub=>{
+      const dec=sub.decisions?.at(-1);
+      const decByItem={};
+      (dec?.items||[]).forEach(di=>{decByItem[di.item_id]=di;});
+      return `<div class="hist-sub">
+        <div class="hist-sub-hd">${subStatusLabel(sub.status)}<span>提交人：${esc(sub.created_by||'—')}</span><span class="dim">${timeEl(sub.created_at)}</span>${dec?`<span class="dim">· 裁决：${esc(dec.created_by||'专家')} ${timeEl(dec.created_at,true)}</span>`:''}</div>
+        ${dec?.reason?`<div class="log-reason" style="margin:0 0 8px"><b>裁决意见：</b>${esc(dec.reason)}</div>`:''}
+        <div class="tbl-wrap"><table class="tbl tbl-compact"><thead><tr><th>商品</th><th style="width:110px">提交编码</th><th style="width:110px">专家终值</th><th>改码说明</th></tr></thead>
+        <tbody>${(sub.items||[]).map(si=>{
+          const it=itemMap[si.item_id], di=decByItem[si.item_id];
+          const recoded=di&&di.final_hs&&di.final_hs!==si.submitted_hs;
+          return `<tr><td>${it?`第 ${esc(it.row)} 行 · <b>${esc(it.name)}</b>`:esc(si.item_id)}</td>
+            <td class="mono">${esc(si.submitted_hs)}</td>
+            <td class="mono">${di?`<span class="${recoded?'diff-hl':''}">${esc(di.final_hs)}</span>`:'<span class="dim">—</span>'}</td>
+            <td>${di?.change_reason?esc(di.change_reason):'<span class="dim">—</span>'}</td></tr>`;
+        }).join('')}</tbody></table></div>
+        <details class="trace-details"><summary>提交与裁决标识</summary>${traceRow('提交 ID',sub.submission_id)}${dec?traceRow('裁决 ID',dec.decision_id):''}</details>
+      </div>`;
+    }).join(''):'<div class="dim" style="font-size:12px">本版本暂无整批提交记录。</div>';
+
+    const confsHtml=confs.length?`<details class="trace-details"><summary>业务员确认记录（${confs.length} 条）</summary>
+      <div class="stack-8" style="margin-top:6px">${confs.map(c=>{
+        const it=itemMap[c.item_id];
+        return `<div class="log-card" style="background:var(--surface)"><div class="log-card-hd">
+          <b>${it?`第 ${esc(it.row)} 行 · ${esc(it.name)}`:esc(c.item_id)}</b>
+          <span class="mono">${c.previous_hs?esc(c.previous_hs)+' → ':''}<b>${esc(c.confirmed_hs)}</b></span>
+          <span class="tl-by">${esc(c.created_by||'业务员')}</span>
+          <span class="tl-time">${timeEl(c.created_at)}</span>
+        </div>${c.reason?`<div class="log-reason"><b>理由：</b>${esc(c.reason)}</div>`:''}</div>`;
+      }).join('')}</div></details>`:'';
+
+    return `<div class="hist-ver">
+      <div class="hist-ver-hd">
+        <span class="pill ${v.is_current?'teal':'plain'}">V${v.number}${v.is_current?' · 当前':''}</span>
+        <b>${esc(v.original_filename)}</b>
+        <span class="dim" style="font-size:11.5px">${timeEl(v.uploaded_at)} · ${(v.items||[]).length} 条商品 · ${subs.length} 次提交</span>
+        <button class="btn sm" style="margin-left:auto" data-act="live-locate" data-task="${t.id}" data-version="${v.version_id}">查看此版本商品</button>
+      </div>
+      <div class="hist-ver-bd">${subsHtml}${confsHtml}
+        <details class="trace-details"><summary>版本技术标识</summary>${traceRow('版本 ID',v.version_id)}</details>
+      </div>
+    </div>`;
+  }).join('');
+
+  const issuesHtml=(h?.issues||[]).length
+    ? (h.issues||[]).map(i=>issueHtml(t,i)).join('')
+    : '<div class="empty" style="padding:18px">暂无已保存的人工退回问题。</div>';
+
+  openModal({
+    title:'版本、提交与退回问题',
+    sub:t.contract,
+    wide:true,
+    body:`${compareHtml}
+      <div class="dp-sec-hd"><h3>版本与提交记录</h3><span class="r">共 ${versions.length} 个版本</span></div>
+      <div class="stack-12">${versionsHtml}</div>
+      <div class="dp-sec-hd" style="margin-top:20px"><h3>全部历史退回问题</h3><span class="r">${(h?.issues||[]).length} 条</span></div>
+      <div>${issuesHtml}</div>`,
+    footer:'<button class="btn" data-act="close-modal">关闭</button>'
+  });
+}
+async function locateLive(t,version,itemId=''){
+  if(!t.versions.some(v=>v.version_id===version))throw new Error('该版本不属于此任务');
+  const url=`${roleOf()}/task/${t.id}${itemId?'/'+itemId:''}?version=${encodeURIComponent(version)}`;
+  closeModal();
+  if(location.hash==='#/'+url)await refreshLiveRoute();else go(url);
+}
+async function handleLiveAction(act,el,event){
+  const handled=['reload-live','logout-live','open-role-menu','switch-role','pick-role','live-edit-code','live-confirm-code','confirm-code','open-submit','confirm-submit','live-open-decision','live-save-decision','live-history','open-history','live-locate','switch-version','open-expert','batch-pass','batch-return','bulk-confirm','bulk-pass','confirm-expert','undo-decision','need-supplement','reprecheck','finish-precheck','open-upload','confirm-upload','reset-demo','toggle-prod','undo'];
+  if(!handled.includes(act))return false;event.preventDefault();if(WB.pending)return true;
+  const r=parseRoute(),t=task(el.dataset.task||r.b),l=t?line(t,el.dataset.line||r.c):null;
+  try{
+    if(act==='reload-live'){WB.loading=true;render();try{WB.user=await API.me();await reloadLive();}finally{WB.loading=false;}render();return true;}
+    if(act==='logout-live'){await API.logout();WB.user=null;WB.error='';WB.stale=false;WB.lastUserId='';WB.lastRouteKey='';WB.lastListRoute='';WB.pendingTab='';closeModal();S.tasks=[];S.ui=defaultUi();render();return true;}
+    if(['open-role-menu','switch-role','pick-role'].includes(act)){toast('当前角色由登录账号确定。更换账号请退出登录。');return true;}
+    if(act==='confirm-code'){await confirmLive(t,l,el.dataset.code,el.dataset.code===l.supplierCode?'采用供应商原码':'采用 AI 预审建议');return true;}
+    if(act==='live-edit-code'){openLiveCode(t,l);return true;}
+    if(act==='live-confirm-code'){const reason=$('#live-code-reason').value.trim();if(!reason)throw new Error('请填写确认或改码理由');await confirmLive(t,l,$('#live-code').value.trim(),reason);return true;}
+    if(act==='open-submit'){openLiveSubmission(t);return true;}
+    if(act==='confirm-submit'){
+      requireEditable(t,'business');if(t.submitted||t.lines.some(l=>!l.confirmationId))throw new Error('请刷新并完成逐行确认后提交');
+      const payload={version_id:t.currentVersionId,revision:t.revision,items:t.lines.map(l=>({item_id:l.id,confirmation_id:l.confirmationId}))};
+      await saveLive(()=>API.submitTask(t.id,payload,operationKey('submit',t.id,payload)),out=>{requireResult(out,{task_id:t.id,version_id:t.currentVersionId,status:'pending'});if(!out.submission_id||out.items?.length!==t.lines.length||!out.items.every(i=>t.lines.some(l=>l.id===i.item_id&&l.confirmationId===i.confirmation_id&&l.decision.code===i.submitted_hs)))throw new Error('提交回执与确认编码不一致，请刷新核对');},'整批提交已由服务端保存');return true;
+    }
+    if(act==='live-open-decision'){openLiveDecision(t,el.dataset.mode,el.dataset.line);return true;}
+    if(act==='live-save-decision'){
+      requireEditable(t,'expert');if(!t.submitted)throw new Error('该提交已不在待审状态');
+      const approve=el.dataset.mode==='approve',reason=$('#live-decision-reason').value.trim();
+      const payload={action:approve?'approve':'return',revision:t.revision,reason,items:[],issues:[]};
+      if(approve){payload.items=t.lines.map(l=>{const final_hs=$(`[data-final="${l.id}"]`).value.trim(),change_reason=$(`[data-change-reason="${l.id}"]`).value.trim();if(!/^\d{10}$/.test(final_hs))throw new Error(l.name+'：最终编码必须为 10 位数字');if(final_hs!==l.submittedCode&&!change_reason)throw new Error(l.name+'：调整提交编码必须填写改码理由');return {item_id:l.id,final_hs,change_reason};});}
+      else{const message=$('#live-issue-message').value.trim();if(!reason||!message)throw new Error('请填写退回理由与具体问题');payload.return_to=$('#live-return-to').value;payload.issues=[{item_id:$('#live-issue-item').value,message}];}
+      await saveLive(()=>API.decideSubmission(t.submissionId,payload,operationKey('decide',t.submissionId,payload)),out=>{requireResult(out,{task_id:t.id,version_id:t.currentVersionId,submission_id:t.submissionId,action:payload.action,submission_status:approve?'approved':'returned'});if(!out.decision_id)throw new Error('裁决回执缺少标识');if(!approve&&(!out.issues?.length||!out.issues.every(i=>i.version_id===t.currentVersionId&&i.submission_id===t.submissionId&&i.item_id===payload.issues[0].item_id)))throw new Error('退回问题回执缺少版本或商品归属');},approve?'专家整批通过已由服务端保存':'专家退回及问题已由服务端保存');return true;
+    }
+    if(act==='live-history'||act==='open-history'){liveHistory(t);return true;}
+    if(act==='switch-version'){await locateLive(t,t.versions.find(v=>v.v===Number(el.dataset.v)).version_id);return true;}
+    if(act==='live-locate'){await locateLive(t,el.dataset.version,el.dataset.line);return true;}
+    toast('此操作尚未接入正式工作台，未保存任何变更。');return true;
+  }catch(error){WB.error=errorText(error);preserveScroll(()=>render());toast(WB.error);return true;}
+}
+document.addEventListener('submit',async event=>{
+  if(event.target.id!=='live-login-form')return;event.preventDefault();if(WB.pending)return;
+  const username=$('#live-username').value.trim(),password=$('#live-password').value;
+  WB.pending=true;WB.error='';event.target.querySelector('button').disabled=true;
+  try{
+    WB.user=await API.login(username,password);
+    WB.lastUserId=WB.user?(WB.user.username||WB.user.user_id||''):'';
+    WB.lastRouteKey='';WB.lastListRoute='';WB.pendingTab='';
+    S.ui=defaultUi();
+    const role=roleOf(),currentRoute=parseRoute();
+    if(role&&!isValidRoleRoute(role,currentRoute)){
+      const targetHash='#/'+defaultRoute(role);
+      if(location.hash!==targetHash)history.replaceState(null,'',targetHash);
+    }
+    WB.loading=true;await reloadLive();
+  }
+  catch(error){WB.error=errorText(error);if(error.status===401)WB.user=null;else if(WB.user)WB.stale=true;}
+  finally{WB.pending=false;WB.loading=false;render();if(!WB.user&&$('#live-username'))$('#live-username').value=username;}
+});
 
 /* ---------------------------- 启动 ---------------------------- */
 (async function boot(){
-  const r=parseRoute();
-  if(r.seg==='supplier'||r.seg==='business'||r.seg==='expert')S.role=r.seg;
-  document.body.classList.toggle('prod',!!(S.ui&&S.ui.prod));
-  let mode=detectMode();
-  if(mode!=='demo'){
-    try{
-      const data=mode==='live'?await loadLive():await loadFixture();
-      if(!data.tasks||!data.tasks.length)throw new Error('empty');
-      const role=S.role;S=mapDataset(data);S.role=role;
-    }catch(e){
-      if(mode==='live'){try{const data=await loadFixture();const role=S.role;S=mapDataset(data);S.role=role;mode='fixture';}catch(e2){mode='demo';}}
-      else mode='demo';
-    }
+  if(LIVE){await startLive();return;}
+  const r=parseRoute();if(['supplier','business','expert'].includes(r.seg))S.role=r.seg;
+  if(window.WB_MODE==='fixture'){
+    try{const role=S.role;S=mapDataset(await loadFixture());S.role=role;}
+    catch(error){$('#root').innerHTML=`<div class="empty" role="alert">FIXTURE 读取失败：${esc(error.message)}</div>`;return;}
   }
-  window.WB_MODE=mode;
   render();
 })();
 </script>

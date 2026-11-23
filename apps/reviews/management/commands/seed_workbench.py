@@ -312,7 +312,8 @@ class Command(BaseCommand):
         issue_ids = []
         for spec, item, _ in confirmed_items:
             issue = Issue.objects.create(
-                id=seed_id(f"{key}/{spec.key}/issue"), task=task, item=item,
+                id=seed_id(f"{key}/{spec.key}/issue"), task=task, version=version,
+                submission=submission, decision=decision, item=item,
                 kind="expert_return", message=HISTORY_ISSUES[spec.key], created_by=expert,
             )
             issue_ids.append(str(issue.pk))

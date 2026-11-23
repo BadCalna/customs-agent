@@ -7,6 +7,7 @@
 from apps.accounts.permissions import READ, get_visible_task, require_action
 
 from ..models import Confirmation
+from ..serializers import issue_to_history
 
 
 def _source(item):
@@ -140,12 +141,8 @@ def task_history(user, task_id: str) -> dict:
         "versions": versions,
         "cross_version_candidates": cross_version_candidates(task, latest) if latest is not None else [],
         "issues": [
-            {
-                "issue_id": str(issue.pk), "item_id": str(issue.item_id) if issue.item_id else None,
-                "kind": issue.kind, "message": issue.message, "status": issue.status,
-                "created_at": issue.created_at.isoformat(),
-            }
-            for issue in task.issues.order_by("created_at")
+            issue_to_history(issue).model_dump(mode="json")
+            for issue in task.issues.select_related("item", "decision", "created_by").order_by("created_at", "pk")
         ],
         "audit_events": [
             {
