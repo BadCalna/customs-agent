@@ -1,0 +1,140 @@
+{% extends 'ops_admin/base.html' %}
+{% load static %}
+{% block script %}<script type="module" src="{% static 'ops_admin/console.js' %}"></script>{% endblock %}
+{% block mast_tools %}
+<div class="mast-tools">
+  <span class="operator"><span class="online-dot" aria-hidden="true"></span>{{ operator }}</span>
+  <a class="mast-desk" href="{% url 'production-index' %}">返回工作台 ↗</a>
+  <form id="ops-logout" method="post" hidden>{% csrf_token %}<button type="submit" class="mast-action">退出</button></form>
+</div>
+{% endblock %}
+{% block main %}
+<main id="ops-main" class="work-area" tabindex="-1" data-operator-id="{{ operator_id }}">
+  {{ caps|json_script:'ops-capabilities' }}
+  <noscript><p class="feedback" data-tone="error">控制台需要 JavaScript 连接实时接口。</p></noscript>
+  <div class="hero">
+    <div class="hero-copy">
+      <p class="plate-index"><span>OPS</span> / CONTROL ROOM</p>
+      <h1>系统管理<span aria-hidden="true">.</span></h1>
+      <p>管理账号与访问权限，核查运维操作和服务异常。</p>
+    </div>
+    <div class="yard" aria-hidden="true">
+      <svg viewBox="0 0 375 143" fill="none">
+        <defs><pattern id="yard-grid" width="15" height="15" patternUnits="userSpaceOnUse"><path d="M15 0H0V15" stroke="currentColor" stroke-opacity=".17"/></pattern></defs>
+        <path d="M1 1H374V142H1z" fill="url(#yard-grid)" stroke="currentColor" stroke-opacity=".35"/>
+        <path d="m21 113 61-34h133l42-26h95M21 88l61-34h71l42-26h157M21 138l61-34h170l44-26h56" stroke="currentColor" opacity=".46"/>
+        <path d="M21 113h61v-9m133-25v25h37m5-51v25h39M153 54v25h42V28" stroke="currentColor" opacity=".46" stroke-dasharray="3 4"/>
+        <path d="M21 113h61V79h133l42-26h95" stroke="#e6c486" stroke-width="2"/>
+        <path d="M18 110h6v6h-6zM79 76h6v6h-6zM212 76h6v6h-6zM254 50h6v6h-6zM349 50h6v6h-6z" fill="#e6c486"/>
+      </svg>
+      <span>ACCESS CONTROL <i></i> SYSTEM TELEMETRY</span>
+    </div>
+  </div>
+  <div class="console-layout">
+    <nav class="console-nav" aria-label="系统管理导航" id="ops-nav">
+      <p class="section-code">工作区 / WORKSPACE</p>
+      {% if caps.dashboard %}<a class="nav-link" href="#overview" data-section="overview"><span>01</span>运行概览<b aria-hidden="true">↗</b></a>{% endif %}
+      {% if caps.accounts %}<a class="nav-link" href="#users" data-section="users"><span>02</span>账号管理<b aria-hidden="true">↗</b></a>{% endif %}
+      {% if caps.groups %}<a class="nav-link" href="#groups" data-section="groups"><span>03</span>组与权限<b aria-hidden="true">↗</b></a>{% endif %}
+      {% if caps.audit %}<a class="nav-link" href="#audit" data-section="audit"><span>04</span>审计事件<b aria-hidden="true">↗</b></a>{% endif %}
+      {% if caps.errors %}<a class="nav-link" href="#errors" data-section="errors"><span>05</span>异常日志<b aria-hidden="true">↗</b></a>{% endif %}
+      {% if caps.dashboard %}<a class="nav-link" href="#modules" data-section="modules"><span>06</span>模块登记<b aria-hidden="true">↗</b></a>{% endif %}
+      <div id="shared-nav" class="secondary-nav" hidden><p class="section-code">关联工作区 / LINKS</p><div></div></div>
+      {% if caps.native_users or caps.native_groups %}
+      <div class="secondary-nav">
+        <p class="section-code">原生 Admin / 低频维护</p>
+        {% if caps.native_users %}<a href="{% url 'admin:accounts_user_changelist' %}">原生账号维护 ↗</a>{% endif %}
+        {% if caps.native_groups %}<a href="{% url 'admin:auth_group_changelist' %}">原生组维护 ↗</a>{% endif %}
+        {% if caps.accounts and not caps.native_users or caps.groups and not caps.native_groups %}<small>保留对象及低频维护请联系拥有原生后台权限的管理员。</small>{% endif %}
+      </div>
+      {% elif caps.accounts or caps.groups %}
+      <div class="secondary-nav">
+        <p class="section-code">原生 Admin / 低频维护</p>
+        <small>保留对象及低频维护请联系拥有原生后台权限的管理员。</small>
+      </div>
+      {% endif %}
+    </nav>
+    <div class="workspace">
+      <p id="global-feedback" class="feedback" aria-live="polite" tabindex="-1" hidden></p>
+      {% if caps.dashboard %}
+      <section class="view" id="overview" aria-labelledby="overview-title" hidden>
+        <div class="view-heading"><div><p class="section-code">01 / SYSTEM TELEMETRY</p><h2 id="overview-title" tabindex="-1">运行概览</h2><p>查看当前会话、账户生命周期与基础服务状态。</p></div><button class="utility" data-refresh type="button">刷新概览 <span aria-hidden="true">↻</span></button></div>
+        <p class="view-status" aria-live="polite" data-status></p>
+        <div id="overview-metrics" class="metrics" data-results></div>
+        <section id="operator-summary" class="sheet section-spacing" aria-labelledby="operator-title" hidden><div class="sheet-head"><h3 id="operator-title">当前操作者</h3><span class="mono">SESSION / LIVE</span></div><div class="sheet-body" data-operator></div></section>
+      </section>
+      {% endif %}
+      {% if caps.accounts %}
+      <section class="view" id="users" aria-labelledby="users-title" hidden>
+        <div class="view-heading"><div><p class="section-code">02 / ACCOUNT DIRECTORY</p><h2 id="users-title" tabindex="-1">账号管理</h2><p>管理账号状态、业务角色与系统组。此处不展示业务数据。</p></div>{% if caps.add_user %}<button class="primary" id="add-user" type="button">＋ 新增账号</button>{% endif %}</div>
+        {% if caps.users %}
+        <details class="sheet filter-sheet" open><summary>筛选账号</summary>
+          <form class="filters" data-filter autocomplete="off">
+            <label>用户名<input name="username" type="search" maxlength="150" placeholder="输入用户名"></label>
+            <label>账号 UUID<input name="id" type="search" maxlength="36" placeholder="完整 UUID"></label>
+            <label>状态<select name="status"><option value="">不限状态</option><option value="active">活跃</option><option value="disabled">已禁用</option><option value="pending_secret">待设密</option></select></label>
+            <label>业务角色<select name="role"><option value="">不限角色</option><option value="supplier">供应商</option><option value="operator">业务员</option><option value="expert">专家</option><option value="none">非业务</option></select></label>
+            {% if caps.groups %}<label>系统组<select name="group" id="filter-groups"><option value="">不限系统组</option></select></label>{% endif %}
+            <div class="filter-actions"><button class="primary" type="submit">查询</button><button class="utility" type="reset">清除</button></div>
+          </form>
+        </details>
+        <p class="view-status" aria-live="polite" data-status></p><div data-results></div><button class="utility next-page" data-next type="button" hidden>加载更多 ↓</button>
+        {% else %}<p class="feedback">当前权限可新增账号，不可查看账号目录。</p>{% endif %}
+      </section>
+      {% endif %}
+      {% if caps.groups %}
+      <section class="view" id="groups" aria-labelledby="groups-title" hidden>
+        <div class="view-heading"><div><p class="section-code">03 / PERMISSION CATALOG</p><h2 id="groups-title" tabindex="-1">组与权限</h2><p>只能选择权限白名单中允许分配的项目；声明模块独立检查其权限。</p></div><button class="utility" data-refresh type="button">刷新 <span aria-hidden="true">↻</span></button></div>
+        <p class="view-status" aria-live="polite" data-status></p><div data-results></div><button class="utility next-page" data-next type="button" hidden>加载更多 ↓</button>
+        <details id="permission-catalog" class="sheet section-spacing"><summary>查看可分配权限白名单</summary><div class="sheet-body" data-catalog></div></details>
+      </section>
+      {% endif %}
+      {% if caps.audit %}
+      <section class="view" id="audit" aria-labelledby="audit-title" hidden>
+        <div class="view-heading"><div><p class="section-code">04 / AUDIT TRAIL</p><h2 id="audit-title" tabindex="-1">审计事件</h2><p>检索结构化审计摘要及其请求关联信息。</p></div>{% if caps.export %}<button class="utility" type="button" data-export disabled>导出筛选结果 <span aria-hidden="true">↧</span></button>{% endif %}</div>
+        <details class="sheet filter-sheet" open><summary>筛选审计事件</summary>
+          <form class="filters" data-filter autocomplete="off">
+            <label>起始日期<input name="date_from" type="date"></label><label>截止日期<input name="date_to" type="date"></label>
+            <label>事件类型<input name="event_type" type="search" maxlength="120" placeholder="如 ops.user.created"></label>
+            <label>结果<select name="outcome"><option value="">不限结果</option><option value="success">成功</option><option value="failure">失败</option><option value="denied">已拒绝</option></select></label>
+            <label>操作者 ID<input name="actor_id" type="search" maxlength="36"></label><label>请求 ID<input name="request_id" type="search" maxlength="128"></label>
+            <label>目标类型<input name="target_type" type="search" maxlength="120"></label><label>目标 ID<input name="target_id" type="search" maxlength="128"></label>
+            <label>摘要码<input name="summary_code" type="search" maxlength="120"></label><label>模块<input name="module" type="search" maxlength="120"></label><label>运行 ID<input name="run_id" type="search" maxlength="36"></label>
+            <div class="filter-actions"><button class="primary" type="submit">查询</button><button class="utility" type="reset">清除</button></div>
+          </form>
+        </details>
+        <p class="view-status" aria-live="polite" data-status></p><div data-results></div><button class="utility next-page" data-next type="button" hidden>加载更多 ↓</button>
+      </section>
+      {% endif %}
+      {% if caps.errors %}
+      <section class="view" id="errors" aria-labelledby="errors-title" hidden>
+        <div class="view-heading"><div><p class="section-code">05 / EXCEPTION LEDGER</p><h2 id="errors-title" tabindex="-1">异常日志</h2><p>查看安全摘要、堆栈指纹与重复次数，不展示原始堆栈。</p></div>{% if caps.export %}<button class="utility" type="button" data-export disabled>导出筛选结果 <span aria-hidden="true">↧</span></button>{% endif %}</div>
+        <details class="sheet filter-sheet" open><summary>筛选异常日志</summary>
+          <form class="filters" data-filter autocomplete="off">
+            <label>起始日期<input name="date_from" type="date"></label><label>截止日期<input name="date_to" type="date"></label>
+            <label>HTTP 状态码<input name="status_code" type="number" min="100" max="599" placeholder="如 500"></label><label>异常代码<input name="error_code" type="search" maxlength="120"></label>
+            <label>堆栈指纹<input name="stack_hash" type="search" maxlength="128"></label><label>请求路径<input name="path" type="search" maxlength="255"></label>
+            <label>处理状态<select name="resolved"><option value="">不限状态</option><option value="false">待处理</option><option value="true">已处理</option></select></label>
+            <div class="filter-actions"><button class="primary" type="submit">查询</button><button class="utility" type="reset">清除</button></div>
+          </form>
+        </details>
+        <p class="view-status" aria-live="polite" data-status></p><div data-results></div><button class="utility next-page" data-next type="button" hidden>加载更多 ↓</button>
+      </section>
+      {% endif %}
+      {% if caps.dashboard %}
+      <section class="view" id="modules" aria-labelledby="modules-title" hidden>
+        <div class="view-heading"><div><p class="section-code">06 / MODULE REGISTRY</p><h2 id="modules-title" tabindex="-1">模块登记</h2><p>停用模块只关闭模块入口，不删除模块数据或改变业务权限。</p></div><button class="utility" data-refresh type="button">刷新 <span aria-hidden="true">↻</span></button></div>
+        <p class="view-status" aria-live="polite" data-status></p><div id="module-grid" class="module-grid" data-results></div><button class="utility next-page" data-next type="button" hidden>加载更多 ↓</button>
+      </section>
+      {% endif %}
+    </div>
+  </div>
+  <dialog id="ops-dialog" class="ops-dialog" aria-labelledby="dialog-title">
+    <div class="dialog-inner">
+      <div class="dialog-head"><div><p class="section-code">OPS / 操作面板</p><h2 id="dialog-title" tabindex="-1"></h2></div><button class="utility dialog-close" type="button" aria-label="关闭操作面板">×</button></div>
+      <div id="dialog-body" class="dialog-body"></div>
+      <p id="dialog-feedback" class="feedback" aria-live="polite" tabindex="-1" hidden></p>
+    </div>
+  </dialog>
+</main>
+{% endblock %}

@@ -1,0 +1,19 @@
+{% extends 'reference_browser/base.html' %}
+{% block title %}参考数据中心 · 关务预审工作台{% endblock %}
+{% block body_class %}access-page{% endblock %}
+{% block content %}
+<main class="access-shell" aria-labelledby="access-title">
+  <section class="access-card">
+    <p class="eyebrow">REFERENCE BROWSER / ACCESS</p>
+    {% if state == 'unauthenticated' %}
+      <h1 id="access-title">请先登录工作台</h1>
+      <p>基础数据中心沿用当前会话与对象权限，不接受匿名浏览。</p>
+      <a class="button button-primary" href="/login/">前往登录 <span aria-hidden="true">↗</span></a>
+    {% else %}
+      <h1 id="access-title">暂未开通参考数据权限</h1>
+      <p>当前账号没有可访问的目录或历史案例权限。请联系系统管理员申请明确授权。</p>
+      <a class="button button-secondary" href="/">返回关务工作台</a>
+    {% endif %}
+  </section>
+</main>
+{% endblock %}
