@@ -1696,7 +1696,8 @@ function viewExpertArchive(){
 }
 
 /* ---------------------------- 任务详情 ---------------------------- */
-function filteredLines(t){
+const isUnconfirmed=l=>!l.decision;
+function filteredLines(t,role=roleOf()){
   let ls=[...t.lines];
   const q=(S.ui.query||'').trim().toLowerCase();
   if(q) ls=ls.filter(l=>(l.name+l.alias+l.supplierCode+(l.aiCode||'')+l.no).toLowerCase().includes(q));
@@ -1704,7 +1705,7 @@ function filteredLines(t){
   if(f==='need') ls=ls.filter(l=>l.verdict==='mismatch'||l.verdict==='unsure'||l.verdict==='missing');
   if(f==='match') ls=ls.filter(l=>l.verdict==='match');
   if(f==='done') ls=ls.filter(l=>l.decision||(l.expert&&l.expert.result));
-  if(f==='pending') ls=ls.filter(l=>!l.decision&&!(l.expert&&l.expert.result));
+  if(f==='pending') ls=ls.filter(role==='readonly'?isUnconfirmed:l=>!l.decision&&!(l.expert&&l.expert.result));
   if(S.ui.sort){
     const {key,dir}=S.ui.sort;
     ls.sort((a,b)=>{
@@ -1738,10 +1739,10 @@ function viewTask(role, t, lineId){
   }
   const roleTag=readonly?'超管只读':isExpert?'专家审核':isSup?'供应商回查':'业务员预审';
   const allPassed=isExpert&&lines.every(l=>l.expert&&l.expert.result==='pass');
-  const shown=filteredLines(t);
+  const shown=filteredLines(t,role);
   const sel=S.ui.selected||[];
   const verdictCount=k=>lines.filter(l=>l.verdict===k).length;
-  const unconf=lines.filter(l=>!l.decision).length;
+  const unconf=lines.filter(isUnconfirmed).length;
 
   const hdActions=LIVE?liveTaskActions(role,t):isExpert
     ?(isApproved(t)?`<span class="btn" aria-disabled="true">${svg('checkCircle',14)} 已确认</span>`
@@ -1760,7 +1761,7 @@ function viewTask(role, t, lineId){
     ['all','全部',lines.length],
     ['need','预审存疑',lines.filter(l=>l.verdict==='mismatch'||l.verdict==='unsure'||l.verdict==='missing').length],
     ['match','预审一致',verdictCount('match')],
-    ['pending',pendingLabel,lines.filter(l=>isExpert?!(l.expert&&l.expert.result):!l.decision).length]
+    ['pending',pendingLabel,isExpert?lines.filter(l=>!(l.expert&&l.expert.result)).length:unconf]
   ];
   const toolbar=`<div class="toolbar">
     <label class="search">${svg('search',14)}<input type="text" placeholder="搜索品名 / 编码 / 项号" value="${esc(S.ui.query||'')}" data-act="search-input"></label>
@@ -1798,7 +1799,7 @@ function viewTask(role, t, lineId){
     <div class="panel-hd"><h2>${isExpert?'提交快照':isSup?'当前批次状态':'当前进度'}</h2><span class="meta">${isExpert?'业务员确认并提交的版本':isSup||readonly?'只读查看各阶段编码与退回问题':'逐条处理后整批提交'}</span>
       <div class="hd-r">${pill(st.tone,st.label)}</div></div>
     <div class="panel-bd"><div class="split-3" style="gap:12px">
-      <div><div class="k" style="font-size:11.5px;color:var(--ink-3)">${isSup?'当前版本待处理':readonly?'待业务员确认':'待你处置'}</div><div class="v serif" style="font-size:22px;font-weight:700;margin-top:8px">${isSup?(t.history?.issues||[]).filter(i=>i.version_id===t.viewVersionId&&i.status==='open'&&i.return_to==='supplier').length:isExpert?lines.filter(l=>!(l.expert&&l.expert.result)).length:lines.filter(l=>l.verdict&&!l.decision).length}<small style="font-size:12px;color:var(--ink-4);font-family:var(--sans)"> 条</small></div></div>
+      <div><div class="k" style="font-size:11.5px;color:var(--ink-3)">${isSup?'当前版本待处理':readonly?'待业务员确认':'待你处置'}</div><div class="v serif" style="font-size:22px;font-weight:700;margin-top:8px">${isSup?(t.history?.issues||[]).filter(i=>i.version_id===t.viewVersionId&&i.status==='open'&&i.return_to==='supplier').length:isExpert?lines.filter(l=>!(l.expert&&l.expert.result)).length:readonly?unconf:lines.filter(l=>l.verdict&&!l.decision).length}<small style="font-size:12px;color:var(--ink-4);font-family:var(--sans)"> 条</small></div></div>
       <div><div class="k" style="font-size:11.5px;color:var(--ink-3)">已形成结论</div><div class="v serif" style="font-size:22px;font-weight:700;margin-top:8px">${isExpert||isSup?lines.filter(l=>l.expert&&l.expert.result).length:lines.filter(l=>l.decision).length}<small style="font-size:12px;color:var(--ink-4);font-family:var(--sans)"> 条</small></div></div>
       <div><div class="k" style="font-size:11.5px;color:var(--ink-3)">时间节点</div><div style="font-size:12px;margin-top:10px;line-height:1.6" class="dim">${isExpert?(t.submittedAtRaw?`提交于 ${timeEl(t.submittedAtRaw)}`:`提交于 ${esc(t.submittedAt||'—')}`):(t.precheckAtRaw?`自动预审于 ${timeEl(t.precheckAtRaw)}`:`自动预审于 ${esc(t.precheckAt||'—')}`)}</div></div>
     </div></div>

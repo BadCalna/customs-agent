@@ -8,7 +8,7 @@ import unittest
 from django.test import LiveServerTestCase, override_settings
 
 from apps.accounts.models import Role
-from apps.reviews.models import Task
+from apps.reviews.models import Confirmation, Task
 from tests.p01.factories import PASSWORD, assign, make_item, make_task, make_user, make_version
 from tests.p01.test_superuser_access import make_superuser
 
@@ -46,6 +46,11 @@ class SuperuserWorkbenchBrowserTests(LiveServerTestCase):
         current_version = make_version(task_a, supplier_a, number=2)
         make_item(old_version, name="历史商品甲")
         current_item = make_item(current_version, name="当前商品甲")
+        confirmed_item = make_item(current_version, row=9, name="已确认商品甲")
+        Confirmation.objects.create(
+            item=confirmed_item, revision=confirmed_item.revision,
+            confirmed_hs=confirmed_item.supplier_hs_raw, created_by=operator,
+        )
         make_item(make_version(task_b, supplier_b), name="未分派商品乙")
         self.assertFalse(admin.task_assignments.exists())
 
@@ -102,6 +107,14 @@ class SuperuserWorkbenchBrowserTests(LiveServerTestCase):
                 page.get_by_role("link", name="返回全部任务").click()
                 page.locator(rows).filter(has_text=task_a.title).click()
                 expect(page.get_by_role("heading", name=current_item.name)).to_be_visible(timeout=load_timeout)
+                pending = page.locator('[data-filter="pending"]')
+                item_rows = page.locator("#line-table tbody tr")
+                expect(item_rows).to_have_count(2)
+                expect(pending).to_have_text("未确认1")
+                expect(page.locator(".split-3 > div").filter(has_text="待业务员确认")).to_have_text("待业务员确认1 条")
+                pending.click()
+                expect(item_rows).to_have_count(1)
+                expect(item_rows.first).to_contain_text(current_item.name)
                 expect(page.locator(writes)).to_have_count(0)
                 page.get_by_role("button", name="版本与问题记录").click()
                 dialog = page.get_by_role("dialog", name="版本、提交与退回问题")
