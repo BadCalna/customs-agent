@@ -5,7 +5,7 @@
 ## 隔离环境接入（不用于生产）
 
 1. 在项目已有的 Python 环境安装附加依赖：`uv pip install -r apps/agent_debug/requirements.txt`（使用带 pip 的虚拟环境也可运行 `python -m pip install -r apps/agent_debug/requirements.txt`）。
-2. 在 `INSTALLED_APPS` 加入 `apps.agent_debug`。Django 页面 URLConf 在根 `urlpatterns` 加入 `path("", include("apps.agent_debug.urls"))`，该 URLConf 自带 `/ops/debug/` 前缀。现有 v1 Ninja API 注册 `api_v1.add_router("/ops/debug/", agent_debug_router)`，其中 `from apps.agent_debug.api import router as agent_debug_router`；完整 API 前缀是 `/api/v1/ops/debug/`。保留项目的会话、CSRF 中间件及异常处理。即使绕开页面调用 API，写请求也须提供同会话 CSRF token。
+2. 在 `INSTALLED_APPS` 加入 `apps.agent_debug`。模块内 `apps.agent_debug.urls` 只用相对路径，由集成方挂在根 `urlpatterns` 的 `path("ops/debug/", include("apps.agent_debug.urls"))`；01 系统管理装载清单时也按相对路径解析入口。现有 v1 Ninja API 注册 `api_v1.add_router("ops/debug", agent_debug_router)`，其中 `from apps.agent_debug.api import router as agent_debug_router`；完整 API 前缀是 `/api/v1/ops/debug/`。保留项目的会话、CSRF 中间件及异常处理。即使绕开页面调用 API，写请求也须提供同会话 CSRF token。
 3. `python manage.py migrate agent_debug`；`python manage.py check`。SQLite 只用于开发/隔离测试，不用于多执行器并发；共享运行环境需要 PostgreSQL 行锁。
 4. 按需授权 `agent_debug.use_debug`（预览、运行、本人摘要）、`agent_debug.manage_connections`（连接/探针）、`agent_debug.view_all_runs`（叠加 `use_debug` 才能读其他人摘要）、`agent_debug.view_trace_payload`（还需该运行的读取权）。真实资料另需 `reference_browser.view_catalog` 以及 C 对对应快照和指纹的准入；缺任一项不放行。不要把上述权限与 Django staff 身份混为一谈。
 

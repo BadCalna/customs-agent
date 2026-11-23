@@ -13,5 +13,6 @@ api.add_router("", accounts_router)
 
 urlpatterns = [
     path("api/v1/", api.urls),
-    path("", include("apps.agent_debug.urls")),
+    # 模块内的 URLConf 是相对路径，隔离环境在这里补回 /ops/debug/ 前缀。
+    path("ops/debug/", include("apps.agent_debug.urls")),
 ]

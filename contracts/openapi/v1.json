@@ -4059,6 +4059,420 @@
         ]
       }
     },
+    "/api/v1/ops/data/catalog": {
+      "get": {
+        "operationId": "apps_reference_browser_api_catalog",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Catalog",
+        "tags": [
+          "基础数据中心"
+        ]
+      }
+    },
+    "/api/v1/ops/data/catalog/{kind}/{record_id}": {
+      "get": {
+        "operationId": "apps_reference_browser_api_catalog_detail",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "kind",
+            "required": true,
+            "schema": {
+              "title": "Kind",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "title": "Record Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Catalog Detail",
+        "tags": [
+          "基础数据中心"
+        ]
+      }
+    },
+    "/api/v1/ops/data/evidence": {
+      "get": {
+        "operationId": "apps_reference_browser_api_evidence",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Evidence",
+        "tags": [
+          "基础数据中心"
+        ]
+      }
+    },
+    "/api/v1/ops/data/history": {
+      "get": {
+        "operationId": "apps_reference_browser_api_history",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "History",
+        "tags": [
+          "基础数据中心"
+        ]
+      }
+    },
+    "/api/v1/ops/data/history/{record_id}": {
+      "get": {
+        "operationId": "apps_reference_browser_api_history_detail",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "title": "Record Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "History Detail",
+        "tags": [
+          "基础数据中心"
+        ]
+      }
+    },
+    "/api/v1/ops/data/hs/{hs_code}": {
+      "get": {
+        "operationId": "apps_reference_browser_api_hs_detail",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "hs_code",
+            "required": true,
+            "schema": {
+              "title": "Hs Code",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Hs Detail",
+        "tags": [
+          "基础数据中心"
+        ]
+      }
+    },
+    "/api/v1/ops/data/snapshots": {
+      "get": {
+        "operationId": "apps_reference_browser_api_snapshots",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Snapshots",
+        "tags": [
+          "基础数据中心"
+        ]
+      }
+    },
+    "/api/v1/ops/debug/capabilities": {
+      "get": {
+        "operationId": "apps_agent_debug_api_capabilities",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Capabilities",
+        "tags": [
+          "Agent 调试台"
+        ]
+      }
+    },
+    "/api/v1/ops/debug/connections": {
+      "get": {
+        "operationId": "apps_agent_debug_api_connection_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Connection List",
+        "tags": [
+          "Agent 调试台"
+        ]
+      },
+      "post": {
+        "operationId": "apps_agent_debug_api_create_connection",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Create Connection",
+        "tags": [
+          "Agent 调试台"
+        ]
+      }
+    },
+    "/api/v1/ops/debug/connections/{connection_id}/activate": {
+      "post": {
+        "operationId": "apps_agent_debug_api_activate",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "connection_id",
+            "required": true,
+            "schema": {
+              "title": "Connection Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Activate",
+        "tags": [
+          "Agent 调试台"
+        ]
+      }
+    },
+    "/api/v1/ops/debug/connections/{connection_id}/revoke": {
+      "post": {
+        "operationId": "apps_agent_debug_api_revoke",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "connection_id",
+            "required": true,
+            "schema": {
+              "title": "Connection Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Revoke",
+        "tags": [
+          "Agent 调试台"
+        ]
+      }
+    },
+    "/api/v1/ops/debug/connections/{connection_id}/test": {
+      "post": {
+        "operationId": "apps_agent_debug_api_probe",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "connection_id",
+            "required": true,
+            "schema": {
+              "title": "Connection Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Probe",
+        "tags": [
+          "Agent 调试台"
+        ]
+      }
+    },
+    "/api/v1/ops/debug/previews": {
+      "post": {
+        "operationId": "apps_agent_debug_api_preview",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Preview",
+        "tags": [
+          "Agent 调试台"
+        ]
+      }
+    },
+    "/api/v1/ops/debug/probes/{probe_id}": {
+      "get": {
+        "operationId": "apps_agent_debug_api_probe_detail",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "probe_id",
+            "required": true,
+            "schema": {
+              "title": "Probe Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Probe Detail",
+        "tags": [
+          "Agent 调试台"
+        ]
+      }
+    },
+    "/api/v1/ops/debug/runs": {
+      "get": {
+        "operationId": "apps_agent_debug_api_run_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Run List",
+        "tags": [
+          "Agent 调试台"
+        ]
+      },
+      "post": {
+        "operationId": "apps_agent_debug_api_run_create",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Run Create",
+        "tags": [
+          "Agent 调试台"
+        ]
+      }
+    },
+    "/api/v1/ops/debug/runs/{run_id}": {
+      "get": {
+        "operationId": "apps_agent_debug_api_run_detail",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Run Detail",
+        "tags": [
+          "Agent 调试台"
+        ]
+      }
+    },
+    "/api/v1/ops/debug/runs/{run_id}/steps": {
+      "get": {
+        "operationId": "apps_agent_debug_api_steps",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Steps",
+        "tags": [
+          "Agent 调试台"
+        ]
+      }
+    },
+    "/api/v1/ops/debug/runs/{run_id}/steps/{seq}/payload": {
+      "get": {
+        "operationId": "apps_agent_debug_api_payload",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "seq",
+            "required": true,
+            "schema": {
+              "title": "Seq",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Payload",
+        "tags": [
+          "Agent 调试台"
+        ]
+      }
+    },
     "/api/v1/ops/system/audit": {
       "get": {
         "operationId": "apps_ops_admin_api_audit_list",

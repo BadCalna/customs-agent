@@ -5,7 +5,7 @@ MANAGE := $(PYTHON) manage.py
 BIND ?= 127.0.0.1:8000
 export TASK
 
-.PHONY: setup migrate seed-demo seed-contracts contracts demo-components workbench dev check test test-contracts worker dispatcher \
+.PHONY: setup migrate seed-demo seed-ops-demo ops-demo seed-contracts contracts demo-components workbench dev check test test-contracts worker dispatcher \
         pg-init pg-start pg-stop pg-status db-backup db-copy check-postgres \
         reference-scan reference-import reference-publish reference-releases test-integration
 setup:
@@ -18,6 +18,13 @@ migrate:
 
 seed-demo:
 	$(MANAGE) seed_demo
+
+# 01/02/03 本地演示：合成样例 + mock 调试台，不出站。密钥与密文目录在仓库外。
+seed-ops-demo:
+	$(MANAGE) seed_ops_demo
+
+ops-demo:
+	bash scripts/operations/ops_demo.sh
 
 seed-contracts:
 	$(MANAGE) seed_contracts

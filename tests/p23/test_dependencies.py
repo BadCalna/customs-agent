@@ -139,9 +139,11 @@ class DependencyBoundaryTest(SimpleTestCase):
             "python-dotenv>=1,<2",
         }
         queue = {"django-rq==3.2.2", "rq==2.6.1", "redis==6.4.0"}
-        self.assertEqual(set(dependencies), base | queue,
-                         "仅允许 main 原有五项约束与明确锁定版本的三项队列依赖")
-        self.assertEqual(len(dependencies), len(base) + len(queue), "依赖不得重复或额外添加")
+        # OPS：02 Agent 调试台做 AES-GCM 加密与 HTTP 探针，需要这两项运行时依赖。
+        ops = {"cryptography>=45.0.7,<50", "httpx>=0.28.1,<0.29"}
+        self.assertEqual(set(dependencies), base | queue | ops,
+                         "仅允许 main 原有五项、明确锁定版本的三项队列依赖与 OPS 两项运行时依赖")
+        self.assertEqual(len(dependencies), len(base) + len(queue) + len(ops), "依赖不得重复或额外添加")
 
     def test_tests_do_not_touch_repository_output_directories(self):
         """测试自己也不许把输出写进仓库（例如 .local/reference-import）。"""

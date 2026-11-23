@@ -203,7 +203,8 @@ class SystemTests(TestCase):
                     'target_id': 'internal-target', 'outcome': 'success', 'summary_code': ''}
         logger = logging.getLogger('customs.ops.events')
         ops = self.browser(self.operator)
-        self.assertEqual(self.write(ops, f'modules/{source}', {'status': 'active'}).status_code, 404)
+        # 02/03 已由 config/settings.py 真实登记；未声明的键既没有清单，也不能经系统管理接口登记。
+        self.assertEqual(self.write(ops, 'modules/ghost_module', {'status': 'active'}).status_code, 404)
         with patch.object(apps.get_app_config('ops_admin'), 'manifests', {source: spec}):
             sync_catalog({source: spec})
             gated = ops.get('/ops/debug/')
