@@ -1,3 +1,4 @@
+from django.apps import apps
 from django.contrib import admin
 from django.urls import path
 from ninja import NinjaAPI, Schema
@@ -17,6 +18,9 @@ from apps.api.demo import (
     workbench_index,
 )
 from apps.api.not_implemented import router as pending_router
+from apps.ops_admin.api import install_ops_error_handlers, router as ops_router
+from apps.ops_admin.catalog import add_api_routers, web_patterns
+from apps.ops_admin.pages import dashboard as ops_dashboard, secret as ops_secret
 from apps.reviews.api.confirmations import router as confirmations_router
 from apps.reviews.api.decisions import router as decisions_router
 from apps.reviews.api.exports import router as exports_router
@@ -46,6 +50,10 @@ def health(request):
 
 api_v1 = NinjaAPI(title="关务预审工作台 API v1", version="1.0.0", urls_namespace="api-v1")
 install_error_handlers(api_v1)
+install_ops_error_handlers(api_v1)
+ops_manifests = apps.get_app_config('ops_admin').manifests
+api_v1.add_router('ops/system', ops_router)
+add_api_routers(api_v1, ops_manifests)
 api_v1.add_router("", accounts_router)
 api_v1.add_router("", imports_router)
 api_v1.add_router("", reviews_read_router)
@@ -64,6 +72,9 @@ urlpatterns = [
     path("login/", production_login, name="production-login"),
     path("app/assets/<path:path>", production_asset, name="production-asset"),
     path("admin/", admin.site.urls),
+    path("ops/admin/", ops_dashboard, name="ops-admin"),
+    path("ops/admin/secret/", ops_secret, name="ops-secret"),
+    *web_patterns(ops_manifests),
     path("api/v1/", api_v1.urls),
     path("api/", api.urls),
     # P02 组件演示壳：只读静态资源，不参与 API 契约。
