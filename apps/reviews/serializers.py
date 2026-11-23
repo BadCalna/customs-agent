@@ -8,6 +8,8 @@
 - 专家终值取最新 ``DecisionItem``；
 - 任一阶段没有值就是 ``None``，不用其他阶段补位。
 """
+from django.db.models import Q
+
 from apps.accounts.permissions import ROLE_ACTIONS
 from apps.api.schemas import (
     Action,
@@ -26,7 +28,7 @@ from apps.runs.models import Run, RunItem
 from apps.runs.engine_config import run_result_mode
 
 from .models import Confirmation, DecisionItem, SubmissionItem
-from .schemas import ItemCard, ItemFacts, ItemListEntry, TaskDetail, TaskListEntry, VersionEntry
+from .schemas import HistoryIssue, ItemCard, ItemFacts, ItemListEntry, TaskDetail, TaskListEntry, VersionEntry
 
 
 def iso(value):
@@ -42,6 +44,33 @@ def source_location(item) -> SourceLocation:
     return SourceLocation(
         sheet_name=item.source_sheet, row_number=item.source_row, cells=item.source_cells,
     )
+
+
+def issue_to_history(issue) -> HistoryIssue:
+    return HistoryIssue(
+        issue_id=str(issue.pk), task_id=str(issue.task_id),
+        version_id=str(issue.version_id) if issue.version_id else None,
+        submission_id=str(issue.submission_id) if issue.submission_id else None,
+        decision_id=str(issue.decision_id) if issue.decision_id else None,
+        run_id=str(issue.run_id) if issue.run_id else None,
+        item_id=str(issue.item_id) if issue.item_id else None,
+        source_location=source_location(issue.item) if issue.item_id else None,
+        return_to=(issue.decision.return_to if issue.decision_id else
+                   "supplier" if issue.kind == "operator_return" else None),
+        kind=issue.kind, message=issue.message, status=issue.status,
+        created_by=(issue.created_by.display_name or issue.created_by.username) if issue.created_by_id else "",
+        created_at=iso(issue.created_at),
+    )
+
+
+def version_review_issues(task, version, item=None) -> list[HistoryIssue]:
+    if version is None:
+        return []
+    # 无确切版本的旧任务级问题只留在历史，不自动归入最新版本。
+    rows = task.issues.filter(version=version).select_related("item", "decision", "created_by")
+    if item is not None:
+        rows = rows.filter(Q(item=item) | Q(item__isnull=True))
+    return [issue_to_history(row) for row in rows.order_by("created_at", "pk")]
 
 
 def allowed_actions(user) -> list[Action]:
@@ -136,7 +165,7 @@ def _expert_check_ref(run_item) -> ExpertCheckRef | None:
     if run_item is None or run_item.run.submission_id is None:
         return None
     result = run_item.result or {}
-    submission_item = current_submission_item(run_item.item)
+    submission_item = run_item.run.submission.items.filter(item_id=run_item.item_id).first()
     target_hs = result.get("target_hs") or (submission_item.submitted_hs if submission_item else "")
     if not target_hs:
         return None
@@ -232,6 +261,7 @@ def item_to_card(user, item) -> ItemCard:
         expert_final_hs=stages["expert_final_hs"],
         comparison_status=ComparisonStatus(precheck.comparison_status) if precheck and precheck.comparison_status else None,
         issues=_issues_from_result(result),
+        review_issues=version_review_issues(task, item.version, item=item),
         evidence_status=result.get("evidence_status"),
         evidence=_evidence_from_result(result),
         confidence=precheck.confidence if precheck else None,
@@ -282,11 +312,15 @@ def task_to_detail(user, task) -> TaskDetail:
     from apps.runs.services import precheck_capability
     entry = task_to_entry(user, task)
     current_version = task.versions.order_by("-number").first()
-    submission = task.submissions.filter(version=current_version).order_by("-created_at").first()
+    submission = (
+        task.submissions.filter(version=current_version).order_by("-created_at").first()
+        if current_version else None
+    )
     return TaskDetail(
         **entry.model_dump(),
         precheck_allowed=precheck_capability(user, task),
         versions=[_version_entry(v, current_version.pk if current_version else None) for v in task.versions.all()],
         current_submission_id=str(submission.pk) if submission else None,
         current_submission_status=submission.status if submission else None,
+        review_issues=version_review_issues(task, current_version),
     )

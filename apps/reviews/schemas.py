@@ -58,11 +58,31 @@ class TaskPage(Schema):
     next_cursor: str | None = None
 
 
+class HistoryIssue(Schema):
+    """人工问题的确切归属。旧记录无法证明的引用保留 null，不猜测到当前版本。"""
+
+    issue_id: str
+    task_id: str
+    version_id: str | None = None
+    submission_id: str | None = None
+    decision_id: str | None = None
+    run_id: str | None = None
+    item_id: str | None = None
+    source_location: SourceLocation | None = None
+    return_to: str | None = None
+    kind: str
+    message: str
+    status: str
+    created_by: str = ""
+    created_at: str
+
+
 class TaskDetail(TaskListEntry):
     precheck_allowed: bool = False
     versions: list[VersionEntry] = Field(default_factory=list)
     current_submission_id: str | None = None
     current_submission_status: SubmissionStatus | None = None
+    review_issues: list[HistoryIssue] = Field(default_factory=list)
 
 
 class ItemListEntry(Schema):
@@ -118,6 +138,7 @@ class ItemCard(Schema):
     expert_final_hs: StageValue
     comparison_status: ComparisonStatus | None = None
     issues: list[IssueEntry] = Field(default_factory=list)
+    review_issues: list[HistoryIssue] = Field(default_factory=list)
     evidence_status: EvidenceStatus | None = None
     evidence: list[EvidenceEntry] = Field(default_factory=list)
     confidence: float | None = None
@@ -204,6 +225,7 @@ class ReturnIssueIn(Schema):
 
 
 class DecisionIn(Schema):
+    revision: int | None = Field(default=None, ge=1, description="当前 Task.revision；兼容旧客户端可省略")
     action: str = Field(description="approve 整批通过 / return 退回")
     reason: str = ""
     return_to: str = Field(default="", description="退回时使用：supplier 或 operator")
@@ -227,6 +249,7 @@ class DecisionOut(Schema):
     return_to: str | None = None
     reason: str
     items: list[DecisionLineOut]
+    issues: list[HistoryIssue] = Field(default_factory=list)
     submission_status: SubmissionStatus
     task_stage: TaskStage
     task_revision: int
@@ -247,6 +270,7 @@ class TaskReturnOut(Schema):
     stage: TaskStage
     task_revision: int
     issue_ids: list[str]
+    issues: list[HistoryIssue] = Field(default_factory=list)
     idempotent_replay: bool = False
 
 
@@ -309,15 +333,6 @@ class CrossVersionCandidate(Schema):
     candidate_version_id: str
     basis: str
     note: str
-
-
-class HistoryIssue(Schema):
-    issue_id: str
-    item_id: str | None = None
-    kind: str
-    message: str
-    status: str
-    created_at: str
 
 
 class HistoryAuditEvent(Schema):
