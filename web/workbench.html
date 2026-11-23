@@ -2625,6 +2625,14 @@ function modeLabel(){
 
 /* ---------------------------- 正式工作台：会话、服务端写入与问题回查 ---------------------------- */
 function defaultRoute(role){return role==='business'?'business/overview':`${role}/${role==='expert'?'queue':'tasks'}`;}
+function isValidRoleRoute(role,r){
+  if(!role||!r||r.seg!==role)return false;
+  if(r.a==='task')return Boolean(r.b);
+  if(role==='supplier')return r.a==='tasks';
+  if(role==='business')return r.a==='overview'||r.a==='tasks';
+  if(role==='expert')return r.a==='queue'||r.a==='returned'||r.a==='archive';
+  return false;
+}
 function liveFeedback(){
   return `<div id="live-status" role="status" aria-live="polite">${WB.pending?'正在保存，请稍候…':''}</div>${WB.error?`<div class="callout warn" role="alert" style="margin-bottom:16px">${esc(WB.error)}</div>`:''}`;
 }
@@ -3047,8 +3055,11 @@ document.addEventListener('submit',async event=>{
     WB.lastUserId=WB.user?(WB.user.username||WB.user.user_id||''):'';
     WB.lastRouteKey='';WB.lastListRoute='';WB.pendingTab='';
     S.ui=defaultUi();
-    const targetHash='#/'+defaultRoute(roleOf());
-    if(location.hash!==targetHash)history.replaceState(null,'',targetHash);
+    const role=roleOf(),currentRoute=parseRoute();
+    if(role&&!isValidRoleRoute(role,currentRoute)){
+      const targetHash='#/'+defaultRoute(role);
+      if(location.hash!==targetHash)history.replaceState(null,'',targetHash);
+    }
     WB.loading=true;await reloadLive();
   }
   catch(error){WB.error=errorText(error);if(error.status===401)WB.user=null;else if(WB.user)WB.stale=true;}

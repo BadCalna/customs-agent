@@ -124,19 +124,36 @@ class DecisionReviewFixTests(SubmissionFixture):
                 "issues": [{"message": "缺签章"}]}
         first = self.post(body, key="legacy-decision").json()
         payload = DecisionIn.model_validate(body).model_dump(mode="json")
+        # 升级前 DecisionIn 无 revision 字段，构造真实的升级前 payload（不含 revision 键）。
+        pre_upgrade_payload = {k: v for k, v in payload.items() if k != "revision"}
+        self.assertNotIn("revision", pre_upgrade_payload)
         record = IdempotencyRecord.objects.get(key="legacy-decision")
         other = self._extra_submission()
-        for legacy_payload in (
-            payload,
-            {"submission_id": str(self.submission.pk), "decision": payload},
-        ):
-            with self.subTest(legacy_payload=legacy_payload):
-                record.request_hash = idempotency.legacy_request_hash(legacy_payload)
+        legacy_hashes = (
+            ("pure_with_revision", idempotency.legacy_request_hash(payload)),
+            ("wrapped_with_revision", idempotency.legacy_request_hash(
+                {"submission_id": str(self.submission.pk), "decision": payload}
+            )),
+            ("pre_upgrade_pure", idempotency.legacy_request_hash(pre_upgrade_payload)),
+            ("pre_upgrade_wrapped", idempotency.legacy_request_hash(
+                {"submission_id": str(self.submission.pk), "decision": pre_upgrade_payload}
+            )),
+            ("pre_upgrade_target_hash", idempotency.request_hash(
+                pre_upgrade_payload, str(self.submission.pk)
+            )),
+        )
+        for label, legacy_hash in legacy_hashes:
+            with self.subTest(format=label):
+                record.request_hash = legacy_hash
                 record.save(update_fields=["request_hash"])
                 conflict = self.post(
                     body, key="legacy-decision", url=f"/api/v1/submissions/{other.pk}/decisions",
                 )
                 self.assertEqual(conflict.status_code, 409)
+                # 显式传入 revision 的新请求不得误匹配升级前无 revision 的旧指纹。
+                if label.startswith("pre_upgrade_"):
+                    explicit_rev = self.post({**body, "revision": 1}, key="legacy-decision")
+                    self.assertEqual(explicit_rev.status_code, 409)
                 replay = self.post(body, key="legacy-decision")
                 self.assertEqual(replay.status_code, 200, replay.content)
                 self.assertEqual(replay.json()["decision_id"], first["decision_id"])

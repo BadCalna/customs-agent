@@ -67,6 +67,9 @@ def workbench_index(request):
     """正式审核页（D1=B 双页分工）：LIVE 默认走 workbench.html；样例模式保留在 DEBUG 环境。"""
     if request.GET.get("mode") in ("demo", "fixture"):
         return _served_file(WEB_ROOT, "workbench.html")
+    # 兼容旧 /workbench/?task=...&version=... 深链：仅透传白名单坐标参数到消息/导出中心。
+    if request.GET.get("task") or request.GET.get("version"):
+        return HttpResponseRedirect(_entry_target(request, "/workbench/live/"))
     return _served_file(WEB_ROOT, "workbench.html", formal=True)
 
 
