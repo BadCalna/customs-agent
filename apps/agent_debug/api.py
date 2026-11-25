@@ -129,8 +129,10 @@ def capabilities(request, user):
             except DebugError:
                 pass
     return _json(request, {"modes": ["mock"] + (["live"] if snapshot else []), "connection": active,
-                           "samples": [{"id": key, "label": label, "mode": "mock" if kind == "mock_sample" else None}
-                                       for key, (label, _, kind) in samples().items() if snapshot or kind == "mock_sample"],
+                           "stages": ["precheck", "expert_check"],
+                           "samples": [{"id": key, "label": label, "mode": "mock" if kind == "mock_sample" else None,
+                                        "stage": source.get("stage", "precheck")}
+                                       for key, (label, source, kind) in samples().items() if snapshot or kind == "mock_sample"],
                            "snapshot_ready": bool(snapshot), "snapshot": snapshot, "external_approval_required": True})
 
 

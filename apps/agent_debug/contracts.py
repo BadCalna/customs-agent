@@ -69,11 +69,32 @@ class Basis(Strict):
                                         pattern=r"^[0-9]{4}[A-Za-z]?$" )
 
 
+class ExpertInput(Strict):
+    submitted_hs: str = Field(pattern=r"^(?:[0-9]{8}|[0-9]{10})$")
+    supplier_tax_rate_raw: str = Field(default="", max_length=32)
+    direction: Literal["unknown", "import", "export"] = "unknown"
+    rebate_code: str = Field(default="", max_length=24, pattern=r"^[0-9A-Za-z_-]*$")
+
+    @field_validator("supplier_tax_rate_raw")
+    @classmethod
+    def rate_fact(cls, value):
+        from adapters.engines.skill_precheck import _safe_fact_text
+        try:
+            if any(not char.isprintable() for char in value):
+                raise ValueError("control character")
+            _safe_fact_text(value, ())
+        except RuntimeError:
+            raise ValueError("invalid rate fact") from None
+        return value
+
+
 class PreviewIn(Strict):
+    stage: Literal["precheck", "expert_check"] = "precheck"
     mode: Literal["mock", "live"]
     sample_id: str | None = Field(default=None, min_length=1, max_length=32)
     facts: Facts | None = None
     query_basis: Basis | None = None
+    expert: ExpertInput | None = None
     parent_run_id: UUID | None = None
 
     @model_validator(mode="after")
@@ -82,6 +103,10 @@ class PreviewIn(Strict):
             raise ValueError("one input source required")
         if self.facts is None and self.query_basis is not None:
             raise ValueError("cannot modify pinned sample basis")
+        if self.expert is not None and (self.stage != "expert_check" or self.facts is None):
+            raise ValueError("expert input only for expert facts")
+        if self.stage == "expert_check" and self.facts is not None and self.expert is None:
+            raise ValueError("expert input required")
         return self
 
 

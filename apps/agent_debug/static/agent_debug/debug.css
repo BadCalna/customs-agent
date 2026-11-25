@@ -276,6 +276,57 @@ nav a.active:after {
   font-size: 11px;
   color: var(--muted);
 }
+.stage-select {
+  color: var(--teal-dark);
+  font-weight: 700;
+}
+.stage-note {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.65;
+  margin: 0 0 18px;
+}
+.expert-fields {
+  border: 1px solid var(--line);
+  background: var(--paper);
+  padding: 18px 14px 0;
+  min-width: 0;
+  margin: 0 0 18px;
+}
+.expert-fields legend {
+  color: var(--teal-dark);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 0 6px;
+}
+.field-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.findings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 18px 0;
+}
+.finding-card {
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--yellow);
+  padding: 15px;
+  min-width: 0;
+}
+.finding-card.matched { border-top-color: var(--teal); }
+.finding-card.conflict { border-top-color: var(--coral); }
+.finding-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.finding-head h4 { font-size: 14px; margin: 0; }
+.finding-card p, .result-gaps { font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
+.finding-evidence { padding-left: 16px; font-size: 11px; line-height: 1.8; overflow-wrap: anywhere; }
+.finding-head .status { white-space: nowrap; letter-spacing: 0; }
+.expert-codes { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px 16px; font-size: 12px; }
+.expert-codes dt { color: var(--muted); }
+.expert-codes dd { margin: 0; overflow-wrap: anywhere; }
+.mono { font-family: ui-monospace, monospace; overflow-wrap: anywhere; }
 .divider {
   display: flex;
   align-items: center;
@@ -548,6 +599,7 @@ body[data-page="run-detail"] .timeline-list {
   .trace-pair {
     grid-template-columns: 1fr;
   }
+  .findings-grid, .field-pair { grid-template-columns: 1fr; }
 }
 .timeline-placeholder {
   color: var(--muted);
