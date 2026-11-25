@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    name: Tests (Linux, SQLite)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    env:
+      UV_PROJECT_ENVIRONMENT: .venv-customs
+      PYTHON_DOTENV_DISABLED: "1"
+      CUSTOMS_DB_BACKEND: sqlite
+      CUSTOMS_ENGINE_MODE: mock
+      CUSTOMS_EXECUTOR_MODE: inline
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+        with:
+          version: "0.11.18"
+          enable-cache: false
+
+      - name: Install locked dependencies
+        run: |
+          uv sync --locked --group ci
+          .venv-customs/bin/python -m config.bootstrap
+
+      - name: Django checks and migration drift
+        run: make check
+
+      - name: API contracts
+        run: make test-contracts
+
+      - name: Review workflow integration
+        run: make test-integration
+
+      - name: AI precheck and expert engine regression
+        run: .venv-customs/bin/python manage.py test tests/p16_real tests/p18 --noinput
+
+      - name: Agent debug regression
+        run: .venv-customs/bin/python -m pytest -c optional_tests/ops_debug/pytest.ini optional_tests/ops_debug -q

@@ -19,3 +19,9 @@ dependencies = [
 
 [tool.uv]
 package = false
+
+[dependency-groups]
+ci = [
+    "pytest>=9.2.0",
+    "pytest-django>=4.14.0",
+]
