@@ -120,6 +120,21 @@ def reference_url(ref):
 def evidence_rows(materials, request, cited, output, *, sent):
     """Use exact source section anchors; do not map by name, HS code, or similarity."""
     index = materials.index if materials else {}
+    if request.get("stage") == "expert_check":
+        # P18 sends status summaries only; raw source records are never model citations.
+        # The existing C map contract only permits hs/note. Other sources stay unlocated.
+        for entry in output.evidence if output else ():
+            key = entry.locator or ""
+            # P14 elements may legitimately share official_tariff source_type.
+            # Use the trusted adapter's identity scope, never that broad source label.
+            scope = entry.evidence_id.partition(":")[0]
+            version = materials.bundle.version if materials else ""
+            hs_identity = f"hs:{version}:{output.target_hs}"
+            ref = (index.get(("hs", key)) if scope == "hs" and entry.evidence_id == hs_identity
+                   and entry.source_type == "official_tariff" else None)
+            kind = scope if scope in {"hs", "elements", "tax", "reg"} else "source"
+            yield "postcheck_only", kind, digest(entry.evidence_id), "located" if ref else "unverified", ref
+        return
     reference = request["reference_packet"]
     notes = {r["evidence_id"]: r for r in reference["commentary"].get("records", [])}
     sent_ids = set()

@@ -139,13 +139,17 @@ class _SingleCall:
 def _save_trace(work, step, packet, call, now):
     # Always redact by structure (not substring), including all free text,
     # identifiers from remote headers, excerpts, and system/prompt contents.
+    if call and call.answer:
+        parsed_summary = ({"parsed": True, "stage": "expert_check"} if packet.get("stage") == "expert_check" else
+                          {"parsed": True, "candidate_count": len(call.answer.candidates),
+                           "missing_facts": call.answer.missing_facts})
+    else:
+        parsed_summary = None
     protected = {"request_redacted": {"mode": work.mode, "packet_digest": work.packet_digest,
                                       "model": work.config_snapshot.get("model"),
                                       "fact_fields": sorted(packet["facts"]) if packet else [],
                                       "indexed_materials": len(packet["reference_packet"]["evidence_index"]) if packet else 0},
-                 "response_redacted": ({"parsed": True, "candidate_count": len(call.answer.candidates),
-                                        "missing_facts": call.answer.missing_facts}
-                                       if call and call.answer else None),
+                 "response_redacted": parsed_summary,
                  "withheld_fields": ["authorization", "facts", "prompt", "source_text", "provider_text", "provider_headers"]}
     TracePayload.objects.create(step=step, ciphertext=seal_data(protected, f"trace:{work.pk}:{step.seq}"),
                                 expires_at=min(work.input_expires_at, now + timedelta(days=7)))
@@ -192,8 +196,10 @@ def _finish(claim, materials, packet, call, output, error):
                                      finished_at=call.parse_finished, status=State.SUCCEEDED if parsed else State.FAILED,
                                      error_code="" if parsed else code)
         postcheck_step = None
-        if parsed:
-            postcheck_step = DebugStep.objects.create(run=work, seq=_CHECK_SEQ, kind="postcheck", started_at=call.parse_finished,
+        if parsed or (output is not None and hasattr(output, "findings")):
+            postcheck_step = DebugStep.objects.create(run=work, seq=_CHECK_SEQ, kind="postcheck",
+                                                      started_at=call.parse_finished if parsed else
+                                                      step.finished_at if step is not None else now,
                                                       finished_at=now, status=status, error_code=code)
         prepare_step = work.steps.filter(seq=_PREPARE_SEQ).first()
         if prepare_step is None:
@@ -209,9 +215,13 @@ def _finish(claim, materials, packet, call, output, error):
             ])
         if not error:
             work.result = result_summary(output)
-            missing = {"MODEL_FACTS_PENDING", "MISSING_USAGE"}
-            work.business_status = (BusinessState.NEEDS_FACTS if any(g.code in missing for g in output.gaps)
-                                    else BusinessState.CANDIDATE if output.candidates else BusinessState.UNDETERMINED)
+            if hasattr(output, "findings"):
+                # An expert auxiliary result never grants approval, including all-matched results.
+                work.business_status = BusinessState.UNDETERMINED
+            else:
+                missing = {"MODEL_FACTS_PENDING", "MISSING_USAGE"}
+                work.business_status = (BusinessState.NEEDS_FACTS if any(g.code in missing for g in output.gaps)
+                                        else BusinessState.CANDIDATE if output.candidates else BusinessState.UNDETERMINED)
         work.status, work.error_code, work.finished_at, work.lease_until = status, code, now, None
         work.save(update_fields=["status", "error_code", "finished_at", "lease_until", "business_status", "result"])
         event("debug.run.finished", actor_id=work.owner_id, request_id=work.request_id,
@@ -230,13 +240,16 @@ def _execute_run(claim, transport):
         payload, adapter, packet, body, versions = prepare(protected["input"], claim.mode, cfg.get("model"), materials)
         if not compare_digest(digest(body), claim.packet_digest) or cfg["versions"] != versions:
             raise DebugError("PREVIEW_STALE")
-        if claim.mode == "live":
+        stage = protected["input"].get("stage", "precheck")
+        needs_model = claim.mode == "live" and (stage == "precheck" or packet["model_required"])
+        if needs_model:
             call = _SingleCall(claim, transport, materials, protected)
-            adapter.model = call
+            if stage == "precheck":
+                adapter.model = call
         else:
             DebugStep.objects.create(run=claim, seq=_PREPARE_SEQ, kind="prepare", status=State.SUCCEEDED,
                                      started_at=claim.started_at, finished_at=timezone.now())
-        output = adapter.recommend(payload)
+        output = adapter.execute(payload, model=call) if stage == "expert_check" else adapter.recommend(payload)
     except DebugError as exc:
         error = exc
     except Exception:

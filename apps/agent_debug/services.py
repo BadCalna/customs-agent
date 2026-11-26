@@ -13,7 +13,7 @@ from pydantic import ValidationError
 from .access import flag, limit, live_enabled, require, setting
 from .admission import check_concurrency, mutex, reserve_quota
 from .connections import check_endpoint
-from .contracts import Basis, Facts, digest, input_hash
+from .contracts import Basis, ExpertInput, Facts, digest, input_hash
 from .engine import prepare
 from .errors import DebugError
 from .maintenance import event
@@ -37,24 +37,34 @@ def _json_setting(key, default):
         return default
 
 
-def _input(facts, basis=None, mock_scenario=None):
-    return {"facts": Facts.model_validate(facts).model_dump(mode="json"),
+def _input(facts, basis=None, mock_scenario=None, *, stage="precheck", expert=None):
+    value = {"facts": Facts.model_validate(facts).model_dump(mode="json"),
             "query_basis": Basis.model_validate(basis or {}).model_dump(mode="json", exclude_none=True),
             "mock_scenario": mock_scenario}
+    # Preserve existing precheck bytes and approvals; stage is additive only for expert input.
+    if stage == "expert_check":
+        value.update(stage=stage, expert=ExpertInput.model_validate(expert).model_dump(mode="json"))
+    elif stage != "precheck" or expert is not None:
+        raise ValueError("invalid stage")
+    return value
 
 
 def samples():
     found = {key: (label, _input(facts, mock_scenario=scenario), "mock_sample")
              for key, (label, facts, scenario) in _BUILT_IN.items()}
+    found["expert-demo"] = ("合成样例 · 专家核查", _input(
+        {"name": "演示连接线", "attributes": {"material": "铜", "usage": "低压传输"}},
+        mock_scenario="normal", stage="expert_check", expert={"submitted_hs": "8544422900"}), "mock_sample")
+    reserved = set(found)
     approved = _json_setting("OPS_DEBUG_SAMPLES", [])
     if not isinstance(approved, list):
         return found
     registered = set()
     for row in approved:
-        if not isinstance(row, dict) or row.keys() - {"id", "label", "facts", "query_basis"}:
+        if not isinstance(row, dict) or row.keys() - {"id", "label", "facts", "query_basis", "stage", "expert"}:
             continue
         key, label = row.get("id"), row.get("label")
-        if (not isinstance(key, str) or not _SAMPLE_ID.fullmatch(key) or key in _BUILT_IN
+        if (not isinstance(key, str) or not _SAMPLE_ID.fullmatch(key) or key in reserved
                 or not isinstance(label, str) or not label.strip() or len(label) > 60 or not label.isprintable()):
             continue
         if key in registered:
@@ -62,8 +72,9 @@ def samples():
             continue
         registered.add(key)
         try:
-            found[key] = (label, _input(row.get("facts"), row.get("query_basis")), "approved_sample")
-        except ValidationError:
+            found[key] = (label, _input(row.get("facts"), row.get("query_basis"),
+                                      stage=row.get("stage", "precheck"), expert=row.get("expert")), "approved_sample")
+        except (ValidationError, ValueError, TypeError):
             continue
     return found
 
@@ -88,14 +99,18 @@ def _resolve(user, data):
             if not catalog_visible(user, cfg.get("snapshot_id"), cfg.get("bundle_fingerprint")):
                 raise DebugError("forbidden", 403)
         source = _read_input(parent)
+        if "stage" in data.model_fields_set and data.stage != source["input"].get("stage", "precheck"):
+            raise DebugError("INVALID_INPUT", 422)
         return source["input"], source["sample_kind"], source["sample_id"], parent.sample_label
     if data.sample_id:
         try:
             label, snapshot, kind = samples()[data.sample_id]
         except KeyError:
             raise DebugError("INVALID_INPUT", 422) from None
+        if data.stage != snapshot.get("stage", "precheck"):
+            raise DebugError("INVALID_INPUT", 422)
         return snapshot, kind, data.sample_id, label
-    return _input(data.facts, data.query_basis), "local_facts", "", "自填样例"
+    return _input(data.facts, data.query_basis, stage=data.stage, expert=data.expert), "local_facts", "", "自填样例"
 
 
 def _active(default):
@@ -144,9 +159,10 @@ def create_preview(user, data):
         if kind == "local_facts" and (endpoint.target != "local" or not flag("OPS_DEBUG_LOCAL_FREE_INPUT")):
             raise DebugError("EXTERNAL_NOT_APPROVED", 403)
         materials = live_materials(user)
-    _, _, _, body, versions = prepare(source, data.mode, connection.model if connection else None, materials)
+    _, _, packet, body, versions = prepare(source, data.mode, connection.model if connection else None, materials)
     packet_digest = digest(body)
-    config = {"versions": versions, **versions, "target": "mock"}
+    stage = source.get("stage", "precheck")
+    config = {"versions": versions, **versions, "target": "mock", "stage": stage}
     destination = {"target": "mock", "host": "本地模拟", "model": None}
     if endpoint:
         check_external(endpoint, kind, sample_id, source, packet_digest)
@@ -163,10 +179,13 @@ def create_preview(user, data):
                                 input_ciphertext=seal_data(protected, f"preview:{ticket_hash}"), input_digest=input_hash(protected),
                                 packet_digest=packet_digest, connection=connection, config_snapshot=config, expires_at=expires)
     # Browser response allowlist: do not include or deserialize the request body.
-    return {"ticket": ticket, "expires_at": expires.isoformat(), "destination": destination,
+    result = {"ticket": ticket, "expires_at": expires.isoformat(), "destination": destination,
             "request_bytes": len(body), "packet_digest": packet_digest, "versions": versions,
             "warnings": {"mock": ["合成模拟，不联网"], "local": ["仅发往登记的本机端点"],
                          "external": ["仅获批样例；确认后将出机"]}[destination["target"]]}
+    if stage == "expert_check":
+        result.update(stage=stage, model_required=bool(packet and packet["model_required"]))
+    return result
 
 
 def _recheck_preview(user, preview, default, protected):

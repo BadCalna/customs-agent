@@ -48,7 +48,9 @@ def serialize_run(user, run, *, detail=False):
     steps = list(run.steps.all())
     attempts = [step for step in steps if step.attempt_no is not None]
     owner = run.owner_id == user.pk
-    data = {"id": str(run.pk), "mode": run.mode, "sample_label": run.sample_label if visible else "",
+    data = {"id": str(run.pk), "mode": run.mode,
+            "stage": run.config_snapshot.get("stage", "precheck") if visible else None,
+            "sample_label": run.sample_label if visible else "",
             "owner": str(run.owner_id) if run.owner_id else None,
             "model": run.config_snapshot.get("model") if visible else None,
             "status": run.status, "business_status": run.business_status if visible else "not_evaluated",
@@ -65,6 +67,7 @@ def serialize_run(user, run, *, detail=False):
         data.update(snapshot=run.config_snapshot if visible else {},
                     parent_run_id=str(run.parent_run_id) if owner and visible and run.parent_run_id else None,
                     materials=[{"role": row.role, "kind": row.kind, "status": row.status,
+                                **({"evidence_id": row.source_key} if run.config_snapshot.get("stage") == "expert_check" else {}),
                                 "label": row.ref["label"] if row.ref else "不可定位",
                                 "ref": row.ref, "url": reference_url(row.ref) if row.ref else None}
                                for row in run.materials.order_by("id")] if visible else [])
@@ -104,7 +107,7 @@ def read_trace(user, run_id, seq, request_id):
 
 
 def run_page(user, query):
-    filters = {name: query.get(name, "") for name in ("mode", "state", "date_from", "date_to", "id", "error_code")}
+    filters = {name: query.get(name, "") for name in ("mode", "state", "date_from", "date_to", "id", "error_code", "stage")}
     qs = _query(user).order_by("-created_at", "-pk")
     try:
         page_size = int(query.get("page_size", "25"))
@@ -115,6 +118,12 @@ def run_page(user, query):
                 if value not in allowed:
                     raise ValueError
                 qs = qs.filter(**{field: value})
+        if value := filters["stage"]:
+            if value not in ("precheck", "expert_check"):
+                raise ValueError
+            expert = Q(config_snapshot__stage="expert_check")
+            qs = qs.filter(expert) if value == "expert_check" else qs.filter(
+                Q(config_snapshot__stage="precheck") | Q(config_snapshot__stage__isnull=True))
         if value := filters["id"]:
             qs = qs.filter(pk=UUID(value))
         if not any(filters[k] for k in ("id", "date_from", "date_to")):

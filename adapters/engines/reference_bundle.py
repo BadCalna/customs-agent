@@ -21,6 +21,7 @@ from typing import Any, Mapping
 from adapters.sources import declaration_elements as elements
 from adapters.sources import history_search as history
 from adapters.sources import hs_lookup as tariff
+from adapters.sources import regulatory_lookup as regulatory
 from adapters.sources import tariff_commentary as commentary
 from adapters.sources import tax_lookup as tax
 
@@ -367,6 +368,8 @@ class ReferenceBundle:
     elements_store: Any
     tax_rate_store: Any
     commentary_store: Any = None
+    regulatory_source: regulatory.RegulatorySource | None = None
+    regulatory_store: Any = None
 
     @classmethod
     def load(cls, config: ReferenceBundleConfig | None = None) -> "ReferenceBundle":
@@ -401,6 +404,11 @@ class ReferenceBundle:
             cs = _parse(commentary._snapshot_from_payload, payloads["tariff_commentary"], "tariff_commentary", config.commentary_store)
             if not cs.load().version:
                 raise ReferenceBundleError("Commentary version required")
+        rs = None
+        if "p17_regulatory" in payloads:
+            # Only the independently validated P17 condition snapshot is usable.
+            # A regulatory_code_ledger is never converted into regulatory facts.
+            rs = _parse(regulatory._snapshot_from_payload, payloads["p17_regulatory"], "p17_regulatory")
         metadata: dict[str, Any] = {}
         for name, payload in payloads.items():
             meta = payload["dataset"]
@@ -414,6 +422,12 @@ class ReferenceBundle:
             metadata[name]["authoritative"] = snapshot.dataset.authoritative
         if cs is not None:
             metadata["tariff_commentary"]["authoritative"] = cs.load().dataset.authoritative
+        if rs is not None:
+            regulatory_snapshot = rs.load()
+            metadata["p17_regulatory"].update(
+                authoritative=regulatory_snapshot.dataset.authoritative,
+                versions=[v.version for v in regulatory_snapshot.versions],
+            )
         metadata["p14_tariff"]["versions"] = versions
         metadata["p14_elements"]["versions"] = [v.version for v in element_snapshot.versions]
         metadata["p17_tax_rates"]["versions"] = [v.version for v in tax_snapshot.versions]
@@ -431,4 +445,6 @@ class ReferenceBundle:
             commentary_source=commentary.TariffCommentarySource(cs) if config.include_commentary and cs is not None else None,
             tariff_store=ts, elements_store=es, tax_rate_store=xs,
             commentary_store=cs if config.include_commentary else None,
+            regulatory_source=regulatory.RegulatorySource(rs) if rs is not None else None,
+            regulatory_store=rs,
         )

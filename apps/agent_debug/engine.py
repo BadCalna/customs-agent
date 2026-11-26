@@ -31,6 +31,16 @@ class PreviewOnly:
 
 
 def prepare(input_snapshot, mode, model=None, materials=None):
+    if input_snapshot.get("stage", "precheck") == "expert_check":
+        from .expert import DebugExpertAdapter, payload_for as expert_payload
+        payload = expert_payload(input_snapshot, mode)
+        adapter = DebugExpertAdapter(input_snapshot, mode, materials)
+        if mode == "mock":
+            return payload, adapter, None, json_bytes({"mode": mode, "input": input_snapshot}), versions(adapter)
+        packet = adapter.build_request(payload)
+        body = (wire_bytes(model, packet) if packet["model_required"] else
+                json_bytes({"stage": "expert_check", "source_check": packet}))
+        return payload, adapter, packet, body, versions(adapter, materials, packet)
     payload = payload_for(input_snapshot, mode)
     if mode == "mock":
         adapter = MockEngine()
@@ -58,11 +68,18 @@ def versions(adapter, materials=None, packet=None):
     if materials:
         result.update(bundle_id=materials.bundle.bundle_id, snapshot_id=materials.snapshot_id,
                       bundle_fingerprint=materials.bundle.fingerprint, map_digest=materials.map_digest,
-                      rules_digest=packet["skill"]["selected_rules_sha256"], prompt_digest=digest(packet["system"]))
+                      rules_digest=(packet["skill"]["selected_rules_sha256"] if "skill" in packet else digest(adapter.rules_version)),
+                      prompt_digest=digest(packet.get("system", "")))
     return result
 
 
 def parse_response(raw, packet):
+    if packet.get("stage") == "expert_check":
+        from adapters.engines.expert_check import _strict_model_json
+        try:
+            return _strict_model_json(raw), set()
+        except Exception:
+            raise DebugError("OUTPUT_SCHEMA_INVALID", 502, received=True) from None
     try:
         answer = _strict_json(raw)
     except RuntimeError:
@@ -76,6 +93,9 @@ def parse_response(raw, packet):
 
 def result_summary(output):
     """No provider text, supplier values, score, or source body enters result JSON."""
+    if hasattr(output, "findings"):
+        from .expert import safe_result
+        return safe_result(output)
     return {"suggested_hs": output.suggested_hs,
             "candidates": [{"hs": c.hs, "reason": c.reason} for c in output.candidates],
             "gaps": [{"code": g.code, "field": g.field, "message": g.message} for g in output.gaps],
