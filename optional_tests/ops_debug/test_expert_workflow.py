@@ -16,6 +16,11 @@ from apps.agent_debug.transport import TransportResult
 from apps.agent_debug.worker import work_once
 from apps.reviews.models import Task
 from tests.p16_real.test_reference_bundle import HS
+from tests.p16_real.test_reference_bundle import payloads, release_fixture
+from tests.p17.helpers import (
+    dual_use_item, measure, rate_record, regulatory_record,
+)
+from adapters.sources.regulatory_lookup import MeasureCategory
 
 from .fixture import make_published
 from .test_acceptance import _connection
@@ -81,6 +86,7 @@ def test_expert_mock_is_four_aspects_zero_dispatch_and_no_business_write(client)
     assert {f["aspect"] for f in d["findings"]} == {"elements", "images", "tax", "regulatory"}
     assert next(f for f in d["findings"] if f["aspect"] == "images")["verdict"] == "unknown"
     assert d["business_status"] == "undetermined"
+    assert d["regulatory"]["verified"] is False and d["regulatory"]["outcome"] == "unknown"
     assert d["outbound_counts"] == {"attempts": 0, "responses": 0, "parsed": 0}
     steps = client.get(API + f"runs/{queued['id']}/steps").json()["items"]
     assert [row["kind"] for row in steps] == ["prepare", "mock", "postcheck"]
@@ -268,3 +274,149 @@ def test_supplier_rate_keeps_business_text_without_guessing(client, raw):
     body = expert_input(mode="mock")
     body["expert"]["supplier_tax_rate_raw"] = raw
     _post(client, "previews", body, 201)
+
+
+def diagnostic_release(settings, tmp_path, *, outcome="measures_required", reviewed=True,
+                       record_direction="export", expires="2026-12-31", dual_use=False):
+    """A complete, independently versioned policy release; metadata is a contract fixture only."""
+    data = payloads(reviewed=reviewed)
+    data["p17_tax_rates"]["rates"] = [rate_record(
+        hs_code=HS, version="2026C", rate_kind="zero_rate", rate_percent=0, rate_raw="0%",
+        effective_from="2026-11-16", effective_to="2026-12-31")]
+    measures = [] if outcome == "declared_none" else [
+        measure("B", category=MeasureCategory.LICENCE, name="测试许可证"),
+        measure("N", category=MeasureCategory.INSPECTION_QUARANTINE, name="测试检验要求"),
+    ]
+    record = regulatory_record(hs_code=HS, version="2026R", direction=record_direction,
+        effective_from="2026-11-16", effective_to=expires, measures=measures)
+    if dual_use:
+        record["dual_use"] = [dual_use_item()]
+    data["p17_regulatory"] = {
+        "schema_version": "p17.regulatory.1",
+        "dataset": {**data["p14_tariff"]["dataset"], "dataset_id": "UNIT-CONTRACT-regulatory",
+                    "source_type": "official_regulatory"},
+        "versions": [{"version": "2026R", "effective_from": "2026-11-16", "effective_to": "2026-12-31"}],
+        "records": [record],
+    }
+    path, _ = release_fixture(tmp_path, data=data, reviewed=reviewed)
+    settings.OPS_DEBUG_PUBLISHED_DIR = str(path.parent.parent)
+    settings.OPS_DEBUG_EVIDENCE_MAP_ROOT = ""
+    _connection()
+    return path
+
+
+def diagnostic_input(*, direction="export", rate="0%", date="2026-11-18", version="2026", elements=""):
+    body = expert_input(elements=elements, basis=False)
+    body["expert"].update(direction=direction, supplier_tax_rate_raw=rate)
+    body["query_basis"] = {"tariff_version": version} if version else {}
+    if date:
+        body["query_basis"]["declaration_date"] = date
+    return body
+
+
+def source_result(client, body):
+    _, queued, _, _ = queue(client, body)
+    assert work_once(transport=lambda *args: pytest.fail("source diagnostic must not call model"))
+    d = detail(client, queued)
+    assert d["status"] == "succeeded", d
+    return d
+
+
+@pytest.mark.parametrize("direction,applicability", [("import", "not_applicable"), ("unknown", "direction_unknown")])
+@pytest.mark.parametrize("rate", ["0%", "13%"])
+def test_diagnostic_non_export_never_compares_export_rebate(client, settings, tmp_path, direction, applicability, rate):
+    diagnostic_release(settings, tmp_path)
+    d = source_result(client, diagnostic_input(direction=direction, rate=rate, version=None))
+    tax = next(f for f in d["findings"] if f["aspect"] == "tax")
+    assert tax["verdict"] == "unknown", d
+    assert d["tax_check"]["direction"] == direction
+    assert d["tax_check"]["applicability"] == applicability
+    assert d["tax_check"].get("comparison", "not_compared") not in {"matched", "conflict"}
+    assert not ({"TAX_QUERY_FAILED", "TAX_RATE_NOT_FOUND", "TAX_NOT_FOUND"} & {g["code"] for g in d["gaps"]})
+
+
+@pytest.mark.parametrize("rate,comparison,verdict", [("0%", "matched", "matched"), ("13%", "conflict", "conflict")])
+def test_diagnostic_policy_versions_resolve_by_date_not_tariff_label(client, settings, tmp_path, rate, comparison, verdict):
+    diagnostic_release(settings, tmp_path)
+    d = source_result(client, diagnostic_input(rate=rate))
+    assert next(f for f in d["findings"] if f["aspect"] == "tax")["verdict"] == verdict, d
+    assert d["tax_check"]["applicability"] == "applies"
+    assert d["tax_check"]["resolved_version"] == "2026C"
+    assert d["tax_check"]["comparison"] == comparison
+    assert d["regulatory"]["verified"] is True
+    assert d["regulatory"]["outcome"] == "measures_required"
+
+
+@pytest.mark.parametrize("date", [None, "2026-11-15", "2027-01-01"])
+def test_diagnostic_missing_or_outside_date_cannot_verify_policy(client, settings, tmp_path, date):
+    diagnostic_release(settings, tmp_path)
+    d = source_result(client, diagnostic_input(date=date))
+    assert next(f for f in d["findings"] if f["aspect"] == "tax")["verdict"] == "unknown"
+    assert d["tax_check"]["applicability"] == "pending"
+    assert d["tax_check"].get("comparison", "unverified") not in {"matched", "conflict"}
+    assert d["regulatory"]["verified"] is False and d["regulatory"]["outcome"] == "unknown"
+
+
+@pytest.mark.parametrize("outcome", ["measures_required", "declared_none"])
+def test_diagnostic_regulatory_measures_and_explicit_none_remain_distinct(client, settings, tmp_path, outcome):
+    diagnostic_release(settings, tmp_path, outcome=outcome)
+    d = source_result(client, diagnostic_input())
+    reg = d["regulatory"]
+    assert reg["verified"] is True and reg["outcome"] == outcome
+    assert next(f for f in d["findings"] if f["aspect"] == "regulatory")["verdict"] == "matched"
+    if outcome == "declared_none":
+        assert reg["measures"] == []
+    else:
+        assert {(m["code"], m["category"]) for m in reg["measures"]} == {
+            ("B", "licence"), ("N", "inspection_quarantine")}
+        assert all(m["evidence_ids"] and all(len(eid) == 64 for eid in m["evidence_ids"]) for m in reg["measures"])
+        assert "P17-UNIT-REGTABLE" not in json.dumps(reg)
+
+
+@pytest.mark.parametrize("changes", [
+    {"reviewed": False}, {"expires": "2026-11-17"}, {"record_direction": "import"}, {"dual_use": True},
+])
+def test_diagnostic_regulatory_unverified_cases_cannot_become_verified(client, settings, tmp_path, changes):
+    diagnostic_release(settings, tmp_path, **changes)
+    d = source_result(client, diagnostic_input())
+    assert d["regulatory"]["verified"] is False and d["regulatory"]["outcome"] == "unknown"
+    assert next(f for f in d["findings"] if f["aspect"] == "regulatory")["verdict"] == "unknown"
+
+
+def test_diagnostic_policy_summaries_hidden_when_snapshot_permission_revoked(client, user, settings, tmp_path):
+    diagnostic_release(settings, tmp_path)
+    _, queued, _, _ = queue(client, diagnostic_input())
+    assert work_once(transport=lambda *args: pytest.fail("source diagnostic must not call model"))
+    d = detail(client, queued)
+    assert "tax_check" in d and "regulatory" in d
+    user.user_permissions.remove(Permission.objects.get(content_type__app_label="reference_browser", codename="view_catalog"))
+    hidden = detail(client, queued)
+    assert not hidden["content_visible"] and "tax_check" not in hidden and "regulatory" not in hidden
+
+
+def test_diagnostic_provider_cannot_forge_regulatory_summary(client, settings, tmp_path):
+    diagnostic_release(settings, tmp_path)
+    _, queued, _, _ = queue(client, diagnostic_input(elements="用途:工业测试"))
+    calls = []
+
+    def transport(endpoint, wire, key):
+        calls.append(wire)
+        return TransportResult(text=json.dumps(neutral(regulatory={"verified": True, "outcome": "declared_none", "measures": []})),
+                               http_status=200, model="debug-model")
+
+    assert work_once(transport=transport)
+    assert len(calls) == 1
+    d = detail(client, queued)
+    assert d["status"] == "failed" and d["error_code"] == "OUTPUT_SCHEMA_INVALID"
+    assert d.get("regulatory", {}).get("verified") is not True
+
+
+def test_diagnostic_old_rules_preview_must_be_regenerated(client, settings, tmp_path, monkeypatch):
+    from apps.agent_debug.expert import DebugExpertAdapter
+    diagnostic_release(settings, tmp_path)
+    current = DebugExpertAdapter.rules_version
+    monkeypatch.setattr(DebugExpertAdapter, "rules_version", current + "-old-tax-direction")
+    preview = _post(client, "previews", diagnostic_input(), 201)
+    monkeypatch.setattr(DebugExpertAdapter, "rules_version", current)
+    refused = _post(client, "runs", {"ticket": preview["ticket"]}, 409)
+    assert refused["error"]["code"] == "PREVIEW_STALE"

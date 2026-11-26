@@ -144,13 +144,67 @@
       const findings = new Map((d.findings || []).map((f) => [f.aspect, f]));
       const materials = new Map((d.materials || []).map((m) => [m.evidence_id, m]));
       const cards = Object.entries(aspects).map(([aspect, title]) => {
-        const finding = findings.get(aspect),
-          verdict = finding && Object.hasOwn(verdicts, finding.verdict) ? finding.verdict : "unknown";
-        const evidence = [...new Set(finding?.evidence_ids || [])].map((id) => {
+        const finding = findings.get(aspect);
+        let verdict = finding && Object.hasOwn(verdicts, finding.verdict) ? finding.verdict : "unknown",
+          label = verdicts[verdict],
+          reason = finding?.reason || "尚无核查结果，保持待核实",
+          detail = "",
+          statusClass = verdict === "conflict" ? "bad" : verdict === "matched" ? "good" : "warn",
+          evidenceIds = finding?.evidence_ids || [];
+        if (aspect === "regulatory") {
+          const regulatory = d.regulatory,
+            measures = Array.isArray(regulatory?.measures) ? regulatory.measures : [];
+          if (regulatory?.verified === true && regulatory.outcome === "measures_required" && measures.length) {
+            label = "有监管要求";
+            statusClass = "warn";
+            reason = "已核实来源列明以下监管要求，是否满足要求仍需人工核对。";
+            evidenceIds = [...evidenceIds, ...measures.flatMap((m) => m.evidence_ids || [])];
+            detail = `<ul class="regulatory-measures">${measures.map((m) => {
+              const links = (m.evidence_ids || []).map((id) => safeEvidence(materials.get(id)));
+              return `<li><code>${esc(m.code || "未提供代码")}</code> · ${esc(m.category || "类别待核实")}<div>${links.join(" · ") || safeEvidence(null)}</div></li>`;
+            }).join("")}</ul>`;
+          } else if (regulatory?.verified === true && regulatory.outcome === "declared_none" && !measures.length) {
+            label = "来源明确无要求";
+            statusClass = "good";
+            reason = "来源明确声明本次查询基准及贸易方向无监管要求，仍需人工复核。";
+          } else {
+            verdict = "unknown";
+            label = "待核实";
+            statusClass = "warn";
+            reason = regulatory
+              ? "监管来源或适用情况待核实，不能据此判断无监管要求。"
+              : "旧记录缺监管适用性核验信息，不能据此判断无监管要求；请复制重跑。";
+          }
+        }
+        if (aspect === "tax") {
+          const tax = d.tax_check;
+          if (tax?.direction === "import" && tax.applicability === "not_applicable") {
+            verdict = "unknown";
+            label = "不适用";
+            statusClass = "neutral";
+            reason = "本项出口退税核查不适用；进口税费需另行核对。";
+          } else if (tax?.direction === "unknown" || tax?.applicability === "direction_unknown") {
+            verdict = "unknown";
+            label = "方向待确认";
+            statusClass = "warn";
+            reason = "贸易方向待确认，本次不进行出口退税比较。";
+          } else if (tax?.direction !== "export" || tax.applicability !== "applies") {
+            verdict = "unknown";
+            label = "待核实";
+            statusClass = "warn";
+            reason = tax
+              ? "出口退税适用性或资料待核实，本次不作确定比较。"
+              : "旧记录缺贸易方向核验信息，请复制重跑。";
+          }
+          if (tax?.resolved_version)
+            detail += `<p class="muted">退税资料版本：${esc(tax.resolved_version)}</p>`;
+        }
+        const uniqueEvidenceIds = [...new Set(evidenceIds)];
+        const evidence = uniqueEvidenceIds.map((id) => {
           const material = materials.get(id);
           return `<li>${esc(material?.label || "证据材料")} · ${safeEvidence(material)}</li>`;
         }).join("");
-        return `<section class="finding-card ${verdict}"><div class="finding-head"><h4>${title}</h4><span class="status ${verdict === "conflict" ? "bad" : verdict === "matched" ? "good" : "warn"}">${verdicts[verdict]}</span></div><p>${esc(finding?.reason || "尚无核查结果，保持待核实")}</p><span class="muted">${esc(finding?.evidence_ids?.length || 0)} 条关联证据</span>${evidence ? `<ul class="finding-evidence">${evidence}</ul>` : ""}</section>`;
+        return `<section class="finding-card ${verdict}" data-aspect="${aspect}"><div class="finding-head"><h4>${title}</h4><span class="status ${statusClass}">${label}</span></div><p>${esc(reason)}</p>${detail}<span class="muted">${esc(uniqueEvidenceIds.length)} 条关联证据</span>${evidence ? `<ul class="finding-evidence">${evidence}</ul>` : ""}</section>`;
       }).join("");
       const gaps = (d.gaps || []).map((g) => `<li><code>${esc(g.code || "UNKNOWN")}</code> ${esc(g.message || "保持待核实")}</li>`).join("");
       return `<h3>专家分项核查</h3><div class="callout"><strong>${modeText(d)}</strong>。${d.mode === "mock" ? "以下为合成样例结果，仅验证调试流程，不构成真实业务核查。" : "AI 辅助结果，待人工复核。"}相符不代表审核通过，待核实不代表无风险。</div><dl class="expert-codes"><dt>本次核查编码</dt><dd class="mono">${esc(d.target_hs || "—")}</dd><dt>建议编码</dt><dd class="mono">${esc(d.suggested_hs || "未建议改码")}</dd></dl><div class="findings-grid">${cards}</div><h3>待核问题</h3>${gaps ? `<ul class="result-gaps">${gaps}</ul>` : '<p class="result-gaps">未记录其他问题，仍需人工复核</p>'}`;
@@ -267,6 +321,7 @@
       else delete f.dataset.sampleId;
       expertFields.hidden = stage.value !== "expert_check";
       expertFields.disabled = expertFields.hidden || Boolean(f.dataset.sampleId) || Boolean(parentRun);
+      document.querySelector("#basisFields").disabled = Boolean(f.dataset.sampleId) || Boolean(parentRun);
       document.querySelector("#stageHint").textContent = stage.value === "expert_check"
         ? "核对提交编码的要素、图片、退税和监管；本版图片未接入。"
         : "独立生成 HS 候选，再核对来源与待补事实。";

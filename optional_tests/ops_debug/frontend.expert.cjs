@@ -19,6 +19,11 @@ const run = {
     { evidence_id: "hash-2", label: "不可定位材料", url: "javascript:alert(1)" },
   ], gaps: [{ code: "IMAGE_NOT_CONNECTED", message: "图片未接入，保持待核实" }], outbound_counts: { attempts: 0, responses: 0, parsed: 0 },
 };
+findings.find((f) => f.aspect === "regulatory").verdict = "matched";
+findings.find((f) => f.aspect === "regulatory").reason = "来源核对相符";
+run.regulatory = { outcome: "measures_required", verified: true,
+  measures: [{ code: "A", category: "inspection", evidence_ids: ["hash-2"] }] };
+run.tax_check = { direction: "import", applicability: "not_applicable" };
 const server = http.createServer(async (req, res) => {
   let raw = "";
   for await (const chunk of req) raw += chunk;
@@ -94,11 +99,18 @@ const server = http.createServer(async (req, res) => {
     assert.match(await page.locator("#runView").innerText(), /MOCK · 合成模拟/);
     assert.match(await page.locator("#runView").innerText(), /仅验证调试流程，不构成真实业务核查/);
     assert.match(await page.locator(".result-gaps").innerText(), /IMAGE_NOT_CONNECTED.*图片未接入/);
+    assert.match(await page.locator('.finding-card').nth(3).innerText(), /有监管要求/);
+    assert.match(await page.locator('.finding-card').nth(3).innerText(), /A.*inspection/);
+    assert.match(await page.locator('.finding-card').nth(2).innerText(), /本项出口退税核查不适用/);
+    assert.match(await page.locator('.finding-card').nth(3).innerText(), /未提供可定位链接/);
     await page.selectOption("#stageSelect", "precheck");
     assert.equal(await page.locator("#runView").isVisible(), false);
     await page.selectOption("#stageSelect", "expert_check");
+    await page.fill('[name="tariff_version"]', "invalid-old-free-input");
     await page.click('.sample[data-id="expert-demo"]');
     assert.equal(await page.locator('[name="submitted_hs"]').isDisabled(), true);
+    assert.equal(await page.locator('[name="tariff_version"]').isDisabled(), true);
+    assert.equal(await page.locator('[name="declaration_date"]').isDisabled(), true);
     await page.click("#previewBtn");
     await page.waitForSelector("#runBtn");
     const sample = requests.filter((r) => r.url.endsWith("/previews")).at(-1).body;
@@ -109,6 +121,7 @@ const server = http.createServer(async (req, res) => {
     await page.waitForSelector(".sample", { state: "attached" });
     assert.equal(await page.locator("#stageSelect").inputValue(), "expert_check");
     assert.equal(await page.locator("#stageSelect").isDisabled(), true);
+    assert.equal(await page.locator('[name="tariff_version"]').isDisabled(), true);
     await page.click("#previewBtn");
     await page.waitForSelector("#runBtn");
     const parent = requests.filter((r) => r.url.endsWith("/previews")).at(-1).body;
@@ -117,6 +130,44 @@ const server = http.createServer(async (req, res) => {
     await page.waitForSelector(".finding-card");
     assert.equal(await page.locator(".finding-card").count(), 4);
     assert.match(await page.locator("#runDetail").innerText(), /MOCK · 合成模拟/);
+    run.regulatory = { outcome: "declared_none", verified: true, measures: [] };
+    await page.reload();
+    await page.waitForSelector(".finding-card");
+    assert.match(await page.locator('.finding-card').nth(3).innerText(), /来源明确无要求/);
+    assert.doesNotMatch(await page.locator('.finding-card').nth(3).innerText(), /有监管要求/);
+    delete run.regulatory;
+    run.tax_check = { direction: "unknown", applicability: "direction_unknown" };
+    findings.find((f) => f.aspect === "tax").verdict = "conflict";
+    findings.find((f) => f.aspect === "tax").reason = "来源比较冲突";
+    await page.reload();
+    await page.waitForSelector(".finding-card");
+    assert.match(await page.locator('.finding-card').nth(3).innerText(), /待核实/);
+    assert.doesNotMatch(await page.locator('.finding-card').nth(3).innerText(), /来源核对相符|来源明确无要求/);
+    assert.match(await page.locator('.finding-card').nth(2).innerText(), /方向待确认/);
+    assert.doesNotMatch(await page.locator('.finding-card').nth(2).innerText(), /相符|存在冲突|来源比较冲突/);
+    run.tax_check = { direction: "export", applicability: "applies", resolved_version: "2026C", comparison: "conflict" };
+    await page.reload();
+    await page.waitForSelector(".finding-card");
+    assert.match(await page.locator('.finding-card').nth(2).innerText(), /存在冲突/);
+    delete run.tax_check;
+    findings.find((f) => f.aspect === "tax").verdict = "matched";
+    findings.find((f) => f.aspect === "tax").reason = "来源核对相符";
+    await page.reload();
+    await page.waitForSelector(".finding-card");
+    assert.match(await page.locator('.finding-card').nth(2).innerText(), /待核实/);
+    assert.match(await page.locator('.finding-card').nth(2).innerText(), /旧记录缺贸易方向核验信息.*复制重跑/);
+    assert.doesNotMatch(await page.locator('.finding-card').nth(2).innerText(), /相符|存在冲突/);
+    run.tax_check = { direction: "export", applicability: "pending" };
+    await page.reload();
+    await page.waitForSelector(".finding-card");
+    assert.match(await page.locator('.finding-card').nth(2).innerText(), /待核实/);
+    assert.doesNotMatch(await page.locator('.finding-card').nth(2).innerText(), /相符|存在冲突/);
+    run.regulatory = { outcome: "measures_required", verified: false,
+      measures: [{ code: "UNVERIFIED", category: "untrusted", evidence_ids: [] }] };
+    await page.reload();
+    await page.waitForSelector(".finding-card");
+    assert.match(await page.locator('.finding-card').nth(3).innerText(), /待核实/);
+    assert.doesNotMatch(await page.locator('.finding-card').nth(3).innerText(), /UNVERIFIED|有监管要求/);
     if (process.env.OPS_DEBUG_UI_SCREENSHOT) {
       fs.mkdirSync(path.dirname(process.env.OPS_DEBUG_UI_SCREENSHOT), { recursive: true });
       await page.screenshot({ path: process.env.OPS_DEBUG_UI_SCREENSHOT, fullPage: true });

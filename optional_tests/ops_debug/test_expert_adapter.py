@@ -314,3 +314,121 @@ def test_invalid_regulatory_snapshot_rejected_even_with_valid_release_hash(tmp_p
     path, _ = release_fixture(tmp_path, data=data, reviewed=True)
     with pytest.raises(ReferenceBundleError, match="p17_regulatory: snapshot contract invalid"):
         ReferenceBundle.load(ReferenceBundleConfig(release_dir=path))
+
+
+def applicable_data(*, measures=False, reviewed=True):
+    data = regulatory_data(reviewed=reviewed)
+    data["p17_tax_rates"]["rates"][0].update(
+        rate_state="in_force", conditions=[], effective_from="2026-11-16", effective_to="2026-12-31")
+    if measures:
+        data["p17_regulatory"]["records"][0]["measures"] = [{
+            "code": "X1", "category": "licence", "name": "测试许可证", "document": "UNIT-LICENCE",
+            "locator": "measure-1"}]
+    return data
+
+
+def run_applicable(tmp_path, source, *, measures=False, reviewed=True):
+    path, _ = release_fixture(tmp_path, data=applicable_data(measures=measures, reviewed=reviewed), reviewed=reviewed)
+    bundle = ReferenceBundle.load(ReferenceBundleConfig(release_dir=path))
+    bundle.tax_source.lookup = Mock(wraps=bundle.tax_source.lookup)
+    model = Mock()
+    model.complete.return_value = neutral()
+    adapter = DebugExpertAdapter(source, "live", SimpleNamespace(bundle=bundle))
+    return adapter, adapter.execute(payload_for(source, "live"), model)
+
+
+@pytest.mark.parametrize("direction,rate", [(direction, rate) for direction in ("import", "unknown") for rate in ("0%", "13%")])
+def test_non_export_never_compares_export_rebate(tmp_path, direction, rate):
+    source = snapshot(direction=direction, supplier_tax_rate_raw=rate)
+    adapter, output = run_applicable(tmp_path, source)
+    assert next(f for f in output.findings if f.aspect == "tax").verdict.value == "unknown"
+    assert not adapter.engine.tax_source.cache  # No export rebate lookup was issued.
+    adapter.engine.tax_source.source.lookup.assert_not_called()
+    result = safe_result(output)
+    assert result["tax_check"]["applicability"] == ("not_applicable" if direction == "import" else "direction_unknown")
+    assert result["tax_check"]["comparison"] == "not_compared"
+
+
+@pytest.mark.parametrize("direction,applicability", [("import", "not_applicable"), ("unknown", "direction_unknown")])
+def test_non_export_direction_is_retained_even_when_other_source_fails(tmp_path, direction, applicability):
+    source = snapshot(direction=direction)
+    prepared = materials(tmp_path)
+    prepared.bundle.elements_source.check = Mock(side_effect=RuntimeError("source failure"))
+    prepared.bundle.tax_source.lookup = Mock(side_effect=AssertionError("must not query export rebates"))
+    adapter = DebugExpertAdapter(source, "live", prepared)
+    result = safe_result(adapter.execute(payload_for(source, "live")))
+    prepared.bundle.tax_source.lookup.assert_not_called()
+    assert result["tax_check"]["direction"] == direction
+    assert result["tax_check"]["applicability"] == applicability
+    assert result["tax_check"]["comparison"] == "not_compared"
+
+
+def test_tariff_version_is_not_reused_as_tax_or_regulatory_policy_version(tmp_path):
+    source = snapshot()
+    source["query_basis"]["tariff_version"] = "2026"
+    adapter, output = run_applicable(tmp_path, source)
+    assert next(f for f in output.findings if f.aspect == "tax").verdict.value == "matched"
+    assert "TAX_VERSION_UNVERIFIED" not in {i.code for i in output.issues}
+    tax = next(iter(adapter.engine.tax_source.cache.values()))
+    assert tax.query.basis.tariff_version is None and tax.version.version == "2026C"
+    assert tax.query.basis.declaration_date == "2026-11-18"
+    result = safe_result(output)
+    assert result["tax_check"]["resolved_version"] == "2026C"
+    assert result["tax_check"]["applicability"] == "applies"
+
+
+@pytest.mark.parametrize("measures,outcome", [(True, "measures_required"), (False, "declared_none")])
+def test_regulatory_summary_preserves_verified_outcome_and_measures(tmp_path, measures, outcome):
+    adapter, output = run_applicable(tmp_path, snapshot(), measures=measures)
+    result = safe_result(output)
+    assert result["regulatory"]["outcome"] == outcome
+    assert result["regulatory"]["verified"] is True
+    summary = next(f for f in result["findings"] if f["aspect"] == "regulatory")
+    assert ("有监管要求" if measures else "明确声明无监管要求") in summary["reason"]
+    if measures:
+        assert result["regulatory"]["measures"][0]["code"] == "X1"
+        assert result["regulatory"]["measures"][0]["category"] == "licence"
+        assert all(len(eid) == 64 for eid in result["regulatory"]["measures"][0]["evidence_ids"])
+    else:
+        assert result["regulatory"]["measures"] == []
+
+
+def test_policy_lookup_without_date_does_not_invent_a_date_from_tariff_version(tmp_path):
+    source = snapshot()
+    source["query_basis"] = {"tariff_version": "2026"}
+    adapter, output = run_applicable(tmp_path, source, measures=True)
+    result = safe_result(output)
+    assert result["tax_check"]["applicability"] == "pending"
+    assert result["tax_check"]["resolved_version"] is None
+    assert result["regulatory"] == {"outcome": "unknown", "verified": False, "measures": []}
+    for source in (adapter.engine.tax_source, adapter.engine.regulatory_source):
+        query = next(iter(source.cache.values())).query
+        assert query.basis.declaration_date is None and query.basis.tariff_version is None
+
+
+def test_mock_cannot_publish_verified_policy_summary():
+    source = snapshot()
+    source["mock_scenario"] = "expert_elements_unknown"
+    result = safe_result(DebugExpertAdapter(source, "mock").execute(payload_for(source, "mock")))
+    assert result["regulatory"] == {"outcome": "unknown", "verified": False, "measures": []}
+    assert result["tax_check"]["applicability"] == "pending"
+
+
+def test_unreviewed_regulatory_summary_does_not_publish_requirement_as_verified(tmp_path):
+    _, output = run_applicable(tmp_path, snapshot(), measures=True, reviewed=False)
+    result = safe_result(output)
+    assert result["regulatory"] == {"outcome": "unknown", "verified": False, "measures": []}
+
+
+def test_source_measure_code_is_not_a_container_for_free_text(tmp_path):
+    data = applicable_data(measures=True)
+    data["p17_regulatory"]["records"][0]["measures"][0]["code"] = "password=PRIVATE-SOURCE"
+    path, _ = release_fixture(tmp_path, data=data, reviewed=True)
+    bundle = ReferenceBundle.load(ReferenceBundleConfig(release_dir=path))
+    source = snapshot()
+    model = Mock()
+    model.complete.return_value = neutral()
+    output = DebugExpertAdapter(source, "live", SimpleNamespace(bundle=bundle)).execute(payload_for(source, "live"), model)
+    result = safe_result(output)
+    assert result["regulatory"] == {"outcome": "unknown", "verified": False, "measures": []}
+    assert b"PRIVATE" not in json_bytes(result)

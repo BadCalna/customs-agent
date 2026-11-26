@@ -322,6 +322,9 @@ nav a.active:after {
 .finding-head h4 { font-size: 14px; margin: 0; }
 .finding-card p, .result-gaps { font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
 .finding-evidence { padding-left: 16px; font-size: 11px; line-height: 1.8; overflow-wrap: anywhere; }
+.regulatory-measures { padding-left: 16px; font-size: 12px; line-height: 1.8; overflow-wrap: anywhere; }
+.regulatory-measures li + li { margin-top: 8px; }
+.basis-fields { border: 0; padding: 0; margin: 0; min-width: 0; }
 .finding-head .status { white-space: nowrap; letter-spacing: 0; }
 .expert-codes { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px 16px; font-size: 12px; }
 .expert-codes dt { color: var(--muted); }
